@@ -21,13 +21,13 @@ jobs:
           NEO4J_AUTH: neo4j/fake-test-only
         ports: ["57474:7474"]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.3
       - run: bun install --frozen-lockfile
       - run: bunx tsc --noEmit -p tsconfig.json
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: '22'
       - run: bun run build
@@ -37,7 +37,7 @@ jobs:
       - run: python3 -I eval/public/benchmark_charts.py --check
       - run: python3 -I scripts/test_install.py
       - run: python3 -I scripts/test_homebrew_formula.py
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6.1.0
         with:
           path: node_modules/@huggingface/transformers/.cache
           key: hf-models-e5small-761b726-bgereranker-280bcc2
@@ -68,9 +68,9 @@ jobs:
           NEO4J_AUTH: neo4j/fake-test-only
         ports: ["57474:7474"]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@1.99.0
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6.1.0
         with:
           path: |
             ~/.cargo/registry

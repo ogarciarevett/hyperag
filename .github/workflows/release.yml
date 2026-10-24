@@ -15,19 +15,32 @@ jobs:
       matrix:
         include:
           - { target: aarch64-apple-darwin, os: macos-14, archive: tar.gz }
-          # Cross-built on Apple silicon: the hosted Intel macOS image is retired.
-          - { target: x86_64-apple-darwin, os: macos-14, archive: tar.gz }
-          # Built on 22.04 so the binary needs glibc 2.35, not 2.39, and runs on older distributions.
-          - { target: x86_64-unknown-linux-gnu, os: ubuntu-22.04, archive: tar.gz }
-          - { target: aarch64-unknown-linux-gnu, os: ubuntu-22.04-arm, archive: tar.gz }
+          # Build ONNX from source: the pinned ort crate has no Intel macOS prebuilt.
+          - { target: x86_64-apple-darwin, os: macos-15-intel, archive: tar.gz, source_ort: true }
+          # Build ONNX on 22.04 too; newer prebuilts require glibc 2.38 / GCC 13.
+          - { target: x86_64-unknown-linux-gnu, os: ubuntu-22.04, archive: tar.gz, source_ort: true }
+          - { target: aarch64-unknown-linux-gnu, os: ubuntu-22.04-arm, archive: tar.gz, source_ort: true }
           - { target: x86_64-pc-windows-msvc, os: windows-2022, archive: zip }
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@1.99.0
         with:
           targets: ${{ matrix.target }}
-      - run: cargo build --release -p hyperag --target ${{ matrix.target }}
+      - name: cache the source-built ONNX runtime
+        if: matrix.source_ort
+        uses: actions/cache@v6.1.0
+        with:
+          path: ${{ runner.temp }}/hyperag-onnx/lib
+          key: onnx-api24-v1-${{ runner.os }}-${{ matrix.target }}-3a728b75062256951b6e19ce718907cf1a1d4cf0
+      - name: build a compatible static ONNX CPU runtime
+        if: matrix.source_ort
+        shell: bash
+        run: |
+          python3 scripts/build-onnx-runtime.py --out "$RUNNER_TEMP/hyperag-onnx"
+          echo "ORT_LIB_PATH=$RUNNER_TEMP/hyperag-onnx/lib" >> "$GITHUB_ENV"
+          echo "ORT_PREFER_DYNAMIC_LINK=0" >> "$GITHUB_ENV"
+      - run: cargo build --release --locked -p hyperag --target ${{ matrix.target }}
       - name: release CLI smoke
         run: python scripts/release-smoke.py target/${{ matrix.target }}/release/hyperag${{ runner.os == 'Windows' && '.exe' || '' }}
       - name: name of the archive
@@ -38,6 +51,10 @@ jobs:
         run: |
           name=hyperag-$TAG-${{ matrix.target }}
           mkdir "$name" && cp target/${{ matrix.target }}/release/hyperag README.md LICENSE NOTICE "$name/"
+          if [ -n "${ORT_LIB_PATH:-}" ]; then
+            mkdir "$name/onnx-runtime"
+            cp "$ORT_LIB_PATH/LICENSE" "$ORT_LIB_PATH/ThirdPartyNotices.txt" "$ORT_LIB_PATH/build.json" "$name/onnx-runtime/"
+          fi
           tar czf "$name.tar.gz" "$name"
       - name: package (windows)
         if: matrix.archive == 'zip'
@@ -47,7 +64,7 @@ jobs:
           New-Item -ItemType Directory $name | Out-Null
           Copy-Item target/${{ matrix.target }}/release/hyperag.exe, README.md, LICENSE, NOTICE $name
           Compress-Archive -Path $name -DestinationPath "$name.zip"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7.0.2
         with:
           name: ${{ matrix.target }}
           path: hyperag-*.${{ matrix.archive }}
@@ -58,7 +75,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8.0.2
         with:
           merge-multiple: true
       - run: sha256sum hyperag-* > SHA256SUMS && cat SHA256SUMS

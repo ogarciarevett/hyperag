@@ -31,3 +31,5 @@ cargo build --release -p hyperag
 ```
 
 Use the Rust version pinned in the release workflow. The TypeScript reference and benchmark harness use the Bun version pinned in CI; `bun install --frozen-lockfile` installs their dependencies.
+
+Linux release binaries are built on Ubuntu 22.04 (glibc 2.35). Their ONNX CPU runtime is built from pinned upstream source on the same host; Intel macOS also uses that source build because the dependency does not provide an Intel prebuilt. ONNX build revision and license notices are included in those archives.
