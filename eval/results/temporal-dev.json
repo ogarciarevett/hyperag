@@ -1,0 +1,105 @@
+{
+  "status": "recomputed from measured dev retrieval artifacts, 2026-10-24",
+  "sourceCommit": null,
+  "sourceCommitLimit": "The original run did not record its source commit. These are exploratory dev observations, not an exact-head or held-out quality result.",
+  "split": "eval/public/splits/lme-s-dev.json",
+  "splitSha256": "899e567d0213da0258d9a2b83f858ed5a698823be8e16806584924b258753365",
+  "seed": "42",
+  "k": 10,
+  "metric": "Fraction of questions with at least one answer-session turn in the top k. Not answer accuracy or all-evidence recall.",
+  "profiles": [
+    {
+      "profile": "bm25",
+      "build": "rust",
+      "embedding": "none",
+      "reranker": "none",
+      "graph": false,
+      "questions": 398,
+      "hits": 386,
+      "recallAt10": 0.9698492462311558,
+      "byType": {
+        "knowledge-update": {
+          "questions": 60,
+          "hits": 60,
+          "recallAt10": 1
+        },
+        "multi-session": {
+          "questions": 107,
+          "hits": 106,
+          "recallAt10": 0.9906542056074766
+        },
+        "single-session-assistant": {
+          "questions": 45,
+          "hits": 45,
+          "recallAt10": 1
+        },
+        "single-session-preference": {
+          "questions": 25,
+          "hits": 21,
+          "recallAt10": 0.84
+        },
+        "single-session-user": {
+          "questions": 55,
+          "hits": 55,
+          "recallAt10": 1
+        },
+        "temporal-reasoning": {
+          "questions": 106,
+          "hits": 99,
+          "recallAt10": 0.9339622641509434
+        }
+      }
+    },
+    {
+      "profile": "bm25+temporal",
+      "build": "rust",
+      "embedding": "none",
+      "reranker": "none",
+      "graph": false,
+      "questions": 398,
+      "hits": 385,
+      "recallAt10": 0.9673366834170855,
+      "byType": {
+        "knowledge-update": {
+          "questions": 60,
+          "hits": 60,
+          "recallAt10": 1
+        },
+        "multi-session": {
+          "questions": 107,
+          "hits": 105,
+          "recallAt10": 0.9813084112149533
+        },
+        "single-session-assistant": {
+          "questions": 45,
+          "hits": 45,
+          "recallAt10": 1
+        },
+        "single-session-preference": {
+          "questions": 25,
+          "hits": 21,
+          "recallAt10": 0.84
+        },
+        "single-session-user": {
+          "questions": 55,
+          "hits": 55,
+          "recallAt10": 1
+        },
+        "temporal-reasoning": {
+          "questions": 106,
+          "hits": 99,
+          "recallAt10": 0.9339622641509434
+        }
+      }
+    }
+  ],
+  "paired": {
+    "gained": 0,
+    "lost": 1
+  },
+  "originalArtifactsSha256": {
+    "dev-bm25.json": "ee22794643173ddc761974858a8ece966bdc75540f78c691078065db46445643",
+    "dev-bm25_temporal.json": "2f28f2b3b2104631cc0ef5a01c3dde27c6a861b0ce260c15bacc86bd9133894b",
+    "hyperag-temporal-bin": "5746e166568ecc835b6bd93bcb81d210b418784a261c0dbe7e58b125ec224459"
+  }
+}

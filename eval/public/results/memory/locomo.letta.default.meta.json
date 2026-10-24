@@ -1,0 +1,58 @@
+{
+  "system": "letta",
+  "version": "letta server 0.16.8 (docker letta/letta:0.16.8)",
+  "profile": "default",
+  "config": {
+    "ingest": "POST /v1/agents/{id}/archival-memory, one per doc, doc id tag",
+    "search": "GET archival-memory/search (semantic), top_k",
+    "embedding": "openai-compatible BAAI/bge-small-en-v1.5, server default chunk size 300",
+    "llm": "not called on this path",
+    "concurrency": 8
+  },
+  "bench": "locomo",
+  "units": 10,
+  "questions": 1986,
+  "expectedQuestions": 1986,
+  "failedSearches": 0,
+  "k": 10,
+  "workers": 2,
+  "llm": {
+    "model": "llama-3.3-70b-instruct",
+    "calls": 1986,
+    "prompt": 1218513,
+    "completion": 22216
+  },
+  "accuracy": "score_locomo.py",
+  "wallSeconds": 353.528684333,
+  "ingestP50Ms": 32292.803957999997,
+  "searchP50Ms": 9164.215333999979,
+  "searchP95Ms": 19656.49449999997,
+  "rssPeakBytes": 25952952,
+  "systemRssPeakBytes": 699446067,
+  "date": "2026-10-24T04:58:58.437Z",
+  "locomo": {
+    "f1_cat1_4": 0.4108,
+    "per_category": {
+      "1": {
+        "n": 282,
+        "f1": 0.2957
+      },
+      "2": {
+        "n": 321,
+        "f1": 0.3108
+      },
+      "3": {
+        "n": 96,
+        "f1": 0.1368
+      },
+      "4": {
+        "n": 841,
+        "f1": 0.5188
+      },
+      "5": {
+        "n": 446,
+        "f1": 0.8475
+      }
+    }
+  }
+}

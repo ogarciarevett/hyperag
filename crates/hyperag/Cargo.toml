@@ -1,0 +1,39 @@
+[package]
+name = "hyperag"
+version = "0.2.0"
+edition = "2024"
+description = "Shared memory and retrieval for AI agents"
+license = "Apache-2.0"
+license-file = "../../LICENSE"
+repository = "https://github.com/ogarciarevett/hyperag"
+homepage = "https://github.com/ogarciarevett/hyperag"
+readme = "../../README.md"
+keywords = ["rag", "memory", "retrieval", "pgvector", "mcp"]
+categories = ["database", "command-line-utilities"]
+rust-version = "1.99"
+
+[dependencies]
+anyhow = "=1.0.104"
+axum = "=0.8.9"
+chrono = { version = "=0.4.45", features = ["serde"] }
+clap = { version = "=4.6.7", features = ["derive", "env"] }
+fastembed = { version = "=7.0.1", default-features = false, features = ["ort-download-binaries-rustls-tls", "hf-hub-rustls-tls"] }
+hex = "=0.4.3"
+getrandom = "=0.4.3"
+# The same versions fastembed uses, for models whose graph needs inputs fastembed does not pass.
+ndarray = { version = "=0.17.2", default-features = false }
+ort = { version = "=2.0.0-rc.13", default-features = false, features = ["ndarray", "std", "api-24"] }
+tokenizers = { version = "=0.23.2", default-features = false, features = ["onig"] }
+pgvector = { version = "=0.4.2", features = ["sqlx"] }
+reqwest = { version = "=0.13.5", default-features = false, features = ["json", "rustls"] }
+rmcp = { version = "=3.5.1", features = ["server", "transport-io", "transport-streamable-http-server", "macros"] }
+serde = { version = "=1.0.229", features = ["derive"] }
+serde_json = { version = "=1.0.151", features = ["preserve_order"] }
+sha2 = "=0.11.0"
+sqlx = { version = "=0.9.0", default-features = false, features = ["runtime-tokio", "tls-rustls", "postgres", "chrono", "json", "macros"] }
+subtle = "=2.6.1"
+tempfile = "=3.27.0"
+thiserror = "=2.0.21"
+tokio = { version = "=1.53.2", features = ["full"] }
+tracing = "=0.1.44"
+tracing-subscriber = { version = "=0.3.23", features = ["env-filter"] }

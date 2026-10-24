@@ -1,0 +1,60 @@
+{
+  "system": "hindsight",
+  "version": "hindsight-api 1.1.0, hindsight-client 1.1.0",
+  "profile": "default",
+  "config": {
+    "retain": "defaults (LLM extraction)",
+    "recall": "defaults (budget mid, max_tokens 4096)",
+    "database": "pg0 embedded Postgres",
+    "embeddings": "local BAAI/bge-small-en-v1.5 (server default)",
+    "reranker": "local cross-encoder (server default)",
+    "llm": "shared endpoint",
+    "max_completion_tokens": "8192 for retain, consolidation and reflect"
+  },
+  "bench": "locomo",
+  "units": 10,
+  "questions": 1986,
+  "expectedQuestions": 1986,
+  "failedSearches": 0,
+  "k": 10,
+  "workers": 4,
+  "llm": {
+    "model": "llama-3.3-70b-instruct",
+    "calls": 1986,
+    "prompt": 665151,
+    "completion": 21090
+  },
+  "accuracy": "score_locomo.py",
+  "wallSeconds": 3553.734990125,
+  "ingestP50Ms": 953476.6090000002,
+  "searchP50Ms": 60325.42374999984,
+  "searchP95Ms": 138557.95745799993,
+  "rssPeakBytes": 31441616,
+  "systemRssPeakBytes": 66830336,
+  "date": "2026-10-24T04:30:14.839Z",
+  "locomo": {
+    "f1_cat1_4": 0.3538,
+    "per_category": {
+      "1": {
+        "n": 282,
+        "f1": 0.3435
+      },
+      "2": {
+        "n": 321,
+        "f1": 0.2744
+      },
+      "3": {
+        "n": 96,
+        "f1": 0.1644
+      },
+      "4": {
+        "n": 841,
+        "f1": 0.4092
+      },
+      "5": {
+        "n": 446,
+        "f1": 0.9552
+      }
+    }
+  }
+}

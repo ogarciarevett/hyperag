@@ -1,0 +1,12 @@
+{
+  "status": "deferred",
+  "score": null,
+  "answers": 18,
+  "uniqueIds": 18,
+  "reason": "local-model row blocked by full machine gate for more than600seconds",
+  "blockedSinceConservative": "2026-10-24T08:51:59Z",
+  "deferredAt": "2026-10-24T09:02:25Z",
+  "movedBehind": "dmr memvid default 4",
+  "restoreRow": "lme-oracle hyperag egemma2+rerank 2 budget90",
+  "notSystemFailure": true
+}

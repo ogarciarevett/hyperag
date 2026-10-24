@@ -1,0 +1,36 @@
+{
+  "sourceCommit": "b3450a82c331483d38f81c82b48de33ec9f2c4a5",
+  "measuredAt": "2026-10-24T02:46:19.621Z",
+  "build": "rust",
+  "probes": {
+    "sameModels": 52,
+    "historyOnly": 12
+  },
+  "tag": "rs_rtmvlsrlvv",
+  "records": 22,
+  "exported": "exported {\"grant\":5,\"grantLog\":7,\"memory\":6,\"relation\":2}",
+  "importedB": "imported {\"memories\":6,\"skipped\":0,\"versions\":6,\"grants\":5,\"grantLog\":7,\"relations\":2}\nembedded 5 memories into space 488f980e9cff3a78\nmodels: embedding hf:Xenova/multilingual-e5-small?revision=761b726dd34fb83930e26aab4e9ac3899aa1fa78&dtype=q8&pooling=mean (space 488f980e9cff3a78), reranker none",
+  "importedC": "imported {\"memories\":6,\"skipped\":0,\"versions\":6,\"grants\":5,\"grantLog\":7,\"relations\":0}\nmodels: embedding none (space -), reranker none",
+  "checks": [
+    {
+      "name": "reranker-only import fills the active embedding space",
+      "pass": true
+    },
+    {
+      "name": "B answers equal A (every retrieve and explain)",
+      "pass": true
+    },
+    {
+      "name": "C keeps every history (BM25 only, no graph)",
+      "pass": true
+    },
+    {
+      "name": "re-import is a no-op",
+      "pass": true
+    },
+    {
+      "name": "the export holds no token or secret",
+      "pass": true
+    }
+  ]
+}

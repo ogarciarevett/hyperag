@@ -1,0 +1,44 @@
+{
+  "system": "hyperag",
+  "version": "0.1.0",
+  "profile": "nemotron+nvrerank",
+  "config": {
+    "embedding": {
+      "model": "nvidia/Nemotron-3.5-Embed-8B-BF16#first-1024-dims",
+      "revision": "781e779ee4ca9c2d2a4f38321993556baeab49a1",
+      "dimensions": 1024,
+      "normalized": true,
+      "preprocessing": "server /v2/embed, input_type query|document, truncate END; mean pooling; first 1024 of 4096 dims, re-normalised"
+    },
+    "reranker": "nvidia/Nemotron-3.5-Rerank-8B-BF16@f88f8d9104726747791283ab156d2fcdb29e90a7",
+    "rrfK": 60,
+    "graph": null
+  },
+  "bench": "dmr",
+  "units": 500,
+  "questions": 500,
+  "expectedQuestions": 500,
+  "failedSearches": 0,
+  "k": 10,
+  "workers": 2,
+  "llm": {
+    "model": "llama-3.3-70b-instruct",
+    "calls": 1000,
+    "prompt": 313338,
+    "completion": 18100
+  },
+  "accuracy": 0.824,
+  "byType": {
+    "dmr": {
+      "n": 500,
+      "correct": 412
+    }
+  },
+  "wallSeconds": 1627.75929925,
+  "ingestP50Ms": 2809.45633299998,
+  "searchP50Ms": 378.22829200001433,
+  "searchP95Ms": 2302.1075829999754,
+  "rssPeakBytes": 48431896,
+  "systemRssPeakBytes": 188848538,
+  "date": "2026-10-24T07:15:16.124Z"
+}

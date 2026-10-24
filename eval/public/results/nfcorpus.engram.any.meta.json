@@ -1,0 +1,22 @@
+{
+  "system": "engram",
+  "version": "engram 3.3.2",
+  "profile": "any",
+  "config": {
+    "transport": "mcp stdio",
+    "match_mode": "any"
+  },
+  "dataset": "nfcorpus",
+  "split": "test",
+  "documents": 3633,
+  "queries": 323,
+  "k": 100,
+  "ingestMs": 50253.359166,
+  "latencyP50Ms": 4.4462080000012065,
+  "latencyP95Ms": 33.208999999995285,
+  "rssPeakBytes": 41583312,
+  "systemRssPeakBytes": 39370752,
+  "failedQueries": 0,
+  "errors": {},
+  "date": "2026-10-23T20:49:25.446Z"
+}

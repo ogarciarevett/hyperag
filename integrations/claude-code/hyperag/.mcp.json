@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "hyperag": {
+      "command": "hyperag",
+      "args": ["mcp"],
+      "env": { "HYPERAG_URL": "${HYPERAG_URL:-http://127.0.0.1:7480}", "HYPERAG_TOKEN": "${HYPERAG_TOKEN}" }
+    }
+  }
+}

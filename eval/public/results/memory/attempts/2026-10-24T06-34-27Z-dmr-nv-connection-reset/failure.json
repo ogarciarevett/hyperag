@@ -1,0 +1,8 @@
+{
+  "status": "failed",
+  "score": null,
+  "reason": "ECONNRESET during /v2/embed ingestion",
+  "answers": 5,
+  "date": "2026-10-24T06:34:27Z",
+  "retry": "staged for next verified idle boundary; active oracle continues"
+}

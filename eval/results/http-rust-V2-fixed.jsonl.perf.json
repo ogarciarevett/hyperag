@@ -1,0 +1,17 @@
+{
+  "build": "rust",
+  "variant": "V2",
+  "memory": "shared",
+  "database": "evalhttp_rust_bge_teams",
+  "serviceStartupMs": 1632.0038749999999,
+  "ingest": {
+    "documents": 1536,
+    "ingestMs": 55542.337584,
+    "graphEdges": 960,
+    "graphMs": 18704.413416999996
+  },
+  "throughputQps": {
+    "c1": 3.418433678222869
+  },
+  "serviceRssPeakBytes": 1625292800
+}

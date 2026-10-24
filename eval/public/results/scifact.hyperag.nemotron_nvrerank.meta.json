@@ -1,0 +1,32 @@
+{
+  "system": "hyperag",
+  "version": "0.1.0",
+  "profile": "nemotron+nvrerank",
+  "config": {
+    "embedding": {
+      "model": "nvidia/Nemotron-3.5-Embed-8B-BF16#first-1024-dims",
+      "revision": "781e779ee4ca9c2d2a4f38321993556baeab49a1",
+      "dimensions": 1024,
+      "normalized": true,
+      "preprocessing": "server /v2/embed, input_type query|document, truncate END; mean pooling; first 1024 of 4096 dims, re-normalised"
+    },
+    "reranker": "nvidia/Nemotron-3.5-Rerank-8B-BF16@f88f8d9104726747791283ab156d2fcdb29e90a7",
+    "rrfK": 60,
+    "graph": null,
+    "gpuRequestDeadline": "No extra adapter wall-clock deadline through the shared proxy; window budget and VM cutoff remain"
+  },
+  "transportRetry": "Common proxy: ECONNRESET only, 3 total upstream attempts, 250/500ms backoff, identical payload; HTTP errors unchanged; native client retries remain; upstream keep-alive disabled",
+  "dataset": "scifact",
+  "split": "test",
+  "documents": 5183,
+  "queries": 300,
+  "k": 100,
+  "ingestMs": 19850.57725,
+  "latencyP50Ms": 1852.0318750000006,
+  "latencyP95Ms": 2801.044292000006,
+  "rssPeakBytes": 50594512,
+  "systemRssPeakBytes": 177733632,
+  "failedQueries": 0,
+  "errors": {},
+  "date": "2026-10-24T13:19:49.236Z"
+}

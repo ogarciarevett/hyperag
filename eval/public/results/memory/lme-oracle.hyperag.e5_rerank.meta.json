@@ -1,0 +1,68 @@
+{
+  "system": "hyperag",
+  "version": "0.1.0",
+  "profile": "e5+rerank",
+  "config": {
+    "embedding": {
+      "model": "Xenova/multilingual-e5-small#q8",
+      "revision": "761b726dd34fb83930e26aab4e9ac3899aa1fa78",
+      "dimensions": 384,
+      "normalized": true,
+      "preprocessing": "mean pooling; prefixes query=\"query: \" document=\"passage: \""
+    },
+    "reranker": "Xenova/bge-reranker-base@280bcc2#q8",
+    "rrfK": 60,
+    "graph": null
+  },
+  "bench": "LME oracle haystack, top-10 retrieval",
+  "units": 500,
+  "questions": 500,
+  "expectedQuestions": 500,
+  "failedSearches": 0,
+  "k": 10,
+  "workers": 2,
+  "llm": {
+    "model": "llama-3.3-70b-instruct",
+    "calls": 1000,
+    "prompt": 1500354,
+    "completion": 40566
+  },
+  "accuracy": 0.806,
+  "byType": {
+    "temporal-reasoning": {
+      "n": 127,
+      "correct": 95
+    },
+    "abstention": {
+      "n": 30,
+      "correct": 18
+    },
+    "multi-session": {
+      "n": 121,
+      "correct": 95
+    },
+    "knowledge-update": {
+      "n": 72,
+      "correct": 59
+    },
+    "single-session-preference": {
+      "n": 30,
+      "correct": 17
+    },
+    "single-session-assistant": {
+      "n": 56,
+      "correct": 55
+    },
+    "single-session-user": {
+      "n": 64,
+      "correct": 64
+    }
+  },
+  "wallSeconds": 1840.4042099160001,
+  "ingestP50Ms": 0.5965829999186099,
+  "searchP50Ms": 2746.347458000062,
+  "searchP95Ms": 3103.237333000172,
+  "rssPeakBytes": 3308212208,
+  "systemRssPeakBytes": 246834790,
+  "date": "2026-10-24T00:54:41.480Z"
+}

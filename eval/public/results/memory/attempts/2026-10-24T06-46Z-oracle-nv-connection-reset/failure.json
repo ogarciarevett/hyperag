@@ -1,0 +1,9 @@
+{
+  "status": "failed",
+  "score": null,
+  "reason": "ECONNRESET during /v2/embed ingestion",
+  "answers": 209,
+  "uniqueIds": 209,
+  "completionMetadata": false,
+  "retry": "bounded transport reset retry; same queue window"
+}

@@ -1,0 +1,10 @@
+{
+  "dataset": "nfcorpus",
+  "system": "hyperag",
+  "profile": "nemotron",
+  "status": "failed",
+  "score": null,
+  "error": "gpu endpoint /v2/embed: 502",
+  "cause": "undetermined: upstream HTTP or proxy transport; prior proxy catch did not log class",
+  "retry": "full row, same configuration"
+}

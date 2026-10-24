@@ -1,0 +1,69 @@
+{
+  "system": "hyperag",
+  "version": "0.1.0",
+  "profile": "nemotron+nvrerank",
+  "config": {
+    "embedding": {
+      "model": "nvidia/Nemotron-3.5-Embed-8B-BF16#first-1024-dims",
+      "revision": "781e779ee4ca9c2d2a4f38321993556baeab49a1",
+      "dimensions": 1024,
+      "normalized": true,
+      "preprocessing": "server /v2/embed, input_type query|document, truncate END; mean pooling; first 1024 of 4096 dims, re-normalised"
+    },
+    "reranker": "nvidia/Nemotron-3.5-Rerank-8B-BF16@f88f8d9104726747791283ab156d2fcdb29e90a7",
+    "rrfK": 60,
+    "graph": null
+  },
+  "transportRetry": "Common proxy: ECONNRESET only, 3 total upstream attempts, 250/500ms backoff, identical payload; HTTP errors unchanged; native client retries remain; upstream keep-alive disabled",
+  "bench": "LME oracle haystack, top-10 retrieval",
+  "units": 500,
+  "questions": 500,
+  "expectedQuestions": 500,
+  "failedSearches": 0,
+  "k": 10,
+  "workers": 2,
+  "llm": {
+    "model": "llama-3.3-70b-instruct",
+    "calls": 1000,
+    "prompt": 1159294,
+    "completion": 41472
+  },
+  "accuracy": 0.852,
+  "byType": {
+    "temporal-reasoning": {
+      "n": 127,
+      "correct": 108
+    },
+    "abstention": {
+      "n": 30,
+      "correct": 17
+    },
+    "multi-session": {
+      "n": 121,
+      "correct": 102
+    },
+    "knowledge-update": {
+      "n": 72,
+      "correct": 62
+    },
+    "single-session-preference": {
+      "n": 30,
+      "correct": 17
+    },
+    "single-session-assistant": {
+      "n": 56,
+      "correct": 56
+    },
+    "single-session-user": {
+      "n": 64,
+      "correct": 64
+    }
+  },
+  "wallSeconds": 1772.737642208,
+  "ingestP50Ms": 951.4803340000799,
+  "searchP50Ms": 918.25662499998,
+  "searchP95Ms": 2422.8967079999857,
+  "rssPeakBytes": 69993264,
+  "systemRssPeakBytes": 198810010,
+  "date": "2026-10-24T07:45:37.541Z"
+}

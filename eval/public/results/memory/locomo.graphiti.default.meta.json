@@ -1,0 +1,61 @@
+{
+  "system": "graphiti",
+  "version": "graphiti-core 0.31.2, openai 3.37.0, neo4j 5.26.28-community",
+  "profile": "default",
+  "config": {
+    "ingest": "add_episode, defaults",
+    "search": "Graphiti.search (EDGE_HYBRID_SEARCH_RRF)",
+    "llm": "shared endpoint via OpenAIGenericClient",
+    "embedder": "openai-compatible BAAI/bge-small-en-v1.5",
+    "store": "Neo4j 5.26 in OrbStack",
+    "SEMAPHORE_LIMIT": 8,
+    "max_tokens": 8192,
+    "output_token_cap_note": "Graphiti 0.31.2 edge extraction requests 16384 tokens natively; this run caps requests at the shared 8192-token ceiling on the 32768-token endpoint"
+  },
+  "bench": "locomo",
+  "units": 10,
+  "questions": 1986,
+  "expectedQuestions": 1986,
+  "failedSearches": 0,
+  "k": 10,
+  "workers": 4,
+  "llm": {
+    "model": "llama-3.3-70b-instruct",
+    "calls": 1986,
+    "prompt": 357929,
+    "completion": 17450
+  },
+  "accuracy": "score_locomo.py",
+  "wallSeconds": 4663.549593375,
+  "ingestP50Ms": 1362945.5885,
+  "searchP50Ms": 1786.449374999851,
+  "searchP95Ms": 19084.34262500005,
+  "rssPeakBytes": 24298192,
+  "systemRssPeakBytes": 960954368,
+  "date": "2026-10-24T06:28:09.528Z",
+  "locomo": {
+    "f1_cat1_4": 0.151,
+    "per_category": {
+      "1": {
+        "n": 282,
+        "f1": 0.1813
+      },
+      "2": {
+        "n": 321,
+        "f1": 0.0369
+      },
+      "3": {
+        "n": 96,
+        "f1": 0.1272
+      },
+      "4": {
+        "n": 841,
+        "f1": 0.1871
+      },
+      "5": {
+        "n": 446,
+        "f1": 0.9507
+      }
+    }
+  }
+}

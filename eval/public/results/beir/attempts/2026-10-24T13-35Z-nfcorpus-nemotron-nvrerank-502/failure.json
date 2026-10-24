@@ -1,0 +1,7 @@
+{
+  "status": "failed",
+  "score": null,
+  "error": "HTTP502 /v2/embed",
+  "cause": "unclassified proxy transport vs upstream HTTP",
+  "retry": "full row same configuration"
+}

@@ -1,0 +1,3 @@
+{"id": "handoff-top", "pack": "handoff",
+ "params": {"cite": 1, "abstain_on_flag": true},
+ "space": {"cite": [1, 2, 3, 4], "abstain_on_flag": [true, false]}}

@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="661" viewBox="0 0 880 661" role="img" aria-labelledby="title description">
+<title id="title">LoCoMo — F1, categories 1–4</title>
+<desc id="description">Completed runs from one evaluation window. N/D means not run or incomplete, never zero. Hyperag is blue; competitor colors are fixed across charts.</desc>
+<style>text{font-family:system-ui,-apple-system,Segoe UI,sans-serif;fill:#59636e;font-size:14px}.title{font-size:22px;font-weight:650}.small{font-size:12px}.grid{stroke:#a0a8b0;stroke-opacity:.25}.axis{stroke:#89939d}@media(prefers-color-scheme:dark){text{fill:#a9b3bd}.grid{stroke:#84909b;stroke-opacity:.28}.axis{stroke:#9ca7b2}}</style>
+<text class="title" x="14" y="30">LoCoMo</text>
+<text x="14" y="54">F1, categories 1–4 · higher is better · one window, October 23–24, 2026</text>
+<line class="grid" x1="420" y1="75" x2="420" y2="574"/>
+<text class="small" text-anchor="middle" x="420" y="66">0</text>
+<line class="grid" x1="512.5" y1="75" x2="512.5" y2="574"/>
+<text class="small" text-anchor="middle" x="512.5" y="66">0.25</text>
+<line class="grid" x1="605" y1="75" x2="605" y2="574"/>
+<text class="small" text-anchor="middle" x="605" y="66">0.5</text>
+<line class="grid" x1="697.5" y1="75" x2="697.5" y2="574"/>
+<text class="small" text-anchor="middle" x="697.5" y="66">0.75</text>
+<line class="grid" x1="790" y1="75" x2="790" y2="574"/>
+<text class="small" text-anchor="middle" x="790" y="66">1</text>
+<text x="14" y="103">Hyperag · default template (graph on)</text>
+<text x="428" y="103">N/D</text>
+<text x="14" y="134">Hyperag · bm25 · graph off</text>
+<text x="428" y="134">N/D</text>
+<text x="14" y="165">Hyperag · e5+rerank · graph off</text>
+<rect x="420" y="152" width="168.091" height="18" fill="#5283a3"><title>Hyperag · e5+rerank · graph off: 0.454</title></rect>
+<text x="595.091" y="165">0.454</text>
+<text x="14" y="196">Hyperag · e5+rerank+graph · graph on</text>
+<rect x="420" y="183" width="172.235" height="18" fill="#5283a3"><title>Hyperag · e5+rerank+graph · graph on: 0.466</title></rect>
+<text x="599.235" y="196">0.466</text>
+<text x="14" y="227">Hyperag · egemma2+rerank · graph off</text>
+<rect x="420" y="214" width="176.268" height="18" fill="#5283a3"><title>Hyperag · egemma2+rerank · graph off: 0.476</title></rect>
+<text x="603.268" y="227">0.476</text>
+<text x="14" y="258">Hyperag · nemotron · graph off</text>
+<text x="428" y="258">N/D</text>
+<text x="14" y="289">Hyperag · nemotron+nvrerank · graph off</text>
+<rect x="420" y="276" width="188.737" height="18" fill="#5283a3"><title>Hyperag · nemotron+nvrerank · graph off: 0.510</title></rect>
+<text x="615.737" y="289">0.510</text>
+<text x="14" y="320">cognee · default</text>
+<rect x="420" y="307" width="152.107" height="18" fill="#55958c"><title>cognee · default: 0.411</title></rect>
+<text x="579.107" y="320">0.411</text>
+<text x="14" y="351">engram · any</text>
+<rect x="420" y="338" width="39.442" height="18" fill="#8b915c"><title>engram · any: 0.107</title></rect>
+<text x="466.442" y="351">0.107</text>
+<text x="14" y="382">engram · default</text>
+<rect x="420" y="369" width="5.513" height="18" fill="#8b915c"><title>engram · default: 0.015</title></rect>
+<text x="432.513" y="382">0.015</text>
+<text x="14" y="413">graphiti · default</text>
+<rect x="420" y="400" width="55.870" height="18" fill="#b08c55"><title>graphiti · default: 0.151</title></rect>
+<text x="482.870" y="413">0.151</text>
+<text x="14" y="444">hindsight · default</text>
+<rect x="420" y="431" width="130.906" height="18" fill="#987b9a"><title>hindsight · default: 0.354</title></rect>
+<text x="557.906" y="444">0.354</text>
+<text x="14" y="475">langmem · default</text>
+<text x="428" y="475">N/D</text>
+<text x="14" y="506">letta · default</text>
+<rect x="420" y="493" width="151.996" height="18" fill="#8b915c"><title>letta · default: 0.411</title></rect>
+<text x="578.996" y="506">0.411</text>
+<text x="14" y="537">mem0 · default</text>
+<rect x="420" y="524" width="142.820" height="18" fill="#b08c55"><title>mem0 · default: 0.386</title></rect>
+<text x="569.820" y="537">0.386</text>
+<text x="14" y="568">memvid · default</text>
+<rect x="420" y="555" width="6.438" height="18" fill="#987b9a"><title>memvid · default: 0.017</title></rect>
+<text x="433.438" y="568">0.017</text>
+<line class="axis" x1="420" y1="75" x2="420" y2="574"/>
+<text class="small" x="14" y="604">N/D = unrun or incomplete. Failed native searches remain scored by the common harness.</text>
+<text class="small" x="14" y="625">Raw scores and completion checks: eval/public/results. Graph is off unless marked on.</text>
+</svg>

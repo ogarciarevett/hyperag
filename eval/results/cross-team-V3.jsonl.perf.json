@@ -1,0 +1,18 @@
+{
+  "variant": "V3",
+  "database": "eval_cross_team_e5",
+  "startupMs": 66.458916,
+  "ingest": {
+    "documents": 1536,
+    "ingestMs": 25136.738083,
+    "graphEdges": 1248,
+    "graphMs": 1976.070749999999
+  },
+  "throughputQps": {
+    "c1": 107.00000136341384
+  },
+  "rssPeakBytes": 709101152,
+  "memories": 1536,
+  "versions": 1536,
+  "databaseBytes": 17749695
+}

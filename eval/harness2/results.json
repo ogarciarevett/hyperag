@@ -1,0 +1,168 @@
+{
+ "handoff": {
+  "A": {
+   "pack": "handoff",
+   "side": "A",
+   "cap_seconds": 1200,
+   "pass_score": 0.95,
+   "round": 2,
+   "k": 1,
+   "recovered_interrupted_artifact": false,
+   "selection": "pilot-proposal",
+   "score": 0.7358974358974358,
+   "pass": false,
+   "hard_failure": null,
+   "sealed_items": 13,
+   "plugin_sha256": "3e2eb8179c6d850633920162a10ec9a81fa655d7d063e43c8dc1c3a2abf17113",
+   "status": "complete",
+   "usage": {
+    "input_tokens": 174658,
+    "cached_input_tokens": 154240,
+    "cache_write_input_tokens": 0,
+    "output_tokens": 2519,
+    "reasoning_output_tokens": 315
+   },
+   "cost_estimate_usd": 0.08145,
+   "wall_seconds": 75.158,
+   "model_calls": 1
+  },
+  "B": {
+   "pack": "handoff",
+   "side": "B",
+   "cap_seconds": 1200,
+   "pass_score": 0.95,
+   "round": 2,
+   "k": 1,
+   "selection": "agg1",
+   "final_selection_reached": true,
+   "final_selection_trivial": true,
+   "compose_fell_back": false,
+   "compose_kept_base": true,
+   "own_baseline": {
+    "score": 0.7358974358974358,
+    "pass": false,
+    "hard_failure": null,
+    "sealed_items": 13,
+    "plugin_sha256": "5516cae3a6961a01b9c5987fa4c005c6fc8eeda430152e4f53006da528607426"
+   },
+   "score": 0.7358974358974358,
+   "pass": false,
+   "hard_failure": null,
+   "sealed_items": 13,
+   "plugin_sha256": "2234c060c76e0f1220cf62dd7b4ed19166687cec3e80c8dcd41b65eb4c5b29d0",
+   "status": "complete",
+   "delta_vs_own_baseline": 0.0,
+   "compose_reached": true,
+   "compose_model_turn_completed": true,
+   "usage": {
+    "input_tokens": 1859280,
+    "cached_input_tokens": 1610496,
+    "cache_write_input_tokens": 0,
+    "output_tokens": 21144,
+    "reasoning_output_tokens": 3484
+   },
+   "cost_estimate_usd": 0.870058,
+   "wall_seconds": 793.095,
+   "model_calls": 10
+  },
+  "B_phases": {
+   "phases": {
+    "baseline": true,
+    "propose": true,
+    "probe": true,
+    "compose": true
+   },
+   "composed_harness_found": true,
+   "harness_diff": {
+    "added": [],
+    "removed": [],
+    "modified": []
+   },
+   "compose_changed_harness": false
+  },
+  "verdict": "tie"
+ },
+ "engineering": {
+  "A": {
+   "pack": "engineering",
+   "side": "A",
+   "cap_seconds": 1200,
+   "pass_score": 0.95,
+   "round": 2,
+   "k": 1,
+   "recovered_interrupted_artifact": false,
+   "selection": "pilot-proposal",
+   "score": 0.7948717948717949,
+   "pass": false,
+   "hard_failure": null,
+   "sealed_items": 13,
+   "plugin_sha256": "dd888e145dc27049592d3d660b7c010151f18f8d5b78dccbbd00d081b609386e",
+   "status": "complete",
+   "usage": {
+    "input_tokens": 250193,
+    "cached_input_tokens": 219520,
+    "cache_write_input_tokens": 0,
+    "output_tokens": 3093,
+    "reasoning_output_tokens": 483
+   },
+   "cost_estimate_usd": 0.114228,
+   "wall_seconds": 94.699,
+   "model_calls": 1
+  },
+  "B": {
+   "pack": "engineering",
+   "side": "B",
+   "cap_seconds": 1200,
+   "pass_score": 0.95,
+   "round": 2,
+   "k": 1,
+   "selection": "agg1",
+   "final_selection_reached": true,
+   "final_selection_trivial": true,
+   "compose_fell_back": false,
+   "compose_kept_base": true,
+   "own_baseline": {
+    "score": 0.7948717948717949,
+    "pass": false,
+    "hard_failure": null,
+    "sealed_items": 13,
+    "plugin_sha256": "b1405bdd4756a2bf9291959acd6237493a72a61a05277c32218b02b2eab87e97"
+   },
+   "score": 0.7948717948717949,
+   "pass": false,
+   "hard_failure": null,
+   "sealed_items": 13,
+   "plugin_sha256": "6bbc6fbfe26f8fdcf99d915a981d6edef3a569b47cc01dce8a576406c91e6941",
+   "status": "complete",
+   "delta_vs_own_baseline": 0.0,
+   "compose_reached": true,
+   "compose_model_turn_completed": true,
+   "usage": {
+    "input_tokens": 1591480,
+    "cached_input_tokens": 1289856,
+    "cache_write_input_tokens": 0,
+    "output_tokens": 17801,
+    "reasoning_output_tokens": 2739
+   },
+   "cost_estimate_usd": 0.910244,
+   "wall_seconds": 503.613,
+   "model_calls": 7
+  },
+  "B_phases": {
+   "phases": {
+    "baseline": true,
+    "propose": true,
+    "probe": true,
+    "compose": true
+   },
+   "composed_harness_found": true,
+   "harness_diff": {
+    "added": [],
+    "removed": [],
+    "modified": []
+   },
+   "compose_changed_harness": false
+  },
+  "verdict": "tie"
+ }
+}

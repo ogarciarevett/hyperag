@@ -1,0 +1,18 @@
+{
+  "build": "ts",
+  "variant": "L",
+  "database": "evalhttp_ts_lex",
+  "serviceStartupMs": 103.570542,
+  "ingest": {
+    "documents": 1536,
+    "ingestMs": 16640.234083,
+    "graphEdges": 1248,
+    "graphMs": 2442.1948330000014
+  },
+  "throughputQps": {
+    "c1": 318.6513741789475,
+    "c4": 1054.2702061592438,
+    "c8": 1210.8131326267749
+  },
+  "serviceRssPeakBytes": 71303168
+}

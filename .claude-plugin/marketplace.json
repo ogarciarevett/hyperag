@@ -1,0 +1,13 @@
+{
+  "name": "hyperag-local",
+  "owner": {
+    "name": "ogarciarevett"
+  },
+  "plugins": [
+    {
+      "name": "hyperag",
+      "source": "./integrations/claude-code/hyperag",
+      "description": "Shared memory with scoped access and version history"
+    }
+  ]
+}

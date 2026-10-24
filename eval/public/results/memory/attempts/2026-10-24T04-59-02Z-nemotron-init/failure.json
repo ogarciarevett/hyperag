@@ -1,0 +1,18 @@
+{
+  "system": "hyperag",
+  "profile": "nemotron+nvrerank",
+  "benches": [
+    "locomo",
+    "dmr",
+    "lme-oracle",
+    "lme-s100"
+  ],
+  "status": "failed_initialization",
+  "score": null,
+  "error": {
+    "code": "23505",
+    "constraint": "pg_extension_name_index",
+    "detail": "Key (extname)=(vector) already exists."
+  },
+  "cause": "Parallel adapter factories initialize the same schema without serialization after database creation."
+}

@@ -1,0 +1,5 @@
+{
+  "name": "hyperag-local",
+  "owner": { "name": "ogarciarevett" },
+  "plugins": [{ "name": "hyperag", "source": "./hyperag", "description": "Hyperag memory: MCP tools and session hooks" }]
+}

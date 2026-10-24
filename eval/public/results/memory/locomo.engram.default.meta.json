@@ -1,0 +1,55 @@
+{
+  "system": "engram",
+  "version": "engram 3.3.2",
+  "profile": "default",
+  "config": {
+    "transport": "mcp stdio",
+    "match_mode": "all (default)"
+  },
+  "bench": "locomo",
+  "units": 10,
+  "questions": 1986,
+  "expectedQuestions": 1986,
+  "failedSearches": 0,
+  "k": 10,
+  "workers": 4,
+  "llm": {
+    "model": "llama-3.3-70b-instruct",
+    "calls": 1986,
+    "prompt": 170849,
+    "completion": 20546
+  },
+  "accuracy": "score_locomo.py",
+  "wallSeconds": 54.05940604199999,
+  "ingestP50Ms": 5750.071750000003,
+  "searchP50Ms": 82.44258400000035,
+  "searchP95Ms": 182.8864169999997,
+  "rssPeakBytes": 26870456,
+  "systemRssPeakBytes": 370769920,
+  "date": "2026-10-23T22:05:46.655Z",
+  "locomo": {
+    "f1_cat1_4": 0.0149,
+    "per_category": {
+      "1": {
+        "n": 282,
+        "f1": 0.0135
+      },
+      "2": {
+        "n": 321,
+        "f1": 0.0029
+      },
+      "3": {
+        "n": 96,
+        "f1": 0.0558
+      },
+      "4": {
+        "n": 841,
+        "f1": 0.0153
+      },
+      "5": {
+        "n": 446,
+        "f1": 0.926
+      }
+    }
+  }
+}

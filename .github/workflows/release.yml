@@ -1,0 +1,83 @@
+name: release
+# Builds the hyperag binary for each platform when a GitHub Release is published, and attaches the
+# archives and SHA256SUMS to that release.
+on:
+  release:
+    types: [published]
+  # A manual run builds every target without uploading anything, to try the matrix.
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { target: aarch64-apple-darwin, os: macos-14, archive: tar.gz }
+          # Cross-built on Apple silicon: the hosted Intel macOS image is retired.
+          - { target: x86_64-apple-darwin, os: macos-14, archive: tar.gz }
+          # Built on 22.04 so the binary needs glibc 2.35, not 2.39, and runs on older distributions.
+          - { target: x86_64-unknown-linux-gnu, os: ubuntu-22.04, archive: tar.gz }
+          - { target: aarch64-unknown-linux-gnu, os: ubuntu-22.04-arm, archive: tar.gz }
+          - { target: x86_64-pc-windows-msvc, os: windows-2022, archive: zip }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.99.0
+        with:
+          targets: ${{ matrix.target }}
+      - run: cargo build --release -p hyperag --target ${{ matrix.target }}
+      - name: release CLI smoke
+        run: python scripts/release-smoke.py target/${{ matrix.target }}/release/hyperag${{ runner.os == 'Windows' && '.exe' || '' }}
+      - name: name of the archive
+        shell: bash
+        run: echo "TAG=${{ github.event.release.tag_name || format('dry-run-{0}', github.sha) }}" >> "$GITHUB_ENV"
+      - name: package (unix)
+        if: matrix.archive == 'tar.gz'
+        run: |
+          name=hyperag-$TAG-${{ matrix.target }}
+          mkdir "$name" && cp target/${{ matrix.target }}/release/hyperag README.md LICENSE NOTICE "$name/"
+          tar czf "$name.tar.gz" "$name"
+      - name: package (windows)
+        if: matrix.archive == 'zip'
+        shell: pwsh
+        run: |
+          $name = "hyperag-$env:TAG-${{ matrix.target }}"
+          New-Item -ItemType Directory $name | Out-Null
+          Copy-Item target/${{ matrix.target }}/release/hyperag.exe, README.md, LICENSE, NOTICE $name
+          Compress-Archive -Path $name -DestinationPath "$name.zip"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.target }}
+          path: hyperag-*.${{ matrix.archive }}
+  publish:
+    if: github.event_name == 'release'
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+      - run: sha256sum hyperag-* > SHA256SUMS && cat SHA256SUMS
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ github.event.release.tag_name }}" hyperag-* SHA256SUMS --repo "${{ github.repository }}" --clobber
+  installer:
+    if: github.event_name == 'release'
+    needs: publish
+    runs-on: ubuntu-24.04
+    container: ubuntu:24.04
+    steps:
+      - name: install prerequisites in a clean container
+        run: apt-get update && apt-get install -y --no-install-recommends ca-certificates curl tar coreutils
+      - name: install the published binary and verify it
+        env:
+          HYPERAG_VERSION: ${{ github.event.release.tag_name }}
+          HYPERAG_INSTALL_DIR: /tmp/hyperag-bin
+          RELEASE_REPO: ${{ github.repository }}
+        run: |
+          curl -fsSL "https://raw.githubusercontent.com/$RELEASE_REPO/$HYPERAG_VERSION/scripts/install.sh" | sh
+          /tmp/hyperag-bin/hyperag --version

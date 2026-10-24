@@ -1,0 +1,44 @@
+{
+  "system": "hyperag",
+  "version": "0.1.0",
+  "profile": "e5+rerank",
+  "config": {
+    "embedding": {
+      "model": "Xenova/multilingual-e5-small#q8",
+      "revision": "761b726dd34fb83930e26aab4e9ac3899aa1fa78",
+      "dimensions": 384,
+      "normalized": true,
+      "preprocessing": "mean pooling; prefixes query=\"query: \" document=\"passage: \""
+    },
+    "reranker": "Xenova/bge-reranker-base@280bcc2#q8",
+    "rrfK": 60,
+    "graph": null
+  },
+  "bench": "dmr",
+  "units": 500,
+  "questions": 500,
+  "expectedQuestions": 500,
+  "failedSearches": 0,
+  "k": 10,
+  "workers": 2,
+  "llm": {
+    "model": "llama-3.3-70b-instruct",
+    "calls": 1000,
+    "prompt": 319187,
+    "completion": 18067
+  },
+  "accuracy": 0.77,
+  "byType": {
+    "dmr": {
+      "n": 500,
+      "correct": 385
+    }
+  },
+  "wallSeconds": 1011.950886,
+  "ingestP50Ms": 0.9269590000039898,
+  "searchP50Ms": 444.3766670000041,
+  "searchP95Ms": 630.8270839999896,
+  "rssPeakBytes": 2307788088,
+  "systemRssPeakBytes": 162738995,
+  "date": "2026-10-24T00:23:08.596Z"
+}

@@ -1,0 +1,79 @@
+{
+  "version": 1,
+  "rows": [
+    {
+      "bench": "locomo",
+      "system": "langmem",
+      "profile": "default",
+      "status": "blocked",
+      "score": null,
+      "answerRows": 0,
+      "stage": "ingestion",
+      "finishedAt": "2026-10-24T04:30:16Z",
+      "runnerHead": "dbc88a8eaf27724dda4a3f4015ac9426e41868af",
+      "error": {
+        "httpStatus": 400,
+        "type": "BadRequestError",
+        "message": "\"auto\" tool choice requires --enable-auto-tool-choice and --tool-call-parser to be set"
+      },
+      "resolution": "Next window: enable --enable-auto-tool-choice and a model-compatible --tool-call-parser; validate the unchanged native pipeline before a full retry. No serving change in this window."
+    },
+    {
+      "bench": "lme-oracle",
+      "system": "langmem",
+      "profile": "default",
+      "status": "blocked",
+      "score": null,
+      "answerRows": 0,
+      "stage": "ingestion",
+      "finishedAt": null,
+      "runnerHead": "dbc88a8eaf27724dda4a3f4015ac9426e41868af",
+      "error": {
+        "httpStatus": 400,
+        "type": "BadRequestError",
+        "message": "\"auto\" tool choice requires --enable-auto-tool-choice and --tool-call-parser to be set"
+      },
+      "resolution": "Next window: enable --enable-auto-tool-choice and a model-compatible --tool-call-parser; validate the unchanged native pipeline before a full retry. No serving change in this window.",
+      "attempted": false,
+      "observedFailureBench": "locomo"
+    },
+    {
+      "bench": "dmr",
+      "system": "langmem",
+      "profile": "default",
+      "status": "blocked",
+      "score": null,
+      "answerRows": 0,
+      "stage": "ingestion",
+      "finishedAt": null,
+      "runnerHead": "dbc88a8eaf27724dda4a3f4015ac9426e41868af",
+      "error": {
+        "httpStatus": 400,
+        "type": "BadRequestError",
+        "message": "\"auto\" tool choice requires --enable-auto-tool-choice and --tool-call-parser to be set"
+      },
+      "resolution": "Next window: enable --enable-auto-tool-choice and a model-compatible --tool-call-parser; validate the unchanged native pipeline before a full retry. No serving change in this window.",
+      "attempted": false,
+      "observedFailureBench": "locomo"
+    },
+    {
+      "bench": "lme-s100",
+      "system": "langmem",
+      "profile": "default",
+      "status": "blocked",
+      "score": null,
+      "answerRows": 0,
+      "stage": "ingestion",
+      "finishedAt": null,
+      "runnerHead": "dbc88a8eaf27724dda4a3f4015ac9426e41868af",
+      "error": {
+        "httpStatus": 400,
+        "type": "BadRequestError",
+        "message": "\"auto\" tool choice requires --enable-auto-tool-choice and --tool-call-parser to be set"
+      },
+      "resolution": "Next window: enable --enable-auto-tool-choice and a model-compatible --tool-call-parser; validate the unchanged native pipeline before a full retry. No serving change in this window.",
+      "attempted": false,
+      "observedFailureBench": "locomo"
+    }
+  ]
+}

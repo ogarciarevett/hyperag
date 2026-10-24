@@ -1,0 +1,8 @@
+{
+  "dataset": "arguana",
+  "profile": "nemotron_nvrerank",
+  "status": "failed",
+  "score": null,
+  "error": "embed HTTP502; concurrent endpoint health requests time out",
+  "retry": "full same configuration after endpoint recovery"
+}

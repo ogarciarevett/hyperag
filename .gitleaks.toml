@@ -1,0 +1,9 @@
+title = "Hyperag public source scan"
+[extend]
+useDefault = true
+
+# Exact, deliberately fake local fixture values; no paths, commits or rules are skipped.
+[allowlist]
+description = "Clearly fake local test credentials"
+regexTarget = "secret"
+regexes = ['''^(?:neo4j[:/])?fake-test-only(?:-key|-token)?$''']

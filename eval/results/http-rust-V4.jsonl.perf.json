@@ -1,0 +1,18 @@
+{
+  "build": "rust",
+  "variant": "V4",
+  "database": "evalhttp_rust_e5",
+  "serviceStartupMs": 1315.696666,
+  "ingest": {
+    "documents": 1536,
+    "ingestMs": 33749.859834,
+    "graphEdges": 1248,
+    "graphMs": 3772.798917
+  },
+  "throughputQps": {
+    "c1": 3.2264469436132774,
+    "c4": 2.8993400632730615,
+    "c8": 3.1524247840866235
+  },
+  "serviceRssPeakBytes": 1412038656
+}

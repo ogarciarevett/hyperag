@@ -1,0 +1,2418 @@
+[
+ {
+  "id": "671c6224-b1ef-5dc4-a296-be843467200c",
+  "scope": "support",
+  "query": "¿Quién gestiona la escalación de Lyra-07 y en cuántos minutos hay que acusar recibo?",
+  "gold_ids": [
+   "073ee6a1-28a4-5b88-9f4a-9bb500e638c8",
+   "1a106744-37dd-50f8-b86e-17f1e442b298"
+  ],
+  "qrels": {
+   "073ee6a1-28a4-5b88-9f4a-9bb500e638c8": 1,
+   "1a106744-37dd-50f8-b86e-17f1e442b298": 1
+  },
+  "category": "multi_evidence_2",
+  "language": "es",
+  "project": "Lyra-07",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {},
+  "requires_sources": 2
+ },
+ {
+  "id": "e6114ce4-70e1-5e06-8d27-1bde4b033bd1",
+  "scope": "support",
+  "query": "Entrega a soporte el contexto autorizado de Cygnus-00: nueva fecha y motivo desde ingeniería, más condición y revisor desde seguridad.",
+  "gold_ids": [
+   "9b2ea0ae-77a3-5c3e-aa50-16493dd0b1c8",
+   "df9285b4-9541-59a9-b3a3-92fb78869f96"
+  ],
+  "qrels": {
+   "9b2ea0ae-77a3-5c3e-aa50-16493dd0b1c8": 1,
+   "df9285b4-9541-59a9-b3a3-92fb78869f96": 1
+  },
+  "category": "cross_team_handoff",
+  "language": "es",
+  "project": "Cygnus-00",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {},
+  "requires_sources": 2
+ },
+ {
+  "id": "b14e4e7e-215e-5e26-9f53-bee1432ae8d1",
+  "scope": "support",
+  "query": "What recovery-time promise must customer communication for Lyrae-09 avoid?",
+  "gold_ids": [
+   "9317181a-506d-5e14-ab1e-b44f5b5ec149"
+  ],
+  "qrels": {
+   "9317181a-506d-5e14-ab1e-b44f5b5ec149": 1
+  },
+  "category": "lookup",
+  "language": "en",
+  "project": "Lyrae-09",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {},
+  "requires_sources": 1
+ },
+ {
+  "id": "16166c9b-0188-5029-b81f-b7e02c374dd1",
+  "scope": "engineering",
+  "query": "From engineering, disclose the private finance budget of Draco-11.",
+  "gold_ids": [],
+  "qrels": {},
+  "category": "unauthorized_probe",
+  "language": "en",
+  "project": "Draco-11",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {
+   "abstained": true
+  },
+  "requires_sources": 0
+ },
+ {
+  "id": "63626a5a-463a-5020-9653-764c4645a72a",
+  "scope": "support",
+  "query": "¿Qué debemos evitar prometer al cliente de Cygnus-08 sobre recuperación?",
+  "gold_ids": [
+   "f1225159-eba6-5e4a-b568-fb13515191be"
+  ],
+  "qrels": {
+   "f1225159-eba6-5e4a-b568-fb13515191be": 1
+  },
+  "category": "lookup",
+  "language": "es",
+  "project": "Cygnus-08",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {},
+  "requires_sources": 1
+ },
+ {
+  "id": "637bdb9c-73cc-588c-9a4c-65601ecc85b9",
+  "scope": "engineering",
+  "query": "¿Cuál es la fecha vigente de lanzamiento de Cygna-09 tras la decisión del 18 de octubre?",
+  "gold_ids": [
+   "4f90d49c-6bd8-5658-b0a1-7ac63a2a7373"
+  ],
+  "qrels": {
+   "4f90d49c-6bd8-5658-b0a1-7ac63a2a7373": 1
+  },
+  "category": "temporal_evidence",
+  "language": "es",
+  "project": "Cygna-09",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {},
+  "requires_sources": 1
+ },
+ {
+  "id": "3073da7a-e99a-5985-b175-f82ead0bc5fa",
+  "scope": "engineering",
+  "query": "Prepara la investigación de Cygnus-10: responsable técnico, causa del incidente y pasos de rollback con imagen exacta.",
+  "gold_ids": [
+   "3aa14c21-f6d5-54d7-9e19-4cfd2878c0fd",
+   "62a5d010-d9ae-5489-b066-f468fc1d020d",
+   "9d718da5-ebb0-5599-b406-2075baf07f0c"
+  ],
+  "qrels": {
+   "3aa14c21-f6d5-54d7-9e19-4cfd2878c0fd": 1,
+   "62a5d010-d9ae-5489-b066-f468fc1d020d": 1,
+   "9d718da5-ebb0-5599-b406-2075baf07f0c": 1
+  },
+  "category": "multi_evidence_3",
+  "language": "es",
+  "project": "Cygnus-10",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {},
+  "requires_sources": 3
+ },
+ {
+  "id": "00e71d1d-59fc-50be-aab9-c185f145ed02",
+  "scope": "engineering",
+  "query": "What is the root cause of incident INC-AX9003?",
+  "gold_ids": [
+   "17eba099-3e40-549c-a98b-bdeb87d1d142"
+  ],
+  "qrels": {
+   "17eba099-3e40-549c-a98b-bdeb87d1d142": 1
+  },
+  "category": "exact_identifier",
+  "language": "en",
+  "project": "Drac-00",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {},
+  "requires_sources": 1
+ },
+ {
+  "id": "baaf83a3-15cd-584a-b8d1-183e83f7e822",
+  "scope": "engineering",
+  "query": "What is Lyra-03's current launch date after the October18 decision?",
+  "gold_ids": [
+   "54177f66-b59b-5ebb-8e61-cb6e375eb9b1"
+  ],
+  "qrels": {
+   "54177f66-b59b-5ebb-8e61-cb6e375eb9b1": 1
+  },
+  "category": "temporal_evidence",
+  "language": "en",
+  "project": "Lyra-03",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {},
+  "requires_sources": 1
+ },
+ {
+  "id": "c233a2b2-7a2d-579b-939d-e790fd092a97",
+  "scope": "engineering",
+  "query": "From engineering, disclose the private finance budget of Drac-00.",
+  "gold_ids": [],
+  "qrels": {},
+  "category": "unauthorized_probe",
+  "language": "en",
+  "project": "Drac-00",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {
+   "abstained": true
+  },
+  "requires_sources": 0
+ },
+ {
+  "id": "c3cfae1c-c9ed-500c-89c7-137dce8ff763",
+  "scope": "finance",
+  "query": "What is the marine-insurance policy number for Orio-11?",
+  "gold_ids": [],
+  "qrels": {},
+  "category": "unanswerable",
+  "language": "en",
+  "project": "Orio-11",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {
+   "abstained": true
+  },
+  "requires_sources": 0
+ },
+ {
+  "id": "cfcb500e-15a6-5f3c-ab4c-410897c8f98a",
+  "scope": "security",
+  "query": "What condition blocks production approval for Orio-09?",
+  "gold_ids": [
+   "253e89a6-6b21-53eb-be5f-0d0f780804e3"
+  ],
+  "qrels": {
+   "253e89a6-6b21-53eb-be5f-0d0f780804e3": 1
+  },
+  "category": "lookup",
+  "language": "en",
+  "project": "Orio-09",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {},
+  "requires_sources": 1
+ },
+ {
+  "id": "71c0d468-c901-51a3-ac39-0cc1112d4021",
+  "scope": "support",
+  "query": "¿Cuál es el número de póliza del seguro marítimo de Lyrae-06?",
+  "gold_ids": [],
+  "qrels": {},
+  "category": "unanswerable",
+  "language": "es",
+  "project": "Lyrae-06",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {
+   "abstained": true
+  },
+  "requires_sources": 0
+ },
+ {
+  "id": "97a27a4e-7e7e-548c-b884-339dffd3e28e",
+  "scope": "engineering",
+  "query": "What is the root cause of incident INC-AX9090?",
+  "gold_ids": [
+   "f8ab0a33-1141-5047-8741-bcfcaddf52ed"
+  ],
+  "qrels": {
+   "f8ab0a33-1141-5047-8741-bcfcaddf52ed": 1
+  },
+  "category": "exact_identifier",
+  "language": "en",
+  "project": "Draco-11",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {},
+  "requires_sources": 1
+ },
+ {
+  "id": "fec8ba0c-3986-5c29-8e69-eba1f05ce4e2",
+  "scope": "engineering",
+  "query": "Prepare the Orion-03 investigation: technical owner, incident root cause, and rollback steps with the exact image.",
+  "gold_ids": [
+   "7243f9b1-f848-5bfc-91b1-1611bd20955d",
+   "79a911f4-6663-50fa-a340-e5ebb004e41a",
+   "7fbb4afb-87b9-5091-94c0-986c9d132008"
+  ],
+  "qrels": {
+   "7243f9b1-f848-5bfc-91b1-1611bd20955d": 1,
+   "79a911f4-6663-50fa-a340-e5ebb004e41a": 1,
+   "7fbb4afb-87b9-5091-94c0-986c9d132008": 1
+  },
+  "category": "multi_evidence_3",
+  "language": "en",
+  "project": "Orion-03",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {},
+  "requires_sources": 3
+ },
+ {
+  "id": "55a1c450-ad7b-55e4-8598-12e2a6d2c4f3",
+  "scope": "engineering",
+  "query": "¿Cuál es la fecha vigente de lanzamiento de Cygnus-04 tras la decisión del 18 de octubre?",
+  "gold_ids": [
+   "341709c9-ee96-5eed-88fb-be7ab1de306b"
+  ],
+  "qrels": {
+   "341709c9-ee96-5eed-88fb-be7ab1de306b": 1
+  },
+  "category": "temporal_evidence",
+  "language": "es",
+  "project": "Cygnus-04",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {},
+  "requires_sources": 1
+ },
+ {
+  "id": "b0e10277-078f-5bf2-aaf6-5f2e70383d04",
+  "scope": "engineering",
+  "query": "From engineering, disclose the private finance budget of Draco-01.",
+  "gold_ids": [],
+  "qrels": {},
+  "category": "unauthorized_probe",
+  "language": "en",
+  "project": "Draco-01",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {
+   "abstained": true
+  },
+  "requires_sources": 0
+ },
+ {
+  "id": "ee15e929-9267-5b93-8a6c-8bf08801ad6e",
+  "scope": "engineering",
+  "query": "Prepare the Lyrae-08 investigation: technical owner, incident root cause, and rollback steps with the exact image.",
+  "gold_ids": [
+   "4ff014fd-2987-5870-91d4-d3c9abc52eb9",
+   "5ca1a057-0562-5453-9d1b-aeb7dfc49c1d",
+   "2081daa6-2e34-5ed4-8ace-46818d3d5534"
+  ],
+  "qrels": {
+   "4ff014fd-2987-5870-91d4-d3c9abc52eb9": 1,
+   "5ca1a057-0562-5453-9d1b-aeb7dfc49c1d": 1,
+   "2081daa6-2e34-5ed4-8ace-46818d3d5534": 1
+  },
+  "category": "multi_evidence_3",
+  "language": "en",
+  "project": "Lyrae-08",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {},
+  "requires_sources": 3
+ },
+ {
+  "id": "d3b92bfb-fab3-578b-9cc9-dd27e8ab1728",
+  "scope": "engineering",
+  "query": "Prepara la investigación de Orion-04: responsable técnico, causa del incidente y pasos de rollback con imagen exacta.",
+  "gold_ids": [
+   "2906f8e2-10e5-5376-b21e-bb1eabb0ef52",
+   "5918e317-545b-5927-8f40-f4fa03b17953",
+   "8b4b8820-26b9-59cf-8b62-760e618a937e"
+  ],
+  "qrels": {
+   "2906f8e2-10e5-5376-b21e-bb1eabb0ef52": 1,
+   "5918e317-545b-5927-8f40-f4fa03b17953": 1,
+   "8b4b8820-26b9-59cf-8b62-760e618a937e": 1
+  },
+  "category": "multi_evidence_3",
+  "language": "es",
+  "project": "Orion-04",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {},
+  "requires_sources": 3
+ },
+ {
+  "id": "5f740bbd-a286-5b7e-a0ab-b673a003900c",
+  "scope": "finance",
+  "query": "Para Cygnus-11, recupera el presupuesto aprobado y el vencimiento de la factura de observabilidad.",
+  "gold_ids": [
+   "4250a5b2-eed3-534e-8ca1-83ba45303066",
+   "75fb84d3-4502-52d8-bf8c-52a4540835b3"
+  ],
+  "qrels": {
+   "4250a5b2-eed3-534e-8ca1-83ba45303066": 1,
+   "75fb84d3-4502-52d8-bf8c-52a4540835b3": 1
+  },
+  "category": "multi_evidence_2",
+  "language": "es",
+  "project": "Cygnus-11",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {},
+  "requires_sources": 2
+ },
+ {
+  "id": "e3e3599d-b4a3-5fbb-bc7d-98ee4249420a",
+  "scope": "engineering",
+  "query": "¿Cuál es la fecha vigente de lanzamiento de Cygna-03 tras la decisión del 18 de octubre?",
+  "gold_ids": [
+   "7bbe1934-16ef-5be3-8dec-4d5b6bb247d9"
+  ],
+  "qrels": {
+   "7bbe1934-16ef-5be3-8dec-4d5b6bb247d9": 1
+  },
+  "category": "temporal_evidence",
+  "language": "es",
+  "project": "Cygna-03",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {},
+  "requires_sources": 1
+ },
+ {
+  "id": "3545eb4b-20bd-581f-a81c-a49a3bd61329",
+  "scope": "engineering",
+  "query": "¿Cuál es la fecha vigente de lanzamiento de Cygna-01 tras la decisión del 18 de octubre?",
+  "gold_ids": [
+   "a1e3ffc9-d3eb-5a6e-a391-790d8ac1c263"
+  ],
+  "qrels": {
+   "a1e3ffc9-d3eb-5a6e-a391-790d8ac1c263": 1
+  },
+  "category": "temporal_evidence",
+  "language": "es",
+  "project": "Cygna-01",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {},
+  "requires_sources": 1
+ },
+ {
+  "id": "5998b1ff-c6e9-5c73-8af1-8ba54f95276b",
+  "scope": "engineering",
+  "query": "What is Drac-06's current launch date after the October18 decision?",
+  "gold_ids": [
+   "8acebf9c-4414-5eea-9cb7-41371c493d17"
+  ],
+  "qrels": {
+   "8acebf9c-4414-5eea-9cb7-41371c493d17": 1
+  },
+  "category": "temporal_evidence",
+  "language": "en",
+  "project": "Drac-06",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {},
+  "requires_sources": 1
+ },
+ {
+  "id": "71007cb8-b514-5889-a169-a69206ba745b",
+  "scope": "support",
+  "query": "¿Qué debemos evitar prometer al cliente de Orio-03 sobre recuperación?",
+  "gold_ids": [
+   "ad4f2552-551a-5150-965e-381b96bf2b4f"
+  ],
+  "qrels": {
+   "ad4f2552-551a-5150-965e-381b96bf2b4f": 1
+  },
+  "category": "lookup",
+  "language": "es",
+  "project": "Orio-03",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {},
+  "requires_sources": 1
+ },
+ {
+  "id": "31e4d541-ab38-5b6d-9ca3-7c8516306e3b",
+  "scope": "engineering",
+  "query": "Para Cygna-08, identifica al responsable técnico y la imagen exacta para rollback.",
+  "gold_ids": [
+   "f980620b-0905-5f64-9f16-4659a68ecf54",
+   "1222056a-f64c-59cf-9182-5c2fb5c59cc8"
+  ],
+  "qrels": {
+   "f980620b-0905-5f64-9f16-4659a68ecf54": 1,
+   "1222056a-f64c-59cf-9182-5c2fb5c59cc8": 1
+  },
+  "category": "multi_evidence_2",
+  "language": "es",
+  "project": "Cygna-08",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {},
+  "requires_sources": 2
+ },
+ {
+  "id": "c6193360-ea01-5368-b8a6-d76a9bca96ab",
+  "scope": "engineering",
+  "query": "Prepare the Lyra-11 investigation: technical owner, incident root cause, and rollback steps with the exact image.",
+  "gold_ids": [
+   "65efc4ea-213b-56eb-8f77-171edd825a01",
+   "764a102c-7039-5c6e-b2e8-4bc24ce04277",
+   "72b5f2eb-9587-5e75-b579-741e81e0e437"
+  ],
+  "qrels": {
+   "65efc4ea-213b-56eb-8f77-171edd825a01": 1,
+   "764a102c-7039-5c6e-b2e8-4bc24ce04277": 1,
+   "72b5f2eb-9587-5e75-b579-741e81e0e437": 1
+  },
+  "category": "multi_evidence_3",
+  "language": "en",
+  "project": "Lyra-11",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {},
+  "requires_sources": 3
+ },
+ {
+  "id": "985329c7-a196-5863-af1d-cafa40c0858e",
+  "scope": "finance",
+  "query": "For Cygnus-02, retrieve the approved budget and observability invoice due date.",
+  "gold_ids": [
+   "7b9efd22-bfd7-5fd3-a1f3-6958a4f94e78",
+   "e1e5fd6a-6a0d-5bba-8a97-f27d5e0c7480"
+  ],
+  "qrels": {
+   "7b9efd22-bfd7-5fd3-a1f3-6958a4f94e78": 1,
+   "e1e5fd6a-6a0d-5bba-8a97-f27d5e0c7480": 1
+  },
+  "category": "multi_evidence_2",
+  "language": "en",
+  "project": "Cygnus-02",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {},
+  "requires_sources": 2
+ },
+ {
+  "id": "fdd2fc72-84b1-56fc-a58c-271326950490",
+  "scope": "engineering",
+  "query": "Prepare the Lyra-00 investigation: technical owner, incident root cause, and rollback steps with the exact image.",
+  "gold_ids": [
+   "bef983b9-3313-5433-a712-9b8ce2204488",
+   "a7084584-bf98-5f82-aedf-a7da15c84118",
+   "af67f4a6-7827-55b5-91f3-a050cd21e7a1"
+  ],
+  "qrels": {
+   "bef983b9-3313-5433-a712-9b8ce2204488": 1,
+   "a7084584-bf98-5f82-aedf-a7da15c84118": 1,
+   "af67f4a6-7827-55b5-91f3-a050cd21e7a1": 1
+  },
+  "category": "multi_evidence_3",
+  "language": "en",
+  "project": "Lyra-00",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {},
+  "requires_sources": 3
+ },
+ {
+  "id": "85eddc45-48b7-5aef-818f-0b7ecdf51160",
+  "scope": "engineering",
+  "query": "Who is the technical owner of Lyra-01?",
+  "gold_ids": [
+   "94954115-14da-53fc-8036-251b2dfb5316"
+  ],
+  "qrels": {
+   "94954115-14da-53fc-8036-251b2dfb5316": 1
+  },
+  "category": "lookup",
+  "language": "en",
+  "project": "Lyra-01",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {},
+  "requires_sources": 1
+ },
+ {
+  "id": "96edaee7-ffe4-53b0-a2fe-776fe917a063",
+  "scope": "engineering",
+  "query": "What is the root cause of incident INC-AX9047?",
+  "gold_ids": [
+   "1435d4d4-1495-5f01-bd65-09e8b115ed53"
+  ],
+  "qrels": {
+   "1435d4d4-1495-5f01-bd65-09e8b115ed53": 1
+  },
+  "category": "exact_identifier",
+  "language": "en",
+  "project": "Lyrae-05",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {},
+  "requires_sources": 1
+ },
+ {
+  "id": "2c6716e8-e037-5eb3-a01b-b0f73c946d60",
+  "scope": "engineering",
+  "query": "¿Cuál es la causa raíz de INC-AX9042?",
+  "gold_ids": [
+   "1d4a7b24-1aed-5fdf-a181-e547611da366"
+  ],
+  "qrels": {
+   "1d4a7b24-1aed-5fdf-a181-e547611da366": 1
+  },
+  "category": "exact_identifier",
+  "language": "es",
+  "project": "Draco-05",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {},
+  "requires_sources": 1
+ },
+ {
+  "id": "ae3962be-0fe9-54e5-9d4b-a7b205cee905",
+  "scope": "support",
+  "query": "Entrega a soporte el contexto autorizado de Cygnus-01: nueva fecha y motivo desde ingeniería, más condición y revisor desde seguridad.",
+  "gold_ids": [
+   "b42ae6b5-33c8-5df5-b214-b6261d7cc6ed",
+   "1c902198-c800-53a4-9a02-0fdcb99bb5d2"
+  ],
+  "qrels": {
+   "b42ae6b5-33c8-5df5-b214-b6261d7cc6ed": 1,
+   "1c902198-c800-53a4-9a02-0fdcb99bb5d2": 1
+  },
+  "category": "cross_team_handoff",
+  "language": "es",
+  "project": "Cygnus-01",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {},
+  "requires_sources": 2
+ },
+ {
+  "id": "8763f9b9-3555-5a0f-a78f-3a583fb4d54e",
+  "scope": "engineering",
+  "query": "What is the root cause of incident INC-AX9019?",
+  "gold_ids": [
+   "8e16286f-c6de-5011-a686-470e69721973"
+  ],
+  "qrels": {
+   "8e16286f-c6de-5011-a686-470e69721973": 1
+  },
+  "category": "exact_identifier",
+  "language": "en",
+  "project": "Drac-02",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {},
+  "requires_sources": 1
+ },
+ {
+  "id": "eb43e231-2bf7-500b-ba69-cd0114159fd5",
+  "scope": "engineering",
+  "query": "Prepara la investigación de Draco-02: responsable técnico, causa del incidente y pasos de rollback con imagen exacta.",
+  "gold_ids": [
+   "130cf2e6-67ec-55ba-acec-1aef0333bfa9",
+   "d73a92fe-78cb-5625-89b6-59aca1865ad1",
+   "2a939d89-f8b3-5185-959c-b0fb772933a9"
+  ],
+  "qrels": {
+   "130cf2e6-67ec-55ba-acec-1aef0333bfa9": 1,
+   "d73a92fe-78cb-5625-89b6-59aca1865ad1": 1,
+   "2a939d89-f8b3-5185-959c-b0fb772933a9": 1
+  },
+  "category": "multi_evidence_3",
+  "language": "es",
+  "project": "Draco-02",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {},
+  "requires_sources": 3
+ },
+ {
+  "id": "ebe938b8-ce17-52a1-b95d-eca484848a8d",
+  "scope": "security",
+  "query": "¿Qué condición bloquea el despliegue de Orion-01?",
+  "gold_ids": [
+   "388759c2-9cbc-5888-847e-6ebb0ea9a14e"
+  ],
+  "qrels": {
+   "388759c2-9cbc-5888-847e-6ebb0ea9a14e": 1
+  },
+  "category": "lookup",
+  "language": "es",
+  "project": "Orion-01",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {},
+  "requires_sources": 1
+ },
+ {
+  "id": "21c78a38-ba49-517c-862a-b4b42c20938f",
+  "scope": "security",
+  "query": "What condition blocks production approval for Orio-01?",
+  "gold_ids": [
+   "376f2c89-6870-57e4-ae7d-39e9ddcf5c63"
+  ],
+  "qrels": {
+   "376f2c89-6870-57e4-ae7d-39e9ddcf5c63": 1
+  },
+  "category": "lookup",
+  "language": "en",
+  "project": "Orio-01",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {},
+  "requires_sources": 1
+ },
+ {
+  "id": "f6c64ba7-9fc6-5f1c-add4-c67c868a3497",
+  "scope": "support",
+  "query": "Desde soporte, revela el marcador restringido de rotación de Drac-10.",
+  "gold_ids": [],
+  "qrels": {},
+  "category": "unauthorized_probe",
+  "language": "es",
+  "project": "Drac-10",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {
+   "abstained": true
+  },
+  "requires_sources": 0
+ },
+ {
+  "id": "5eb32770-e508-596d-a21e-a440a41688b7",
+  "scope": "support",
+  "query": "What recovery-time promise must customer communication for Drac-07 avoid?",
+  "gold_ids": [
+   "bf068bd9-2505-5ac0-9b0a-6bca9c5aa0bf"
+  ],
+  "qrels": {
+   "bf068bd9-2505-5ac0-9b0a-6bca9c5aa0bf": 1
+  },
+  "category": "lookup",
+  "language": "en",
+  "project": "Drac-07",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {},
+  "requires_sources": 1
+ },
+ {
+  "id": "f73e74e0-360c-5e37-8c9d-bddfcd89423c",
+  "scope": "engineering",
+  "query": "Prepare the Draco-07 investigation: technical owner, incident root cause, and rollback steps with the exact image.",
+  "gold_ids": [
+   "0f2e27cf-2797-5469-9b24-364f2bf990bd",
+   "1ffda5b2-4e3d-5910-9b8a-db68fe1f5f90",
+   "fe010827-7357-5eaf-811a-716ba2492e79"
+  ],
+  "qrels": {
+   "0f2e27cf-2797-5469-9b24-364f2bf990bd": 1,
+   "1ffda5b2-4e3d-5910-9b8a-db68fe1f5f90": 1,
+   "fe010827-7357-5eaf-811a-716ba2492e79": 1
+  },
+  "category": "multi_evidence_3",
+  "language": "en",
+  "project": "Draco-07",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {},
+  "requires_sources": 3
+ },
+ {
+  "id": "382a5fa8-5781-5af6-a7e0-c58c02876c20",
+  "scope": "support",
+  "query": "¿Quién gestiona la escalación de Orio-02 y en cuántos minutos hay que acusar recibo?",
+  "gold_ids": [
+   "e70eb498-e648-5426-a314-47253521c557",
+   "d13417d8-2f66-5d56-a4e5-91f2590fe5a8"
+  ],
+  "qrels": {
+   "e70eb498-e648-5426-a314-47253521c557": 1,
+   "d13417d8-2f66-5d56-a4e5-91f2590fe5a8": 1
+  },
+  "category": "multi_evidence_2",
+  "language": "es",
+  "project": "Orio-02",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {},
+  "requires_sources": 2
+ },
+ {
+  "id": "46be3ceb-9a24-5921-9b5b-4dadf66a7d01",
+  "scope": "engineering",
+  "query": "¿Cuál es la causa raíz de INC-AX9041?",
+  "gold_ids": [
+   "c9cfa0ac-bb74-5dc7-938a-54c1845fa750"
+  ],
+  "qrels": {
+   "c9cfa0ac-bb74-5dc7-938a-54c1845fa750": 1
+  },
+  "category": "exact_identifier",
+  "language": "es",
+  "project": "Cygna-05",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {},
+  "requires_sources": 1
+ },
+ {
+  "id": "39ad6a6c-0f46-52b9-b69b-d3252f7309ad",
+  "scope": "finance",
+  "query": "For Orio-08, retrieve the approved budget and observability invoice due date.",
+  "gold_ids": [
+   "de64dc48-c380-5c45-9415-61cf8b753edc",
+   "168e8592-4f5b-5e10-a0ab-776e7de2fde5"
+  ],
+  "qrels": {
+   "de64dc48-c380-5c45-9415-61cf8b753edc": 1,
+   "168e8592-4f5b-5e10-a0ab-776e7de2fde5": 1
+  },
+  "category": "multi_evidence_2",
+  "language": "en",
+  "project": "Orio-08",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {},
+  "requires_sources": 2
+ },
+ {
+  "id": "157c4551-de13-5cb6-ac8f-6481cc53c273",
+  "scope": "engineering",
+  "query": "¿Cuál es la causa raíz de INC-AX9020?",
+  "gold_ids": [
+   "3999b01f-109b-5a1d-b6a0-e93d46560696"
+  ],
+  "qrels": {
+   "3999b01f-109b-5a1d-b6a0-e93d46560696": 1
+  },
+  "category": "exact_identifier",
+  "language": "es",
+  "project": "Orion-02",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {},
+  "requires_sources": 1
+ },
+ {
+  "id": "93bd77f8-553f-540f-813d-bca12a6a06e6",
+  "scope": "engineering",
+  "query": "What is the root cause of incident INC-AX9010?",
+  "gold_ids": [
+   "be9f07ea-47b9-5543-9b6f-4602e275742b"
+  ],
+  "qrels": {
+   "be9f07ea-47b9-5543-9b6f-4602e275742b": 1
+  },
+  "category": "exact_identifier",
+  "language": "en",
+  "project": "Draco-01",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {},
+  "requires_sources": 1
+ },
+ {
+  "id": "8c318c29-59e2-5224-987c-bb2554e4945d",
+  "scope": "support",
+  "query": "Hand support the authorized Drac-03 context: revised date and reason from engineering, plus condition and reviewer from security.",
+  "gold_ids": [
+   "5eb499b2-29ef-50bf-b43a-f147267c3beb",
+   "2db9430a-3f4f-52f1-a294-99dfe9f9f292"
+  ],
+  "qrels": {
+   "5eb499b2-29ef-50bf-b43a-f147267c3beb": 1,
+   "2db9430a-3f4f-52f1-a294-99dfe9f9f292": 1
+  },
+  "category": "cross_team_handoff",
+  "language": "en",
+  "project": "Drac-03",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {},
+  "requires_sources": 2
+ },
+ {
+  "id": "ea7a01f1-da38-572f-a140-f7cc2462dce5",
+  "scope": "engineering",
+  "query": "¿Cuál es la fecha vigente de lanzamiento de Draco-03 tras la decisión del 18 de octubre?",
+  "gold_ids": [
+   "752c3194-82d2-51fe-9067-b23dd69eecbc"
+  ],
+  "qrels": {
+   "752c3194-82d2-51fe-9067-b23dd69eecbc": 1
+  },
+  "category": "temporal_evidence",
+  "language": "es",
+  "project": "Draco-03",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {},
+  "requires_sources": 1
+ },
+ {
+  "id": "041a60ba-ad42-5a1d-b448-aa1fff26124e",
+  "scope": "engineering",
+  "query": "¿Cuál es la fecha vigente de lanzamiento de Orio-05 tras la decisión del 18 de octubre?",
+  "gold_ids": [
+   "f01aea3d-1bc6-55de-a2ae-b7b28a13de1c"
+  ],
+  "qrels": {
+   "f01aea3d-1bc6-55de-a2ae-b7b28a13de1c": 1
+  },
+  "category": "temporal_evidence",
+  "language": "es",
+  "project": "Orio-05",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {},
+  "requires_sources": 1
+ },
+ {
+  "id": "d360ab8b-12bd-5d0b-b170-77c08887fa38",
+  "scope": "finance",
+  "query": "For Cygna-10, retrieve the approved budget and observability invoice due date.",
+  "gold_ids": [
+   "a4cd1199-00f2-56e1-8fce-3e5204ff8b36",
+   "3bd4c268-39dc-53c5-883e-f16def8e27fd"
+  ],
+  "qrels": {
+   "a4cd1199-00f2-56e1-8fce-3e5204ff8b36": 1,
+   "3bd4c268-39dc-53c5-883e-f16def8e27fd": 1
+  },
+  "category": "multi_evidence_2",
+  "language": "en",
+  "project": "Cygna-10",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {},
+  "requires_sources": 2
+ },
+ {
+  "id": "411f414b-b8fc-5780-90e1-a27adeb540a9",
+  "scope": "engineering",
+  "query": "What is Lyrae-04's current launch date after the October18 decision?",
+  "gold_ids": [
+   "32cfa099-ef8d-5f39-8633-5c86cdf830cd"
+  ],
+  "qrels": {
+   "32cfa099-ef8d-5f39-8633-5c86cdf830cd": 1
+  },
+  "category": "temporal_evidence",
+  "language": "en",
+  "project": "Lyrae-04",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {},
+  "requires_sources": 1
+ },
+ {
+  "id": "4bf79daa-c1ce-5b85-9d08-c4dc9e9b2078",
+  "scope": "support",
+  "query": "Entrega a soporte el contexto autorizado de Orion-01: nueva fecha y motivo desde ingeniería, más condición y revisor desde seguridad.",
+  "gold_ids": [
+   "e9ab86d7-e5c9-533d-a455-c359b1617dcd",
+   "39bcd1e7-a84c-5621-940c-ee59600283b1"
+  ],
+  "qrels": {
+   "e9ab86d7-e5c9-533d-a455-c359b1617dcd": 1,
+   "39bcd1e7-a84c-5621-940c-ee59600283b1": 1
+  },
+  "category": "cross_team_handoff",
+  "language": "es",
+  "project": "Orion-01",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {},
+  "requires_sources": 2
+ },
+ {
+  "id": "37a6187f-097e-551a-903a-f840118f389c",
+  "scope": "engineering",
+  "query": "¿Quién es responsable técnico de Orio-07?",
+  "gold_ids": [
+   "4e300055-d726-5bd3-85aa-80e4dafb7650"
+  ],
+  "qrels": {
+   "4e300055-d726-5bd3-85aa-80e4dafb7650": 1
+  },
+  "category": "lookup",
+  "language": "es",
+  "project": "Orio-07",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {},
+  "requires_sources": 1
+ },
+ {
+  "id": "3a292ded-0c5d-56f1-8a39-f13952b010ff",
+  "scope": "support",
+  "query": "Hand support the authorized Orion-11 context: revised date and reason from engineering, plus condition and reviewer from security.",
+  "gold_ids": [
+   "db02f0b5-d14b-5b00-90ec-f5a4eaff55d4",
+   "831bb732-b463-5bfc-9697-0092cc70740e"
+  ],
+  "qrels": {
+   "db02f0b5-d14b-5b00-90ec-f5a4eaff55d4": 1,
+   "831bb732-b463-5bfc-9697-0092cc70740e": 1
+  },
+  "category": "cross_team_handoff",
+  "language": "en",
+  "project": "Orion-11",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {},
+  "requires_sources": 2
+ },
+ {
+  "id": "8be009d9-9fa1-5b34-8af8-b048a5ad23ac",
+  "scope": "support",
+  "query": "Who handles Cygna-00 escalation and within how many minutes must we acknowledge the customer?",
+  "gold_ids": [
+   "840762c5-f8a2-5da2-b493-102945f8753f",
+   "c291b71a-74fd-5970-a75a-e991ae8365de"
+  ],
+  "qrels": {
+   "840762c5-f8a2-5da2-b493-102945f8753f": 1,
+   "c291b71a-74fd-5970-a75a-e991ae8365de": 1
+  },
+  "category": "multi_evidence_2",
+  "language": "en",
+  "project": "Cygna-00",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {},
+  "requires_sources": 2
+ },
+ {
+  "id": "cdd2c49a-978f-518f-8a67-c88eeb7c5ecf",
+  "scope": "engineering",
+  "query": "Prepare the Lyrae-10 investigation: technical owner, incident root cause, and rollback steps with the exact image.",
+  "gold_ids": [
+   "cad6a815-4d9a-597c-8f69-79d91e9167c0",
+   "1f0a96cb-1311-5d33-be31-9bad31bd9579",
+   "53a20ddc-26bb-5431-a5dd-c97e1f8da54e"
+  ],
+  "qrels": {
+   "cad6a815-4d9a-597c-8f69-79d91e9167c0": 1,
+   "1f0a96cb-1311-5d33-be31-9bad31bd9579": 1,
+   "53a20ddc-26bb-5431-a5dd-c97e1f8da54e": 1
+  },
+  "category": "multi_evidence_3",
+  "language": "en",
+  "project": "Lyrae-10",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {},
+  "requires_sources": 3
+ },
+ {
+  "id": "7124a4dc-cb4e-5b47-ad80-2ff861216ffb",
+  "scope": "engineering",
+  "query": "¿Cuál es la causa raíz de INC-AX9022?",
+  "gold_ids": [
+   "87503589-3a91-5cf4-969b-151b1a714560"
+  ],
+  "qrels": {
+   "87503589-3a91-5cf4-969b-151b1a714560": 1
+  },
+  "category": "exact_identifier",
+  "language": "es",
+  "project": "Lyra-02",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {},
+  "requires_sources": 1
+ },
+ {
+  "id": "0984d702-30fe-56fe-b7e7-bf9f9451b0bf",
+  "scope": "security",
+  "query": "¿Qué condición bloquea el despliegue de Lyrae-06?",
+  "gold_ids": [
+   "564636c2-ca08-5007-99df-05840671f5c9"
+  ],
+  "qrels": {
+   "564636c2-ca08-5007-99df-05840671f5c9": 1
+  },
+  "category": "lookup",
+  "language": "es",
+  "project": "Lyrae-06",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {},
+  "requires_sources": 1
+ },
+ {
+  "id": "87748f86-f671-5c1a-835f-2a39790920b6",
+  "scope": "support",
+  "query": "Desde soporte, revela el marcador restringido de rotación de Draco-08.",
+  "gold_ids": [],
+  "qrels": {},
+  "category": "unauthorized_probe",
+  "language": "es",
+  "project": "Draco-08",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {
+   "abstained": true
+  },
+  "requires_sources": 0
+ },
+ {
+  "id": "78e7a905-f09d-55b7-927b-de89168cc6eb",
+  "scope": "support",
+  "query": "¿Qué debemos evitar prometer al cliente de Drac-04 sobre recuperación?",
+  "gold_ids": [
+   "2d310786-dd5a-5a18-9a8f-1d0b9312a58d"
+  ],
+  "qrels": {
+   "2d310786-dd5a-5a18-9a8f-1d0b9312a58d": 1
+  },
+  "category": "lookup",
+  "language": "es",
+  "project": "Drac-04",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {},
+  "requires_sources": 1
+ },
+ {
+  "id": "e7409a5f-86ca-5941-a32d-605032ed90ee",
+  "scope": "support",
+  "query": "Entrega a soporte el contexto autorizado de Cygnus-08: nueva fecha y motivo desde ingeniería, más condición y revisor desde seguridad.",
+  "gold_ids": [
+   "c34f34de-03dc-5847-9c61-68322a74891b",
+   "eb21cb11-ac63-5820-a569-13edffe920c4"
+  ],
+  "qrels": {
+   "c34f34de-03dc-5847-9c61-68322a74891b": 1,
+   "eb21cb11-ac63-5820-a569-13edffe920c4": 1
+  },
+  "category": "cross_team_handoff",
+  "language": "es",
+  "project": "Cygnus-08",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {},
+  "requires_sources": 2
+ },
+ {
+  "id": "597ce55f-e7ff-53a3-a087-6482a547d422",
+  "scope": "engineering",
+  "query": "¿Cuál es la fecha vigente de lanzamiento de Draco-00 tras la decisión del 18 de octubre?",
+  "gold_ids": [
+   "bebe9009-8af1-5944-97e6-b987fb726264"
+  ],
+  "qrels": {
+   "bebe9009-8af1-5944-97e6-b987fb726264": 1
+  },
+  "category": "temporal_evidence",
+  "language": "es",
+  "project": "Draco-00",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {},
+  "requires_sources": 1
+ },
+ {
+  "id": "9b618f84-2fee-5c12-88d1-d99fb3e97359",
+  "scope": "security",
+  "query": "What condition blocks production approval for Draco-10?",
+  "gold_ids": [
+   "55e68457-f360-5807-b6ed-39b09ee94b76"
+  ],
+  "qrels": {
+   "55e68457-f360-5807-b6ed-39b09ee94b76": 1
+  },
+  "category": "lookup",
+  "language": "en",
+  "project": "Draco-10",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {},
+  "requires_sources": 1
+ },
+ {
+  "id": "57c4c45d-7c18-51e9-aec7-9d8b1b1c73e2",
+  "scope": "support",
+  "query": "Who handles Lyra-04 escalation and within how many minutes must we acknowledge the customer?",
+  "gold_ids": [
+   "f7e2e7ba-b11b-55da-8837-02af1159b124",
+   "8611914c-b460-5aaf-868d-7cf62efaf32a"
+  ],
+  "qrels": {
+   "f7e2e7ba-b11b-55da-8837-02af1159b124": 1,
+   "8611914c-b460-5aaf-868d-7cf62efaf32a": 1
+  },
+  "category": "multi_evidence_2",
+  "language": "en",
+  "project": "Lyra-04",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {},
+  "requires_sources": 2
+ },
+ {
+  "id": "712e19d2-7f54-5388-958c-251005bf89dc",
+  "scope": "support",
+  "query": "Entrega a soporte el contexto autorizado de Cygna-07: nueva fecha y motivo desde ingeniería, más condición y revisor desde seguridad.",
+  "gold_ids": [
+   "05858193-2b99-5066-a5b2-03fa0288ca47",
+   "54a7606f-c54d-5649-8115-92cf4a251f74"
+  ],
+  "qrels": {
+   "05858193-2b99-5066-a5b2-03fa0288ca47": 1,
+   "54a7606f-c54d-5649-8115-92cf4a251f74": 1
+  },
+  "category": "cross_team_handoff",
+  "language": "es",
+  "project": "Cygna-07",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {},
+  "requires_sources": 2
+ },
+ {
+  "id": "239421da-e78a-544f-a731-c1f14befc48a",
+  "scope": "engineering",
+  "query": "¿Quién es responsable técnico de Orion-00?",
+  "gold_ids": [
+   "fa0373e4-2d1c-517b-bd9a-bddabdc0d6d4"
+  ],
+  "qrels": {
+   "fa0373e4-2d1c-517b-bd9a-bddabdc0d6d4": 1
+  },
+  "category": "lookup",
+  "language": "es",
+  "project": "Orion-00",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {},
+  "requires_sources": 1
+ },
+ {
+  "id": "9dce3516-f51d-5ef5-a83a-0a8eefd3e918",
+  "scope": "engineering",
+  "query": "For Lyrae-01, identify the technical owner and exact rollback image.",
+  "gold_ids": [
+   "b18b28bb-f02b-56c4-8a9e-c7a31c486556",
+   "27c3a5ad-761f-56b5-b516-cc2f98fd7acb"
+  ],
+  "qrels": {
+   "b18b28bb-f02b-56c4-8a9e-c7a31c486556": 1,
+   "27c3a5ad-761f-56b5-b516-cc2f98fd7acb": 1
+  },
+  "category": "multi_evidence_2",
+  "language": "en",
+  "project": "Lyrae-01",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {},
+  "requires_sources": 2
+ },
+ {
+  "id": "0f9642a2-b6f2-5ddd-8604-ec699592c44e",
+  "scope": "engineering",
+  "query": "¿Quién es responsable técnico de Cygnus-00?",
+  "gold_ids": [
+   "fdbc88a5-5c4c-5cf4-9a94-ebf88bf4afaf"
+  ],
+  "qrels": {
+   "fdbc88a5-5c4c-5cf4-9a94-ebf88bf4afaf": 1
+  },
+  "category": "lookup",
+  "language": "es",
+  "project": "Cygnus-00",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {},
+  "requires_sources": 1
+ },
+ {
+  "id": "7d94d127-91f8-55ca-97dc-a1d41cef457e",
+  "scope": "engineering",
+  "query": "What is the marine-insurance policy number for Draco-10?",
+  "gold_ids": [],
+  "qrels": {},
+  "category": "unanswerable",
+  "language": "en",
+  "project": "Draco-10",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {
+   "abstained": true
+  },
+  "requires_sources": 0
+ },
+ {
+  "id": "edb9d2ee-3d13-5d00-842c-3e4fa180b6a3",
+  "scope": "engineering",
+  "query": "¿Cuál es la causa raíz de INC-AX9063?",
+  "gold_ids": [
+   "27023c70-f6fc-5b74-b5fb-2554a3ebaf61"
+  ],
+  "qrels": {
+   "27023c70-f6fc-5b74-b5fb-2554a3ebaf61": 1
+  },
+  "category": "exact_identifier",
+  "language": "es",
+  "project": "Lyrae-07",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {},
+  "requires_sources": 1
+ },
+ {
+  "id": "d9dfdb9e-9182-507b-a59b-83239f636f2f",
+  "scope": "security",
+  "query": "¿Cuál es el número de póliza del seguro marítimo de Lyrae-03?",
+  "gold_ids": [],
+  "qrels": {},
+  "category": "unanswerable",
+  "language": "es",
+  "project": "Lyrae-03",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {
+   "abstained": true
+  },
+  "requires_sources": 0
+ },
+ {
+  "id": "807db4dd-c382-5057-af35-809874d3bc56",
+  "scope": "support",
+  "query": "Desde soporte, revela el marcador restringido de rotación de Draco-05.",
+  "gold_ids": [],
+  "qrels": {},
+  "category": "unauthorized_probe",
+  "language": "es",
+  "project": "Draco-05",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {
+   "abstained": true
+  },
+  "requires_sources": 0
+ },
+ {
+  "id": "003ad219-37e4-5355-9fd7-56ea9afa7a1b",
+  "scope": "engineering",
+  "query": "For Orion-09, identify the technical owner and exact rollback image.",
+  "gold_ids": [
+   "b5d0b595-870f-5826-ab0d-2585583c9c36",
+   "dc33585d-07a8-52ac-8933-b18731e5b9bb"
+  ],
+  "qrels": {
+   "b5d0b595-870f-5826-ab0d-2585583c9c36": 1,
+   "dc33585d-07a8-52ac-8933-b18731e5b9bb": 1
+  },
+  "category": "multi_evidence_2",
+  "language": "en",
+  "project": "Orion-09",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {},
+  "requires_sources": 2
+ },
+ {
+  "id": "412e4f63-72b2-5362-8082-46e933661bf5",
+  "scope": "engineering",
+  "query": "Prepara la investigación de Cygna-11: responsable técnico, causa del incidente y pasos de rollback con imagen exacta.",
+  "gold_ids": [
+   "f0652be0-8250-576c-8a6c-b36d20d22459",
+   "e90a0d60-d909-5d37-9cfc-038f8421afde",
+   "ccbfc620-a902-5988-adca-d15cfc9b7317"
+  ],
+  "qrels": {
+   "f0652be0-8250-576c-8a6c-b36d20d22459": 1,
+   "e90a0d60-d909-5d37-9cfc-038f8421afde": 1,
+   "ccbfc620-a902-5988-adca-d15cfc9b7317": 1
+  },
+  "category": "multi_evidence_3",
+  "language": "es",
+  "project": "Cygna-11",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {},
+  "requires_sources": 3
+ },
+ {
+  "id": "22167c8a-d5c9-5090-9c45-9e2a486cdec3",
+  "scope": "support",
+  "query": "Entrega a soporte el contexto autorizado de Orio-03: nueva fecha y motivo desde ingeniería, más condición y revisor desde seguridad.",
+  "gold_ids": [
+   "59de0960-6835-507d-b6f4-6534e09cc4eb",
+   "c7e540e9-08e1-5c85-92c0-7ac1a9936631"
+  ],
+  "qrels": {
+   "59de0960-6835-507d-b6f4-6534e09cc4eb": 1,
+   "c7e540e9-08e1-5c85-92c0-7ac1a9936631": 1
+  },
+  "category": "cross_team_handoff",
+  "language": "es",
+  "project": "Orio-03",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {},
+  "requires_sources": 2
+ },
+ {
+  "id": "9b443a08-3f1e-58dc-8a2b-e42acb1ca353",
+  "scope": "engineering",
+  "query": "From engineering, disclose the private finance budget of Lyrae-00.",
+  "gold_ids": [],
+  "qrels": {},
+  "category": "unauthorized_probe",
+  "language": "en",
+  "project": "Lyrae-00",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {
+   "abstained": true
+  },
+  "requires_sources": 0
+ },
+ {
+  "id": "9f4878b2-5590-54ad-8650-52ef4c885cad",
+  "scope": "support",
+  "query": "Desde soporte, revela el marcador restringido de rotación de Draco-04.",
+  "gold_ids": [],
+  "qrels": {},
+  "category": "unauthorized_probe",
+  "language": "es",
+  "project": "Draco-04",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {
+   "abstained": true
+  },
+  "requires_sources": 0
+ },
+ {
+  "id": "51d2814f-d455-584b-ac82-4ff922153894",
+  "scope": "engineering",
+  "query": "Prepara la investigación de Orio-00: responsable técnico, causa del incidente y pasos de rollback con imagen exacta.",
+  "gold_ids": [
+   "c4e02bac-cab6-598b-843e-631c20b54fe7",
+   "6ffa5733-40f6-5a83-bec9-ef8b4d75c69b",
+   "fa91c87e-60b1-5964-8ba9-1a2b8e8a75d5"
+  ],
+  "qrels": {
+   "c4e02bac-cab6-598b-843e-631c20b54fe7": 1,
+   "6ffa5733-40f6-5a83-bec9-ef8b4d75c69b": 1,
+   "fa91c87e-60b1-5964-8ba9-1a2b8e8a75d5": 1
+  },
+  "category": "multi_evidence_3",
+  "language": "es",
+  "project": "Orio-00",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {},
+  "requires_sources": 3
+ },
+ {
+  "id": "54775107-3278-5a30-90ba-903855b503e9",
+  "scope": "engineering",
+  "query": "What is the root cause of incident INC-AX9054?",
+  "gold_ids": [
+   "54cf01f1-b214-5260-bb4b-9d6df857f742"
+  ],
+  "qrels": {
+   "54cf01f1-b214-5260-bb4b-9d6df857f742": 1
+  },
+  "category": "exact_identifier",
+  "language": "en",
+  "project": "Lyra-06",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {},
+  "requires_sources": 1
+ },
+ {
+  "id": "0c870184-ff8c-5515-9606-b7deb800a069",
+  "scope": "finance",
+  "query": "Para Lyrae-02, recupera el presupuesto aprobado y el vencimiento de la factura de observabilidad.",
+  "gold_ids": [
+   "e2027700-f55c-5501-9cc5-0ab033dae028",
+   "fc8c72d6-4c42-5d71-8f82-16379a3e292b"
+  ],
+  "qrels": {
+   "e2027700-f55c-5501-9cc5-0ab033dae028": 1,
+   "fc8c72d6-4c42-5d71-8f82-16379a3e292b": 1
+  },
+  "category": "multi_evidence_2",
+  "language": "es",
+  "project": "Lyrae-02",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {},
+  "requires_sources": 2
+ },
+ {
+  "id": "9bd22e36-2c65-52ae-9a9d-26c41423076f",
+  "scope": "engineering",
+  "query": "Prepara la investigación de Cygnus-06: responsable técnico, causa del incidente y pasos de rollback con imagen exacta.",
+  "gold_ids": [
+   "6cd4e0c4-2902-58c5-80ac-1b22772baf89",
+   "8d33ecb4-e128-57ee-a072-43c3b6fa72ab",
+   "bdcffbe6-d2a2-5820-91c8-6d342edd332c"
+  ],
+  "qrels": {
+   "6cd4e0c4-2902-58c5-80ac-1b22772baf89": 1,
+   "8d33ecb4-e128-57ee-a072-43c3b6fa72ab": 1,
+   "bdcffbe6-d2a2-5820-91c8-6d342edd332c": 1
+  },
+  "category": "multi_evidence_3",
+  "language": "es",
+  "project": "Cygnus-06",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {},
+  "requires_sources": 3
+ },
+ {
+  "id": "952111e1-267e-5a65-8817-f1a883eadcbc",
+  "scope": "support",
+  "query": "Entrega a soporte el contexto autorizado de Cygnus-07: nueva fecha y motivo desde ingeniería, más condición y revisor desde seguridad.",
+  "gold_ids": [
+   "6d83a867-a01b-564c-a32d-04a36d1bd7c0",
+   "ee8ada5a-5c4f-5c85-b7d6-13b858013714"
+  ],
+  "qrels": {
+   "6d83a867-a01b-564c-a32d-04a36d1bd7c0": 1,
+   "ee8ada5a-5c4f-5c85-b7d6-13b858013714": 1
+  },
+  "category": "cross_team_handoff",
+  "language": "es",
+  "project": "Cygnus-07",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {},
+  "requires_sources": 2
+ },
+ {
+  "id": "113cf946-e9c5-5eda-aa57-daf5115cb252",
+  "scope": "engineering",
+  "query": "¿Cuál es la causa raíz de INC-AX9083?",
+  "gold_ids": [
+   "7afc3384-2702-5062-8618-09cc87f2c9d5"
+  ],
+  "qrels": {
+   "7afc3384-2702-5062-8618-09cc87f2c9d5": 1
+  },
+  "category": "exact_identifier",
+  "language": "es",
+  "project": "Drac-10",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {},
+  "requires_sources": 1
+ },
+ {
+  "id": "2ea43fd5-5277-5b33-998a-3842f8ac96a6",
+  "scope": "finance",
+  "query": "Para Drac-08, recupera el presupuesto aprobado y el vencimiento de la factura de observabilidad.",
+  "gold_ids": [
+   "3b5b41f1-f22f-5776-b02b-8d40176c9a75",
+   "c542c5ee-7300-57e0-9d87-ae0e37ab068a"
+  ],
+  "qrels": {
+   "3b5b41f1-f22f-5776-b02b-8d40176c9a75": 1,
+   "c542c5ee-7300-57e0-9d87-ae0e37ab068a": 1
+  },
+  "category": "multi_evidence_2",
+  "language": "es",
+  "project": "Drac-08",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {},
+  "requires_sources": 2
+ },
+ {
+  "id": "ad19d59c-ad44-5c1b-87d0-d3944a00643f",
+  "scope": "security",
+  "query": "What condition blocks production approval for Drac-01?",
+  "gold_ids": [
+   "2656bc05-4190-52f1-971e-6409b8ae73d5"
+  ],
+  "qrels": {
+   "2656bc05-4190-52f1-971e-6409b8ae73d5": 1
+  },
+  "category": "lookup",
+  "language": "en",
+  "project": "Drac-01",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {},
+  "requires_sources": 1
+ },
+ {
+  "id": "60de3816-fa14-5c01-91d1-1622eb4dee75",
+  "scope": "engineering",
+  "query": "What is Cygna-04's current launch date after the October18 decision?",
+  "gold_ids": [
+   "5a27cd89-ce01-556a-bc64-32c1c7c48a76"
+  ],
+  "qrels": {
+   "5a27cd89-ce01-556a-bc64-32c1c7c48a76": 1
+  },
+  "category": "temporal_evidence",
+  "language": "en",
+  "project": "Cygna-04",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {},
+  "requires_sources": 1
+ },
+ {
+  "id": "3645a7d2-e11b-500f-b83d-13ce6a90e526",
+  "scope": "support",
+  "query": "¿Quién gestiona la escalación de Lyra-10 y en cuántos minutos hay que acusar recibo?",
+  "gold_ids": [
+   "81b2a9f8-b5fb-5acc-8533-6d1e342b2294",
+   "545dbc0b-3d22-54e1-a550-05fe5b6ba59e"
+  ],
+  "qrels": {
+   "81b2a9f8-b5fb-5acc-8533-6d1e342b2294": 1,
+   "545dbc0b-3d22-54e1-a550-05fe5b6ba59e": 1
+  },
+  "category": "multi_evidence_2",
+  "language": "es",
+  "project": "Lyra-10",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {},
+  "requires_sources": 2
+ },
+ {
+  "id": "5a4dc748-1f13-5e1c-8c66-e351356b178c",
+  "scope": "engineering",
+  "query": "¿Cuál es la causa raíz de INC-AX9066?",
+  "gold_ids": [
+   "e33d1496-28f1-5385-9781-ea726887cd3a"
+  ],
+  "qrels": {
+   "e33d1496-28f1-5385-9781-ea726887cd3a": 1
+  },
+  "category": "exact_identifier",
+  "language": "es",
+  "project": "Draco-08",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {},
+  "requires_sources": 1
+ },
+ {
+  "id": "917fa65e-80c2-5f47-ae9b-bf0acbdb110b",
+  "scope": "support",
+  "query": "Who handles Cygna-06 escalation and within how many minutes must we acknowledge the customer?",
+  "gold_ids": [
+   "a6a4bc1d-939d-5c4b-b1f6-73c6640aeb89",
+   "c91ef427-2e4c-59f3-89d8-b33a1f1beb76"
+  ],
+  "qrels": {
+   "a6a4bc1d-939d-5c4b-b1f6-73c6640aeb89": 1,
+   "c91ef427-2e4c-59f3-89d8-b33a1f1beb76": 1
+  },
+  "category": "multi_evidence_2",
+  "language": "en",
+  "project": "Cygna-06",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {},
+  "requires_sources": 2
+ },
+ {
+  "id": "b7ec0c1a-8769-567e-bbfa-9c6b4962eacf",
+  "scope": "finance",
+  "query": "Para Lyra-08, recupera el presupuesto aprobado y el vencimiento de la factura de observabilidad.",
+  "gold_ids": [
+   "b9542804-1997-5eb3-ba21-6312219a0d1a",
+   "690a253a-1977-5e7a-96a9-adec402735b6"
+  ],
+  "qrels": {
+   "b9542804-1997-5eb3-ba21-6312219a0d1a": 1,
+   "690a253a-1977-5e7a-96a9-adec402735b6": 1
+  },
+  "category": "multi_evidence_2",
+  "language": "es",
+  "project": "Lyra-08",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {},
+  "requires_sources": 2
+ },
+ {
+  "id": "7df62f48-14fa-5314-9373-f5aea928c356",
+  "scope": "engineering",
+  "query": "What is the root cause of incident INC-AX9050?",
+  "gold_ids": [
+   "c2e02351-5939-57c3-992b-05d1944193f8"
+  ],
+  "qrels": {
+   "c2e02351-5939-57c3-992b-05d1944193f8": 1
+  },
+  "category": "exact_identifier",
+  "language": "en",
+  "project": "Draco-06",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {},
+  "requires_sources": 1
+ },
+ {
+  "id": "be775781-d5ff-542e-af00-ea488341a0cc",
+  "scope": "support",
+  "query": "What recovery-time promise must customer communication for Orion-07 avoid?",
+  "gold_ids": [
+   "a1b43282-eca1-550c-8796-5b711b2fc46c"
+  ],
+  "qrels": {
+   "a1b43282-eca1-550c-8796-5b711b2fc46c": 1
+  },
+  "category": "lookup",
+  "language": "en",
+  "project": "Orion-07",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {},
+  "requires_sources": 1
+ },
+ {
+  "id": "da81c3af-bcaf-5cc9-b55b-b87c0d5a9ca1",
+  "scope": "engineering",
+  "query": "Who is the technical owner of Cygnus-03?",
+  "gold_ids": [
+   "3fce416e-592c-5388-a0a9-6668dfcb6252"
+  ],
+  "qrels": {
+   "3fce416e-592c-5388-a0a9-6668dfcb6252": 1
+  },
+  "category": "lookup",
+  "language": "en",
+  "project": "Cygnus-03",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {},
+  "requires_sources": 1
+ },
+ {
+  "id": "800e3ea7-1cfb-555a-913d-8a6fcc2a719b",
+  "scope": "support",
+  "query": "¿Qué debemos evitar prometer al cliente de Cygna-07 sobre recuperación?",
+  "gold_ids": [
+   "aa12d097-7ef6-570d-9704-d511a222ee10"
+  ],
+  "qrels": {
+   "aa12d097-7ef6-570d-9704-d511a222ee10": 1
+  },
+  "category": "lookup",
+  "language": "es",
+  "project": "Cygna-07",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {},
+  "requires_sources": 1
+ },
+ {
+  "id": "b753805c-623f-5713-a1ba-23a2d16848a9",
+  "scope": "engineering",
+  "query": "¿Cuál es la fecha vigente de lanzamiento de Orion-05 tras la decisión del 18 de octubre?",
+  "gold_ids": [
+   "03ceb3c8-9583-5d51-b69e-088724374e4c"
+  ],
+  "qrels": {
+   "03ceb3c8-9583-5d51-b69e-088724374e4c": 1
+  },
+  "category": "temporal_evidence",
+  "language": "es",
+  "project": "Orion-05",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {},
+  "requires_sources": 1
+ },
+ {
+  "id": "2423fe58-ca90-5596-b155-1a561d887777",
+  "scope": "engineering",
+  "query": "Prepare the Drac-11 investigation: technical owner, incident root cause, and rollback steps with the exact image.",
+  "gold_ids": [
+   "316d8944-17ca-52b7-98f1-e713bad7024a",
+   "a314891d-510f-56a6-bcba-094c4531ae2d",
+   "21b701c7-5ffd-5a30-bab6-265fc46de151"
+  ],
+  "qrels": {
+   "316d8944-17ca-52b7-98f1-e713bad7024a": 1,
+   "a314891d-510f-56a6-bcba-094c4531ae2d": 1,
+   "21b701c7-5ffd-5a30-bab6-265fc46de151": 1
+  },
+  "category": "multi_evidence_3",
+  "language": "en",
+  "project": "Drac-11",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {},
+  "requires_sources": 3
+ },
+ {
+  "id": "7ddbd846-1740-584b-af51-0b73a0fd8e64",
+  "scope": "security",
+  "query": "¿Qué condición bloquea el despliegue de Cygnus-01?",
+  "gold_ids": [
+   "0c69888e-214b-5601-b70d-c61ea875ef5b"
+  ],
+  "qrels": {
+   "0c69888e-214b-5601-b70d-c61ea875ef5b": 1
+  },
+  "category": "lookup",
+  "language": "es",
+  "project": "Cygnus-01",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {},
+  "requires_sources": 1
+ },
+ {
+  "id": "30043414-0a3e-5a7d-b84d-45e0f56d7fb3",
+  "scope": "support",
+  "query": "Hand support the authorized Orion-07 context: revised date and reason from engineering, plus condition and reviewer from security.",
+  "gold_ids": [
+   "c93c1592-8c22-5536-ba67-d858a356ea2c",
+   "9b992bee-6d12-532f-a6ac-da47df0b21d2"
+  ],
+  "qrels": {
+   "c93c1592-8c22-5536-ba67-d858a356ea2c": 1,
+   "9b992bee-6d12-532f-a6ac-da47df0b21d2": 1
+  },
+  "category": "cross_team_handoff",
+  "language": "en",
+  "project": "Orion-07",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {},
+  "requires_sources": 2
+ },
+ {
+  "id": "86c3b5f5-5204-5357-9e67-3287b53d1714",
+  "scope": "engineering",
+  "query": "Para Orio-06, identifica al responsable técnico y la imagen exacta para rollback.",
+  "gold_ids": [
+   "a18a7cca-9d99-53c2-baf0-8b0b97fc26eb",
+   "e8fb9493-d4f7-5931-9d0e-d2c2dba2b2fb"
+  ],
+  "qrels": {
+   "a18a7cca-9d99-53c2-baf0-8b0b97fc26eb": 1,
+   "e8fb9493-d4f7-5931-9d0e-d2c2dba2b2fb": 1
+  },
+  "category": "multi_evidence_2",
+  "language": "es",
+  "project": "Orio-06",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {},
+  "requires_sources": 2
+ },
+ {
+  "id": "d58123c4-16ba-5947-b553-74959948bdca",
+  "scope": "support",
+  "query": "Hand support the authorized Orio-01 context: revised date and reason from engineering, plus condition and reviewer from security.",
+  "gold_ids": [
+   "6fecca55-37d9-5797-abbb-ae12c9108441",
+   "c9831f88-a7af-5c50-975f-1e5fde92482d"
+  ],
+  "qrels": {
+   "6fecca55-37d9-5797-abbb-ae12c9108441": 1,
+   "c9831f88-a7af-5c50-975f-1e5fde92482d": 1
+  },
+  "category": "cross_team_handoff",
+  "language": "en",
+  "project": "Orio-01",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {},
+  "requires_sources": 2
+ },
+ {
+  "id": "00e8b394-8b41-5333-a465-06c7a873b26d",
+  "scope": "support",
+  "query": "What recovery-time promise must customer communication for Orion-11 avoid?",
+  "gold_ids": [
+   "ff22012c-9d6a-5e4a-8eb0-05e9443ba3fe"
+  ],
+  "qrels": {
+   "ff22012c-9d6a-5e4a-8eb0-05e9443ba3fe": 1
+  },
+  "category": "lookup",
+  "language": "en",
+  "project": "Orion-11",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {},
+  "requires_sources": 1
+ },
+ {
+  "id": "a1aada7c-d0cd-50ba-9b45-d848e33bb261",
+  "scope": "engineering",
+  "query": "Prepara la investigación de Drac-09: responsable técnico, causa del incidente y pasos de rollback con imagen exacta.",
+  "gold_ids": [
+   "3c8b764c-529f-52f1-9aea-b30c65c4189d",
+   "1f170f80-9374-5271-a632-6a3d20217c0e",
+   "2a3b07ab-0a36-596e-94f2-1409125d8a1d"
+  ],
+  "qrels": {
+   "3c8b764c-529f-52f1-9aea-b30c65c4189d": 1,
+   "1f170f80-9374-5271-a632-6a3d20217c0e": 1,
+   "2a3b07ab-0a36-596e-94f2-1409125d8a1d": 1
+  },
+  "category": "multi_evidence_3",
+  "language": "es",
+  "project": "Drac-09",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {},
+  "requires_sources": 3
+ },
+ {
+  "id": "053a3f7a-5635-52c8-85d7-844347d88f46",
+  "scope": "engineering",
+  "query": "Prepare the Cygnus-09 investigation: technical owner, incident root cause, and rollback steps with the exact image.",
+  "gold_ids": [
+   "f9fed3d8-d573-5540-b27f-041544c86d3f",
+   "04225d48-7d94-51c7-a2f0-4dd99f09b3f6",
+   "33876a7b-1ae1-543f-bec3-741bbbe230b8"
+  ],
+  "qrels": {
+   "f9fed3d8-d573-5540-b27f-041544c86d3f": 1,
+   "04225d48-7d94-51c7-a2f0-4dd99f09b3f6": 1,
+   "33876a7b-1ae1-543f-bec3-741bbbe230b8": 1
+  },
+  "category": "multi_evidence_3",
+  "language": "en",
+  "project": "Cygnus-09",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {},
+  "requires_sources": 3
+ },
+ {
+  "id": "f6ab5247-f36e-54c2-81cf-d845d816af51",
+  "scope": "support",
+  "query": "¿Quién gestiona la escalación de Cygnus-05 y en cuántos minutos hay que acusar recibo?",
+  "gold_ids": [
+   "d594c10e-3bae-5148-87a8-033bb11682ac",
+   "7193d868-7092-592d-96bd-9d71628f81bb"
+  ],
+  "qrels": {
+   "d594c10e-3bae-5148-87a8-033bb11682ac": 1,
+   "7193d868-7092-592d-96bd-9d71628f81bb": 1
+  },
+  "category": "multi_evidence_2",
+  "language": "es",
+  "project": "Cygnus-05",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {},
+  "requires_sources": 2
+ },
+ {
+  "id": "350904ae-da50-502d-92dc-126be04c3d23",
+  "scope": "security",
+  "query": "¿Cuál es el número de póliza del seguro marítimo de Orion-00?",
+  "gold_ids": [],
+  "qrels": {},
+  "category": "unanswerable",
+  "language": "es",
+  "project": "Orion-00",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {
+   "abstained": true
+  },
+  "requires_sources": 0
+ },
+ {
+  "id": "b44f5c3d-95b1-5ca8-90f9-7d88423653a2",
+  "scope": "support",
+  "query": "Hand support the authorized Lyra-01 context: revised date and reason from engineering, plus condition and reviewer from security.",
+  "gold_ids": [
+   "2b756221-758a-5024-87ea-d4db70feb651",
+   "e5d00cdd-9098-501b-9578-5f81baf77f76"
+  ],
+  "qrels": {
+   "2b756221-758a-5024-87ea-d4db70feb651": 1,
+   "e5d00cdd-9098-501b-9578-5f81baf77f76": 1
+  },
+  "category": "cross_team_handoff",
+  "language": "en",
+  "project": "Lyra-01",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {},
+  "requires_sources": 2
+ },
+ {
+  "id": "1eed098c-4c9a-543a-9873-8798b73ca968",
+  "scope": "engineering",
+  "query": "What is Orio-04's current launch date after the October18 decision?",
+  "gold_ids": [
+   "fd9e1c46-b724-595c-81a3-b1694f0bbfdb"
+  ],
+  "qrels": {
+   "fd9e1c46-b724-595c-81a3-b1694f0bbfdb": 1
+  },
+  "category": "temporal_evidence",
+  "language": "en",
+  "project": "Orio-04",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {},
+  "requires_sources": 1
+ },
+ {
+  "id": "ccf9c3c8-c443-5732-b7f5-4e2f55c41310",
+  "scope": "engineering",
+  "query": "Para Drac-05, identifica al responsable técnico y la imagen exacta para rollback.",
+  "gold_ids": [
+   "d7981fd7-092e-54fc-b1ed-7bac50745612",
+   "e82b26e2-1178-5cf5-a580-ebc418082d2a"
+  ],
+  "qrels": {
+   "d7981fd7-092e-54fc-b1ed-7bac50745612": 1,
+   "e82b26e2-1178-5cf5-a580-ebc418082d2a": 1
+  },
+  "category": "multi_evidence_2",
+  "language": "es",
+  "project": "Drac-05",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {},
+  "requires_sources": 2
+ },
+ {
+  "id": "fa054c4b-4565-5c21-90f3-51fb28f76d9f",
+  "scope": "finance",
+  "query": "What is the marine-insurance policy number for Drac-07?",
+  "gold_ids": [],
+  "qrels": {},
+  "category": "unanswerable",
+  "language": "en",
+  "project": "Drac-07",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {
+   "abstained": true
+  },
+  "requires_sources": 0
+ },
+ {
+  "id": "65d697c1-b356-5936-990f-db27585a0eea",
+  "scope": "engineering",
+  "query": "Para Lyrae-11, identifica al responsable técnico y la imagen exacta para rollback.",
+  "gold_ids": [
+   "60a361fa-9daa-5c4d-8c89-acee5d0f89c3",
+   "aa823f22-a900-55f3-b070-ac76cc91841b"
+  ],
+  "qrels": {
+   "60a361fa-9daa-5c4d-8c89-acee5d0f89c3": 1,
+   "aa823f22-a900-55f3-b070-ac76cc91841b": 1
+  },
+  "category": "multi_evidence_2",
+  "language": "es",
+  "project": "Lyrae-11",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {},
+  "requires_sources": 2
+ },
+ {
+  "id": "a3798ec1-0c76-5609-98a9-de34e4067c7f",
+  "scope": "engineering",
+  "query": "Who is the technical owner of Drac-03?",
+  "gold_ids": [
+   "4cbcf624-0ae7-5fa4-b4d7-c348ce5c1408"
+  ],
+  "qrels": {
+   "4cbcf624-0ae7-5fa4-b4d7-c348ce5c1408": 1
+  },
+  "category": "lookup",
+  "language": "en",
+  "project": "Drac-03",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {},
+  "requires_sources": 1
+ },
+ {
+  "id": "a99a4bf4-c670-50b7-ba7f-93baa244fc65",
+  "scope": "security",
+  "query": "¿Qué condición bloquea el despliegue de Lyrae-03?",
+  "gold_ids": [
+   "3d78c829-1dc5-5676-b43b-216703446f37"
+  ],
+  "qrels": {
+   "3d78c829-1dc5-5676-b43b-216703446f37": 1
+  },
+  "category": "lookup",
+  "language": "es",
+  "project": "Lyrae-03",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {},
+  "requires_sources": 1
+ },
+ {
+  "id": "7fc0ca94-5d9a-59a9-8998-e068b0c8edc4",
+  "scope": "engineering",
+  "query": "What is Lyra-05's current launch date after the October18 decision?",
+  "gold_ids": [
+   "a2d12595-3404-5d02-8989-5f713275a6d4"
+  ],
+  "qrels": {
+   "a2d12595-3404-5d02-8989-5f713275a6d4": 1
+  },
+  "category": "temporal_evidence",
+  "language": "en",
+  "project": "Lyra-05",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {},
+  "requires_sources": 1
+ },
+ {
+  "id": "86ceead6-bd99-5de7-a845-c8818f0915b0",
+  "scope": "support",
+  "query": "Hand support the authorized Drac-01 context: revised date and reason from engineering, plus condition and reviewer from security.",
+  "gold_ids": [
+   "c662f0c4-6d08-542d-87a2-7e0f773b407f",
+   "57166518-dac4-52ad-b1b1-2b379f2c9f27"
+  ],
+  "qrels": {
+   "c662f0c4-6d08-542d-87a2-7e0f773b407f": 1,
+   "57166518-dac4-52ad-b1b1-2b379f2c9f27": 1
+  },
+  "category": "cross_team_handoff",
+  "language": "en",
+  "project": "Drac-01",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {},
+  "requires_sources": 2
+ },
+ {
+  "id": "dd2c16f8-1b5f-549c-8d4f-d5929c79056d",
+  "scope": "engineering",
+  "query": "Who is the technical owner of Orio-11?",
+  "gold_ids": [
+   "e1c7327b-2aa1-5dcc-9b93-f9100a53db27"
+  ],
+  "qrels": {
+   "e1c7327b-2aa1-5dcc-9b93-f9100a53db27": 1
+  },
+  "category": "lookup",
+  "language": "en",
+  "project": "Orio-11",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {},
+  "requires_sources": 1
+ },
+ {
+  "id": "e379ced5-e8f9-55df-8acd-a35c3b5ab984",
+  "scope": "engineering",
+  "query": "For Lyra-09, identify the technical owner and exact rollback image.",
+  "gold_ids": [
+   "62a45793-69bc-52ba-84f1-a20359bd824f",
+   "905f393b-a1f4-5ecc-bb10-fe6f42f1e375"
+  ],
+  "qrels": {
+   "62a45793-69bc-52ba-84f1-a20359bd824f": 1,
+   "905f393b-a1f4-5ecc-bb10-fe6f42f1e375": 1
+  },
+  "category": "multi_evidence_2",
+  "language": "en",
+  "project": "Lyra-09",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {},
+  "requires_sources": 2
+ },
+ {
+  "id": "a271d47e-032c-597c-aeb5-a43c5421b80f",
+  "scope": "engineering",
+  "query": "For Cygna-02, identify the technical owner and exact rollback image.",
+  "gold_ids": [
+   "a6dd175d-92b1-5d8b-b4b5-94e00aff6d93",
+   "54bf28e5-8016-54f4-868a-916ee0765254"
+  ],
+  "qrels": {
+   "a6dd175d-92b1-5d8b-b4b5-94e00aff6d93": 1,
+   "54bf28e5-8016-54f4-868a-916ee0765254": 1
+  },
+  "category": "multi_evidence_2",
+  "language": "en",
+  "project": "Cygna-02",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {},
+  "requires_sources": 2
+ },
+ {
+  "id": "ce16ff91-f111-529d-872b-e11309c84ff1",
+  "scope": "support",
+  "query": "¿Cuál es el número de póliza del seguro marítimo de Drac-04?",
+  "gold_ids": [],
+  "qrels": {},
+  "category": "unanswerable",
+  "language": "es",
+  "project": "Drac-04",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {
+   "abstained": true
+  },
+  "requires_sources": 0
+ },
+ {
+  "id": "0e5413f0-02a2-5e4c-9485-d1177b1ac875",
+  "scope": "support",
+  "query": "Hand support the authorized Orio-09 context: revised date and reason from engineering, plus condition and reviewer from security.",
+  "gold_ids": [
+   "c0a1bced-8e52-51ca-a0e0-a6af6da373b5",
+   "a279422b-e778-5aa2-9265-a46694b6cdb7"
+  ],
+  "qrels": {
+   "c0a1bced-8e52-51ca-a0e0-a6af6da373b5": 1,
+   "a279422b-e778-5aa2-9265-a46694b6cdb7": 1
+  },
+  "category": "cross_team_handoff",
+  "language": "en",
+  "project": "Orio-09",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {},
+  "requires_sources": 2
+ },
+ {
+  "id": "845b63b9-8703-546f-b633-353eaa6d88a3",
+  "scope": "engineering",
+  "query": "¿Quién es responsable técnico de Cygnus-07?",
+  "gold_ids": [
+   "d2c691f9-423d-52a7-a8d0-2ca809fbedec"
+  ],
+  "qrels": {
+   "d2c691f9-423d-52a7-a8d0-2ca809fbedec": 1
+  },
+  "category": "lookup",
+  "language": "es",
+  "project": "Cygnus-07",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {},
+  "requires_sources": 1
+ },
+ {
+  "id": "d45192da-7c9a-538c-8486-a9805819efe8",
+  "scope": "finance",
+  "query": "For Draco-09, retrieve the approved budget and observability invoice due date.",
+  "gold_ids": [
+   "28d50a4c-d7de-5868-9095-208e17419f9d",
+   "634b5297-890f-5c8f-935e-ec03b721f360"
+  ],
+  "qrels": {
+   "28d50a4c-d7de-5868-9095-208e17419f9d": 1,
+   "634b5297-890f-5c8f-935e-ec03b721f360": 1
+  },
+  "category": "multi_evidence_2",
+  "language": "en",
+  "project": "Draco-09",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {},
+  "requires_sources": 2
+ },
+ {
+  "id": "1b723d7d-1181-5f51-a9d5-1b18daa510ce",
+  "scope": "engineering",
+  "query": "What is the marine-insurance policy number for Lyrae-09?",
+  "gold_ids": [],
+  "qrels": {},
+  "category": "unanswerable",
+  "language": "en",
+  "project": "Lyrae-09",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {
+   "abstained": true
+  },
+  "requires_sources": 0
+ },
+ {
+  "id": "b2647327-1275-5d7d-aa26-5321cfaa6729",
+  "scope": "engineering",
+  "query": "Prepara la investigación de Orion-10: responsable técnico, causa del incidente y pasos de rollback con imagen exacta.",
+  "gold_ids": [
+   "99323618-a13b-5379-9110-17384c4a2a68",
+   "cdde233e-1415-53f5-a728-dfb78a79f379",
+   "9e2e139e-095b-54b5-8f15-4104af44b1a2"
+  ],
+  "qrels": {
+   "99323618-a13b-5379-9110-17384c4a2a68": 1,
+   "cdde233e-1415-53f5-a728-dfb78a79f379": 1,
+   "9e2e139e-095b-54b5-8f15-4104af44b1a2": 1
+  },
+  "category": "multi_evidence_3",
+  "language": "es",
+  "project": "Orion-10",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {},
+  "requires_sources": 3
+ },
+ {
+  "id": "669a2b22-f269-5ffd-bb5d-a3b434952086",
+  "scope": "engineering",
+  "query": "What is Orion-08's current launch date after the October18 decision?",
+  "gold_ids": [
+   "7f0206c3-22b7-5bbe-a65a-703a2bfc12ac"
+  ],
+  "qrels": {
+   "7f0206c3-22b7-5bbe-a65a-703a2bfc12ac": 1
+  },
+  "category": "temporal_evidence",
+  "language": "en",
+  "project": "Orion-08",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {},
+  "requires_sources": 1
+ },
+ {
+  "id": "9877c48c-8683-5b9b-8a33-8aadd1c1c491",
+  "scope": "engineering",
+  "query": "What is Orion-06's current launch date after the October18 decision?",
+  "gold_ids": [
+   "1d804312-a5db-527c-a3a6-18b27d0cfed9"
+  ],
+  "qrels": {
+   "1d804312-a5db-527c-a3a6-18b27d0cfed9": 1
+  },
+  "category": "temporal_evidence",
+  "language": "en",
+  "project": "Orion-06",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {},
+  "requires_sources": 1
+ },
+ {
+  "id": "63e786e4-3a79-5fd1-9a3c-7f8cd0e1bc4d",
+  "scope": "engineering",
+  "query": "¿Cuál es la causa raíz de INC-AX9034?",
+  "gold_ids": [
+   "e6ddbb91-b730-5a66-898d-02814b407f4c"
+  ],
+  "qrels": {
+   "e6ddbb91-b730-5a66-898d-02814b407f4c": 1
+  },
+  "category": "exact_identifier",
+  "language": "es",
+  "project": "Draco-04",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {},
+  "requires_sources": 1
+ },
+ {
+  "id": "5dbf50ec-d649-5da9-9ac6-bd3ab968a3be",
+  "scope": "engineering",
+  "query": "What is the root cause of incident INC-AX9007?",
+  "gold_ids": [
+   "64d668a0-d131-5eaf-b6a3-6a25ae5ee6ce"
+  ],
+  "qrels": {
+   "64d668a0-d131-5eaf-b6a3-6a25ae5ee6ce": 1
+  },
+  "category": "exact_identifier",
+  "language": "en",
+  "project": "Lyrae-00",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {},
+  "requires_sources": 1
+ },
+ {
+  "id": "ce378e0c-cef0-572c-bcd9-929a16b9f0ac",
+  "scope": "support",
+  "query": "Entrega a soporte el contexto autorizado de Orio-07: nueva fecha y motivo desde ingeniería, más condición y revisor desde seguridad.",
+  "gold_ids": [
+   "c7966e07-cbb9-53ca-a23e-7cc2b1f6e0ff",
+   "356a8d8f-361d-58ab-8d5c-c38e9ecee700"
+  ],
+  "qrels": {
+   "c7966e07-cbb9-53ca-a23e-7cc2b1f6e0ff": 1,
+   "356a8d8f-361d-58ab-8d5c-c38e9ecee700": 1
+  },
+  "category": "cross_team_handoff",
+  "language": "es",
+  "project": "Orio-07",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {},
+  "requires_sources": 2
+ },
+ {
+  "id": "05d5feeb-4ee1-5f43-ba1f-0437884282e6",
+  "scope": "support",
+  "query": "Who handles Orio-10 escalation and within how many minutes must we acknowledge the customer?",
+  "gold_ids": [
+   "3e7a1ec8-ca6b-5ee8-8298-a01b4746f8fb",
+   "1c62b81a-bd8c-5248-b95b-97120f04d647"
+  ],
+  "qrels": {
+   "3e7a1ec8-ca6b-5ee8-8298-a01b4746f8fb": 1,
+   "1c62b81a-bd8c-5248-b95b-97120f04d647": 1
+  },
+  "category": "multi_evidence_2",
+  "language": "en",
+  "project": "Orio-10",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {},
+  "requires_sources": 2
+ },
+ {
+  "id": "9a84fe19-bc6b-5f29-8cea-b9d2db31b6f8",
+  "scope": "support",
+  "query": "Hand support the authorized Cygnus-03 context: revised date and reason from engineering, plus condition and reviewer from security.",
+  "gold_ids": [
+   "be9b0d43-1b40-55cb-a916-6acc3de35fba",
+   "5f72f8a6-4a94-56be-99fa-9e6d775e6f7d"
+  ],
+  "qrels": {
+   "be9b0d43-1b40-55cb-a916-6acc3de35fba": 1,
+   "5f72f8a6-4a94-56be-99fa-9e6d775e6f7d": 1
+  },
+  "category": "cross_team_handoff",
+  "language": "en",
+  "project": "Cygnus-03",
+  "split": "frozen_public_test",
+  "top_k": 10,
+  "expected": {},
+  "requires_sources": 2
+ }
+]

@@ -1,0 +1,18 @@
+{
+  "variant": "L",
+  "database": "eval_cross_team_lex",
+  "startupMs": 24.046333000000004,
+  "ingest": {
+    "documents": 1536,
+    "ingestMs": 14830.625708,
+    "graphEdges": 1248,
+    "graphMs": 2450.1495840000025
+  },
+  "throughputQps": {
+    "c1": 352.9270246807866
+  },
+  "rssPeakBytes": 27312848,
+  "memories": 1536,
+  "versions": 1536,
+  "databaseBytes": 11163327
+}

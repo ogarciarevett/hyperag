@@ -1,0 +1,22 @@
+{
+  "system": "engram",
+  "version": "engram 3.3.2",
+  "profile": "any",
+  "config": {
+    "transport": "mcp stdio",
+    "match_mode": "any"
+  },
+  "dataset": "arguana",
+  "split": "test",
+  "documents": 8674,
+  "queries": 1406,
+  "k": 100,
+  "ingestMs": 120909.353042,
+  "latencyP50Ms": 47.515749999991385,
+  "latencyP95Ms": 91.34183300001314,
+  "rssPeakBytes": 88048336,
+  "systemRssPeakBytes": 39649280,
+  "failedQueries": 0,
+  "errors": {},
+  "date": "2026-10-23T21:17:05.360Z"
+}

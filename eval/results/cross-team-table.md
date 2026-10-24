@@ -1,0 +1,34 @@
+| run | ndcg_at_10 | recall_at_10 | all_evidence_at_10 | handoff_all_evidence_at_10 | probe_explicit_abstention_rate | false_abstention_rate | cross_scope_hit_count | latency_p50_ms | latency_p95_ms | latency_p95_c8 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| baseline:hindsight | 0.076 | 0.129 | 0.098 | 0.000 | n/a | n/a | 0 | 114.936 | 171.634 | n/a |
+| baseline:engram | 0.170 | 0.201 | 0.188 | 0.500 | n/a | n/a | 0 | 4.052 | 6.613 | n/a |
+| baseline:graphiti | 0.567 | 0.704 | 0.571 | 0.438 | n/a | n/a | 0 | 15.238 | 20.394 | n/a |
+| baseline:agents-runtime-v4 | 0.717 | 0.787 | 0.723 | 0.375 | n/a | n/a | 0 | 17.584 | 22.144 | n/a |
+| baseline:memvid_hybrid | 0.589 | 0.682 | 0.554 | 0.000 | n/a | n/a | 0 | 12.131 | 17.655 | n/a |
+| baseline:cognee | 0.705 | 0.766 | 0.652 | 0.062 | n/a | n/a | 0 | 43.502 | 51.083 | n/a |
+| baseline:mem0 | 0.555 | 0.621 | 0.482 | 0.062 | n/a | n/a | 0 | 16.519 | 20.851 | n/a |
+| cross-team-L | 0.709 | 0.756 | 0.607 | 0.500 | 0.000 | 0.000 | 0 | 2.969 | 4.073 | n/a |
+| cross-team-V0 | 0.717 | 0.787 | 0.723 | 0.375 | 1.000 | 0.768 | 0 | 11.263 | 15.324 | 44.745 |
+| cross-team-V1 | 0.700 | 0.857 | 0.812 | 0.562 | 1.000 | 0.768 | 0 | 13.371 | 18.577 | n/a |
+| cross-team-V2 | 0.692 | 0.789 | 0.705 | 0.188 | 0.750 | 0.348 | 0 | 206.012 | 246.355 | n/a |
+| cross-team-V3 | 0.749 | 0.750 | 0.545 | 0.000 | 0.000 | 0.000 | 0 | 8.662 | 10.319 | n/a |
+| cross-team-V4 | 0.789 | 0.900 | 0.786 | 0.500 | 0.688 | 0.321 | 0 | 217.071 | 283.375 | 1820.501 |
+| cross-team-engram-all | 0.000 | 0.000 | 0.000 | 0.000 | n/a | n/a | 0 | 0.605 | 0.893 | n/a |
+| cross-team-engram-any | 0.163 | 0.188 | 0.179 | 0.500 | n/a | n/a | 0 | 1.869 | 4.018 | n/a |
+
+| run | lang en nDCG | lang es nDCG | cross_team_handoff | exact_identifier | lookup | multi_evidence_2 | multi_evidence_3 | temporal_evidence | unanswerable | unauthorized_probe (all evidence@10) |
+| baseline:hindsight | 0.081 | 0.071 | 0.000 | 0.375 | 0.083 | 0.083 | 0.000 | 0.062 | n/a | n/a |
+| baseline:engram | 0.331 | 0.009 | 0.500 | 0.000 | 0.208 | 0.000 | 0.500 | 0.000 | n/a | n/a |
+| baseline:graphiti | 0.664 | 0.469 | 0.438 | 0.562 | 0.833 | 0.375 | 0.375 | 0.812 | n/a | n/a |
+| baseline:agents-runtime-v4 | 0.802 | 0.632 | 0.375 | 1.000 | 0.833 | 0.375 | 0.938 | 0.938 | n/a | n/a |
+| baseline:memvid_hybrid | 0.709 | 0.469 | 0.000 | 0.562 | 0.833 | 0.417 | 0.500 | 0.938 | n/a | n/a |
+| baseline:cognee | 0.757 | 0.653 | 0.062 | 1.000 | 0.833 | 0.500 | 0.500 | 1.000 | n/a | n/a |
+| baseline:mem0 | 0.656 | 0.454 | 0.062 | 0.375 | 0.833 | 0.333 | 0.250 | 0.938 | n/a | n/a |
+| cross-team-L | 0.759 | 0.659 | 0.500 | 1.000 | 0.833 | 0.333 | 0.000 | 1.000 | n/a | n/a |
+| cross-team-V0 | 0.801 | 0.632 | 0.375 | 1.000 | 0.833 | 0.375 | 0.938 | 0.938 | n/a | n/a |
+| cross-team-V1 | 0.793 | 0.607 | 0.562 | 1.000 | 0.833 | 0.708 | 0.812 | 1.000 | n/a | n/a |
+| cross-team-V2 | 0.723 | 0.662 | 0.188 | 1.000 | 0.833 | 0.542 | 0.688 | 1.000 | n/a | n/a |
+| cross-team-V3 | 0.779 | 0.719 | 0.000 | 1.000 | 0.958 | 0.250 | 0.000 | 1.000 | n/a | n/a |
+| cross-team-V4 | 0.793 | 0.785 | 0.500 | 1.000 | 1.000 | 0.542 | 0.688 | 1.000 | n/a | n/a |
+| cross-team-engram-all | 0.000 | 0.000 | 0.000 | 0.000 | 0.000 | 0.000 | 0.000 | 0.000 | n/a | n/a |
+| cross-team-engram-any | 0.316 | 0.009 | 0.500 | 0.000 | 0.167 | 0.000 | 0.500 | 0.000 | n/a | n/a |

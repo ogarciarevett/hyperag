@@ -1,0 +1,38 @@
+{
+  "system": "memvid",
+  "version": "memvid-sdk 2.0.160",
+  "profile": "default",
+  "config": {
+    "create": "defaults (lex only)",
+    "ingest": "put_many, then commit",
+    "find": "mode=auto (lex without OpenAI key)"
+  },
+  "transportRetry": "Common proxy: ECONNRESET only, 3 total upstream attempts, 250/500ms backoff, identical payload; HTTP errors unchanged; native client retries remain; upstream keep-alive disabled",
+  "bench": "dmr",
+  "units": 500,
+  "questions": 500,
+  "expectedQuestions": 500,
+  "failedSearches": 0,
+  "k": 10,
+  "workers": 4,
+  "llm": {
+    "model": "llama-3.3-70b-instruct",
+    "calls": 1000,
+    "prompt": 155913,
+    "completion": 27720
+  },
+  "accuracy": 0.028,
+  "byType": {
+    "dmr": {
+      "n": 500,
+      "correct": 14
+    }
+  },
+  "wallSeconds": 1838.7136173750002,
+  "ingestP50Ms": 11580.659291999997,
+  "searchP50Ms": 1.1136249999981374,
+  "searchP95Ms": 1.734375,
+  "rssPeakBytes": 32408296,
+  "systemRssPeakBytes": 229277696,
+  "date": "2026-10-24T09:33:51.118Z"
+}

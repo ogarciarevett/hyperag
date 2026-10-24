@@ -1,0 +1,59 @@
+{
+  "system": "mem0",
+  "version": "mem0ai 2.2.1, qdrant-client 1.20.0, spacy 3.8.16, en_core_web_sm 3.8.0",
+  "profile": "default",
+  "config": {
+    "infer": true,
+    "vector_store": "qdrant embedded, on disk",
+    "embedder": "openai-compatible BAAI/bge-small-en-v1.5",
+    "llm": "shared endpoint (EVAL_LLM_MODEL)",
+    "search": "defaults",
+    "concurrency": 8
+  },
+  "bench": "locomo",
+  "units": 10,
+  "questions": 1986,
+  "expectedQuestions": 1986,
+  "failedSearches": 0,
+  "k": 10,
+  "workers": 4,
+  "llm": {
+    "model": "llama-3.3-70b-instruct",
+    "calls": 1986,
+    "prompt": 658799,
+    "completion": 21870
+  },
+  "accuracy": "score_locomo.py",
+  "wallSeconds": 1660.5702145,
+  "ingestP50Ms": 651833.515625,
+  "searchP50Ms": 2386.968957999983,
+  "searchP95Ms": 5224.114999999991,
+  "rssPeakBytes": 23692032,
+  "systemRssPeakBytes": 246628352,
+  "date": "2026-10-23T23:03:39.071Z",
+  "locomo": {
+    "f1_cat1_4": 0.386,
+    "per_category": {
+      "1": {
+        "n": 282,
+        "f1": 0.3385
+      },
+      "2": {
+        "n": 321,
+        "f1": 0.3576
+      },
+      "3": {
+        "n": 96,
+        "f1": 0.1498
+      },
+      "4": {
+        "n": 841,
+        "f1": 0.4397
+      },
+      "5": {
+        "n": 446,
+        "f1": 0.9327
+      }
+    }
+  }
+}

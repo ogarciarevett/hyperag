@@ -1,0 +1,10 @@
+{
+  "status": "failed",
+  "score": null,
+  "answers": 53,
+  "uniqueIds": 53,
+  "error": "TimeoutError after machine-pause resume",
+  "causeEvidence": "old extra120-second adapter wall-clock deadline reproduced as timeout with realSIGSTOP/local-socket test; newproxy-mode omits extra deadline",
+  "date": "2026-10-24T12:55:12Z",
+  "retry": "full100-question retry pending first safe boundary after credential cooldown; no selective scoring"
+}

@@ -1,0 +1,203 @@
+{
+  "hyperag": [
+    {
+      "task": "retention across restart (en)",
+      "pass": true,
+      "note": "top: Decision in PR #88: migrations run in a single tra"
+    },
+    {
+      "task": "retention across restart (es)",
+      "pass": true,
+      "note": "top: Decisión en el PR #91: los reintentos usan backoff"
+    },
+    {
+      "task": "handoff: finding and its evidence reach the second agent",
+      "pass": true,
+      "note": "2 results"
+    },
+    {
+      "task": "correction supersedes an outdated fact",
+      "pass": true,
+      "note": "results: Correction: the billing servic | Evidence: load test 14 shows p | Finding: raise the connection "
+    },
+    {
+      "task": "a correction still holds after a restart",
+      "pass": true,
+      "note": "top: Correction: the billing service runs on "
+    },
+    {
+      "task": "conflicting concurrent update is detected",
+      "pass": true,
+      "note": "outcomes: ok, conflict"
+    },
+    {
+      "task": "history explains a correction",
+      "pass": true,
+      "note": "versions: 2"
+    },
+    {
+      "task": "restricted scope is not reachable",
+      "pass": true,
+      "note": "0 results returned to an unauthorized agent"
+    },
+    {
+      "task": "revoked access stops reads",
+      "pass": true,
+      "note": "0 results after revocation"
+    },
+    {
+      "task": "deleted memory is not returned",
+      "pass": true,
+      "note": "5 results"
+    },
+    {
+      "task": "insufficient evidence is reported",
+      "pass": true,
+      "note": "abstained=true, results=5"
+    },
+    {
+      "task": "valid time: an expired fact is not current",
+      "pass": true,
+      "note": "5 results"
+    },
+    {
+      "task": "answer carries its source",
+      "pass": true,
+      "note": "sources: PR #88, PR #91"
+    }
+  ],
+  "engram-mcp-default": [
+    {
+      "task": "retention across restart (en)",
+      "pass": false,
+      "note": "top: undefined"
+    },
+    {
+      "task": "retention across restart (es)",
+      "pass": false,
+      "note": "top: undefined"
+    },
+    {
+      "task": "handoff: finding and its evidence reach the second agent",
+      "pass": false,
+      "note": "0 results"
+    },
+    {
+      "task": "correction supersedes an outdated fact",
+      "pass": false,
+      "note": "results: "
+    },
+    {
+      "task": "a correction still holds after a restart",
+      "pass": false,
+      "note": "top: undefined"
+    },
+    {
+      "task": "conflicting concurrent update is detected",
+      "pass": false,
+      "note": "outcomes: ok, ok"
+    },
+    {
+      "task": "history explains a correction",
+      "pass": true,
+      "note": "versions: 2"
+    },
+    {
+      "task": "restricted scope is not reachable",
+      "pass": false,
+      "note": "1 results returned to an unauthorized agent"
+    },
+    {
+      "task": "revoked access stops reads",
+      "pass": false,
+      "note": "unsupported: no per-principal permissions: any caller can read any project"
+    },
+    {
+      "task": "deleted memory is not returned",
+      "pass": true,
+      "note": "0 results"
+    },
+    {
+      "task": "insufficient evidence is reported",
+      "pass": true,
+      "note": "abstained=null, results=0"
+    },
+    {
+      "task": "valid time: an expired fact is not current",
+      "pass": false,
+      "note": "unsupported: no valid-time fields"
+    },
+    {
+      "task": "answer carries its source",
+      "pass": false,
+      "note": "sources: "
+    }
+  ],
+  "engram-mcp-any": [
+    {
+      "task": "retention across restart (en)",
+      "pass": true,
+      "note": "top: Decision in PR #88: migrations run in a single tra"
+    },
+    {
+      "task": "retention across restart (es)",
+      "pass": true,
+      "note": "top: Decisión en el PR #91: los reintentos usan backoff"
+    },
+    {
+      "task": "handoff: finding and its evidence reach the second agent",
+      "pass": true,
+      "note": "2 results"
+    },
+    {
+      "task": "correction supersedes an outdated fact",
+      "pass": true,
+      "note": "results: Correction: the billing servic | Finding: raise the connection  | Evidence: load test 14 shows p"
+    },
+    {
+      "task": "a correction still holds after a restart",
+      "pass": true,
+      "note": "top: Correction: the billing service runs on "
+    },
+    {
+      "task": "conflicting concurrent update is detected",
+      "pass": false,
+      "note": "outcomes: ok, ok"
+    },
+    {
+      "task": "history explains a correction",
+      "pass": true,
+      "note": "versions: 2"
+    },
+    {
+      "task": "restricted scope is not reachable",
+      "pass": false,
+      "note": "1 results returned to an unauthorized agent"
+    },
+    {
+      "task": "revoked access stops reads",
+      "pass": false,
+      "note": "unsupported: no per-principal permissions: any caller can read any project"
+    },
+    {
+      "task": "deleted memory is not returned",
+      "pass": true,
+      "note": "0 results"
+    },
+    {
+      "task": "insufficient evidence is reported",
+      "pass": false,
+      "note": "abstained=null, results=5"
+    },
+    {
+      "task": "valid time: an expired fact is not current",
+      "pass": false,
+      "note": "unsupported: no valid-time fields"
+    },
+    {
+      "task": "answer carries its source",
+      "pass": true,
+      "note": "sources: PR #91, PR #88"
+    }
+  ]
+}

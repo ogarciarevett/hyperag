@@ -1,0 +1,16 @@
+node_modules
+.env
+eval/results/*.tmp
+.cache
+.venv-bench
+target
+__pycache__/
+eval/public/.venv-*/
+.venv-fastembed
+eval/public/results/memory/*.ingest.*
+eval/public/results/memory/queue.log
+eval/public/results/memory/check/
+eval/public/results/memory/*.pid
+
+dist/
+*.tgz

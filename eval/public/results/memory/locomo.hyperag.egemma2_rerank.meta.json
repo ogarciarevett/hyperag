@@ -1,0 +1,64 @@
+{
+  "system": "hyperag",
+  "version": "0.1.0",
+  "profile": "egemma2+rerank",
+  "config": {
+    "embedding": {
+      "model": "onnx-community/embeddinggemma-2-ONNX#q8",
+      "revision": "daa72c51243991dfcaf9f9137d2c573d8f7790c0",
+      "dimensions": 768,
+      "normalized": true,
+      "preprocessing": "sentence_embedding; max_length=512; prompts query=\"task: search result | query: \" document=\"title: none | text: \""
+    },
+    "reranker": "Xenova/bge-reranker-base@280bcc2#q8",
+    "rrfK": 60,
+    "graph": null
+  },
+  "transportRetry": "Common proxy: ECONNRESET only, 3 total upstream attempts, 250/500ms backoff, identical payload; HTTP errors unchanged; native client retries remain; upstream keep-alive disabled",
+  "bench": "locomo",
+  "units": 10,
+  "questions": 1986,
+  "expectedQuestions": 1986,
+  "failedSearches": 0,
+  "k": 10,
+  "workers": 2,
+  "llm": {
+    "model": "llama-3.3-70b-instruct",
+    "calls": 1986,
+    "prompt": 1283877,
+    "completion": 22900
+  },
+  "accuracy": "score_locomo.py",
+  "wallSeconds": 1425.562750375,
+  "ingestP50Ms": 141117.52125,
+  "searchP50Ms": 93020.77333299996,
+  "searchP95Ms": 207306.2243750001,
+  "rssPeakBytes": 2906411256,
+  "systemRssPeakBytes": 183605658,
+  "date": "2026-10-24T08:10:25.422Z",
+  "locomo": {
+    "f1_cat1_4": 0.4764,
+    "per_category": {
+      "1": {
+        "n": 282,
+        "f1": 0.3443
+      },
+      "2": {
+        "n": 321,
+        "f1": 0.3527
+      },
+      "3": {
+        "n": 96,
+        "f1": 0.1407
+      },
+      "4": {
+        "n": 841,
+        "f1": 0.6062
+      },
+      "5": {
+        "n": 446,
+        "f1": 0.8318
+      }
+    }
+  }
+}

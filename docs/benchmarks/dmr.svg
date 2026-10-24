@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="661" viewBox="0 0 880 661" role="img" aria-labelledby="title description">
+<title id="title">DMR — Answer accuracy</title>
+<desc id="description">Completed runs from one evaluation window. N/D means not run or incomplete, never zero. Hyperag is blue; competitor colors are fixed across charts.</desc>
+<style>text{font-family:system-ui,-apple-system,Segoe UI,sans-serif;fill:#59636e;font-size:14px}.title{font-size:22px;font-weight:650}.small{font-size:12px}.grid{stroke:#a0a8b0;stroke-opacity:.25}.axis{stroke:#89939d}@media(prefers-color-scheme:dark){text{fill:#a9b3bd}.grid{stroke:#84909b;stroke-opacity:.28}.axis{stroke:#9ca7b2}}</style>
+<text class="title" x="14" y="30">DMR</text>
+<text x="14" y="54">Answer accuracy · higher is better · one window, October 23–24, 2026</text>
+<line class="grid" x1="420" y1="75" x2="420" y2="574"/>
+<text class="small" text-anchor="middle" x="420" y="66">0%</text>
+<line class="grid" x1="512.5" y1="75" x2="512.5" y2="574"/>
+<text class="small" text-anchor="middle" x="512.5" y="66">25%</text>
+<line class="grid" x1="605" y1="75" x2="605" y2="574"/>
+<text class="small" text-anchor="middle" x="605" y="66">50%</text>
+<line class="grid" x1="697.5" y1="75" x2="697.5" y2="574"/>
+<text class="small" text-anchor="middle" x="697.5" y="66">75%</text>
+<line class="grid" x1="790" y1="75" x2="790" y2="574"/>
+<text class="small" text-anchor="middle" x="790" y="66">100%</text>
+<text x="14" y="103">Hyperag · default template (graph on)</text>
+<text x="428" y="103">N/D</text>
+<text x="14" y="134">Hyperag · bm25 · graph off</text>
+<text x="428" y="134">N/D</text>
+<text x="14" y="165">Hyperag · e5+rerank · graph off</text>
+<rect x="420" y="152" width="284.900" height="18" fill="#5283a3"><title>Hyperag · e5+rerank · graph off: 77.0%</title></rect>
+<text x="711.900" y="165">77.0%</text>
+<text x="14" y="196">Hyperag · e5+rerank+graph · graph on</text>
+<text x="428" y="196">N/D</text>
+<text x="14" y="227">Hyperag · egemma2+rerank · graph off</text>
+<rect x="420" y="214" width="281.940" height="18" fill="#5283a3"><title>Hyperag · egemma2+rerank · graph off: 76.2%</title></rect>
+<text x="708.940" y="227">76.2%</text>
+<text x="14" y="258">Hyperag · nemotron · graph off</text>
+<text x="428" y="258">N/D</text>
+<text x="14" y="289">Hyperag · nemotron+nvrerank · graph off</text>
+<rect x="420" y="276" width="304.880" height="18" fill="#5283a3"><title>Hyperag · nemotron+nvrerank · graph off: 82.4%</title></rect>
+<text x="731.880" y="289">82.4%</text>
+<text x="14" y="320">cognee · default</text>
+<text x="428" y="320">N/D</text>
+<text x="14" y="351">engram · any</text>
+<rect x="420" y="338" width="36.260" height="18" fill="#8b915c"><title>engram · any: 9.8%</title></rect>
+<text x="463.260" y="351">9.8%</text>
+<text x="14" y="382">engram · default</text>
+<rect x="420" y="369" width="11.100" height="18" fill="#8b915c"><title>engram · default: 3.0%</title></rect>
+<text x="438.100" y="382">3.0%</text>
+<text x="14" y="413">graphiti · default</text>
+<text x="428" y="413">N/D</text>
+<text x="14" y="444">hindsight · default</text>
+<text x="428" y="444">N/D</text>
+<text x="14" y="475">langmem · default</text>
+<text x="428" y="475">N/D</text>
+<text x="14" y="506">letta · default</text>
+<text x="428" y="506">N/D</text>
+<text x="14" y="537">mem0 · default</text>
+<text x="428" y="537">N/D</text>
+<text x="14" y="568">memvid · default</text>
+<rect x="420" y="555" width="10.360" height="18" fill="#987b9a"><title>memvid · default: 2.8%</title></rect>
+<text x="437.360" y="568">2.8%</text>
+<line class="axis" x1="420" y1="75" x2="420" y2="574"/>
+<text class="small" x="14" y="604">N/D = unrun or incomplete. Failed native searches remain scored by the common harness.</text>
+<text class="small" x="14" y="625">Raw scores and completion checks: eval/public/results. Graph is off unless marked on.</text>
+</svg>

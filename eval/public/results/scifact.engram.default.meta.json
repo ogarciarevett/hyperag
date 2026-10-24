@@ -1,0 +1,22 @@
+{
+  "system": "engram",
+  "version": "engram 3.3.2",
+  "profile": "default",
+  "config": {
+    "transport": "mcp stdio",
+    "match_mode": "all (default)"
+  },
+  "dataset": "scifact",
+  "split": "test",
+  "documents": 5183,
+  "queries": 300,
+  "k": 100,
+  "ingestMs": 273041.76775,
+  "latencyP50Ms": 13.371875000011642,
+  "latencyP95Ms": 18.165709000022616,
+  "rssPeakBytes": 38339256,
+  "systemRssPeakBytes": 0,
+  "failedQueries": 0,
+  "errors": {},
+  "date": "2026-10-23T20:09:05.957Z"
+}

@@ -1,0 +1,3726 @@
+{
+ "results": {
+  "baseline:hindsight": {
+   "requests": 128,
+   "queries": 128,
+   "quality_queries": 112,
+   "probe_queries": 16,
+   "quality_attempt_policy": "first recorded attempt per query",
+   "response_error_count": 0,
+   "unknown_id_count": 0,
+   "cross_scope_hit_count": 0,
+   "mismatched_parent_count": 0,
+   "raw_hit_count": 1280,
+   "distinct_mapped_parent_count": 1280,
+   "duplicate_parent_count": 0,
+   "lost_unique_depth_due_to_duplicates": 0,
+   "over_limit_hit_count": 0,
+   "response_contract_violation_count": 0,
+   "namespace_clean": true,
+   "latency_samples": 128,
+   "latency_mean_ms": 153.8393382479626,
+   "latency_p50_ms": 114.93633303325623,
+   "latency_p95_ms": 171.63374996744096,
+   "latency_p99_ms": 456.2958750175312,
+   "latency_claim_boundary": "Observed endpoint request time, including IPC/network/queueing if timed by caller; not CPU-only kernel time.",
+   "probe_empty_result_rate": 0.0,
+   "probe_explicit_abstention_rate": null,
+   "recall_at_5": 0.05803571428571429,
+   "recall_at_10": 0.12946428571428573,
+   "ndcg_at_10": 0.07576456002879542,
+   "all_evidence_at_5": 0.044642857142857144,
+   "all_evidence_at_10": 0.09821428571428571,
+   "mrr_at_10": 0.0635345804988662,
+   "strata": {
+    "scope": {
+     "engineering": {
+      "queries": 70,
+      "quality_queries": 64,
+      "recall_at_5": 0.0859375,
+      "recall_at_10": 0.15625,
+      "ndcg_at_10": 0.099860398685192,
+      "all_evidence_at_5": 0.078125,
+      "all_evidence_at_10": 0.140625
+     },
+     "finance": {
+      "queries": 10,
+      "quality_queries": 8,
+      "recall_at_5": 0.0625,
+      "recall_at_10": 0.1875,
+      "ndcg_at_10": 0.12434610964224903,
+      "all_evidence_at_5": 0.0,
+      "all_evidence_at_10": 0.125
+     },
+     "security": {
+      "queries": 10,
+      "quality_queries": 8,
+      "recall_at_5": 0.0,
+      "recall_at_10": 0.125,
+      "ndcg_at_10": 0.036133103289735985,
+      "all_evidence_at_5": 0.0,
+      "all_evidence_at_10": 0.125
+     },
+     "support": {
+      "queries": 38,
+      "quality_queries": 32,
+      "recall_at_5": 0.015625,
+      "recall_at_10": 0.0625,
+      "ndcg_at_10": 0.02533535949740371,
+      "all_evidence_at_5": 0.0,
+      "all_evidence_at_10": 0.0
+     }
+    },
+    "category": {
+     "cross_team_handoff": {
+      "queries": 16,
+      "quality_queries": 16,
+      "recall_at_5": 0.03125,
+      "recall_at_10": 0.125,
+      "ndcg_at_10": 0.05067071899480742,
+      "all_evidence_at_5": 0.0,
+      "all_evidence_at_10": 0.0
+     },
+     "exact_identifier": {
+      "queries": 16,
+      "quality_queries": 16,
+      "recall_at_5": 0.3125,
+      "recall_at_10": 0.375,
+      "ndcg_at_10": 0.3102664429315494,
+      "all_evidence_at_5": 0.3125,
+      "all_evidence_at_10": 0.375
+     },
+     "lookup": {
+      "queries": 24,
+      "quality_queries": 24,
+      "recall_at_5": 0.0,
+      "recall_at_10": 0.08333333333333333,
+      "ndcg_at_10": 0.025933256652134213,
+      "all_evidence_at_5": 0.0,
+      "all_evidence_at_10": 0.08333333333333333
+     },
+     "multi_evidence_2": {
+      "queries": 24,
+      "quality_queries": 24,
+      "recall_at_5": 0.041666666666666664,
+      "recall_at_10": 0.14583333333333334,
+      "ndcg_at_10": 0.07446699904534064,
+      "all_evidence_at_5": 0.0,
+      "all_evidence_at_10": 0.08333333333333333
+     },
+     "multi_evidence_3": {
+      "queries": 16,
+      "quality_queries": 16,
+      "recall_at_5": 0.0,
+      "recall_at_10": 0.0,
+      "ndcg_at_10": 0.0,
+      "all_evidence_at_5": 0.0,
+      "all_evidence_at_10": 0.0
+     },
+     "temporal_evidence": {
+      "queries": 16,
+      "quality_queries": 16,
+      "recall_at_5": 0.0,
+      "recall_at_10": 0.0625,
+      "ndcg_at_10": 0.018814374728998825,
+      "all_evidence_at_5": 0.0,
+      "all_evidence_at_10": 0.0625
+     },
+     "unanswerable": {
+      "queries": 8,
+      "quality_queries": 0,
+      "recall_at_5": null,
+      "recall_at_10": null,
+      "ndcg_at_10": null,
+      "all_evidence_at_5": null,
+      "all_evidence_at_10": null
+     },
+     "unauthorized_probe": {
+      "queries": 8,
+      "quality_queries": 0,
+      "recall_at_5": null,
+      "recall_at_10": null,
+      "ndcg_at_10": null,
+      "all_evidence_at_5": null,
+      "all_evidence_at_10": null
+     }
+    },
+    "language": {
+     "en": {
+      "queries": 64,
+      "quality_queries": 56,
+      "recall_at_5": 0.05357142857142857,
+      "recall_at_10": 0.17857142857142858,
+      "ndcg_at_10": 0.08067865994449167,
+      "all_evidence_at_5": 0.03571428571428571,
+      "all_evidence_at_10": 0.125
+     },
+     "es": {
+      "queries": 64,
+      "quality_queries": 56,
+      "recall_at_5": 0.0625,
+      "recall_at_10": 0.08035714285714286,
+      "ndcg_at_10": 0.07085046011309917,
+      "all_evidence_at_5": 0.05357142857142857,
+      "all_evidence_at_10": 0.07142857142857142
+     }
+    }
+   },
+   "latency_by_workload": {
+    "quality:concurrency=1": {
+     "samples": 128,
+     "p50_ms": 114.93633303325623,
+     "p95_ms": 171.63374996744096,
+     "p99_ms": 456.2958750175312
+    }
+   },
+   "false_abstention_rate": null,
+   "handoff_all_evidence_at_10": 0.0
+  },
+  "baseline:engram": {
+   "requests": 128,
+   "queries": 128,
+   "quality_queries": 112,
+   "probe_queries": 16,
+   "quality_attempt_policy": "first recorded attempt per query",
+   "response_error_count": 0,
+   "unknown_id_count": 0,
+   "cross_scope_hit_count": 0,
+   "mismatched_parent_count": 0,
+   "raw_hit_count": 1280,
+   "distinct_mapped_parent_count": 1280,
+   "duplicate_parent_count": 0,
+   "lost_unique_depth_due_to_duplicates": 0,
+   "over_limit_hit_count": 0,
+   "response_contract_violation_count": 0,
+   "namespace_clean": true,
+   "latency_samples": 128,
+   "latency_mean_ms": 6.409478153727832,
+   "latency_p50_ms": 4.052291042171419,
+   "latency_p95_ms": 6.6133750369772315,
+   "latency_p99_ms": 7.299916003830731,
+   "latency_claim_boundary": "Observed endpoint request time, including IPC/network/queueing if timed by caller; not CPU-only kernel time.",
+   "probe_empty_result_rate": 0.0,
+   "probe_explicit_abstention_rate": null,
+   "recall_at_5": 0.1875,
+   "recall_at_10": 0.20089285714285715,
+   "ndcg_at_10": 0.16983964813928618,
+   "all_evidence_at_5": 0.17857142857142858,
+   "all_evidence_at_10": 0.1875,
+   "mrr_at_10": 0.16140873015873017,
+   "strata": {
+    "scope": {
+     "engineering": {
+      "queries": 70,
+      "quality_queries": 64,
+      "recall_at_5": 0.1328125,
+      "recall_at_10": 0.1328125,
+      "ndcg_at_10": 0.12870621426202025,
+      "all_evidence_at_5": 0.125,
+      "all_evidence_at_10": 0.125
+     },
+     "finance": {
+      "queries": 10,
+      "quality_queries": 8,
+      "recall_at_5": 0.0625,
+      "recall_at_10": 0.0625,
+      "ndcg_at_10": 0.03832169954784115,
+      "all_evidence_at_5": 0.0,
+      "all_evidence_at_10": 0.0
+     },
+     "security": {
+      "queries": 10,
+      "quality_queries": 8,
+      "recall_at_5": 0.0,
+      "recall_at_10": 0.125,
+      "ndcg_at_10": 0.03762874945799765,
+      "all_evidence_at_5": 0.0,
+      "all_evidence_at_10": 0.125
+     },
+     "support": {
+      "queries": 38,
+      "quality_queries": 32,
+      "recall_at_5": 0.375,
+      "recall_at_10": 0.390625,
+      "ndcg_at_10": 0.3180387277120015,
+      "all_evidence_at_5": 0.375,
+      "all_evidence_at_10": 0.375
+     }
+    },
+    "category": {
+     "cross_team_handoff": {
+      "queries": 16,
+      "quality_queries": 16,
+      "recall_at_5": 0.5,
+      "recall_at_10": 0.5,
+      "ndcg_at_10": 0.5,
+      "all_evidence_at_5": 0.5,
+      "all_evidence_at_10": 0.5
+     },
+     "exact_identifier": {
+      "queries": 16,
+      "quality_queries": 16,
+      "recall_at_5": 0.0,
+      "recall_at_10": 0.0,
+      "ndcg_at_10": 0.0,
+      "all_evidence_at_5": 0.0,
+      "all_evidence_at_10": 0.0
+     },
+     "lookup": {
+      "queries": 24,
+      "quality_queries": 24,
+      "recall_at_5": 0.16666666666666666,
+      "recall_at_10": 0.20833333333333334,
+      "ndcg_at_10": 0.09587624981933256,
+      "all_evidence_at_5": 0.16666666666666666,
+      "all_evidence_at_10": 0.20833333333333334
+     },
+     "multi_evidence_2": {
+      "queries": 24,
+      "quality_queries": 24,
+      "recall_at_5": 0.041666666666666664,
+      "recall_at_10": 0.0625,
+      "ndcg_at_10": 0.030042108164003045,
+      "all_evidence_at_5": 0.0,
+      "all_evidence_at_10": 0.0
+     },
+     "multi_evidence_3": {
+      "queries": 16,
+      "quality_queries": 16,
+      "recall_at_5": 0.5,
+      "recall_at_10": 0.5,
+      "ndcg_at_10": 0.5,
+      "all_evidence_at_5": 0.5,
+      "all_evidence_at_10": 0.5
+     },
+     "temporal_evidence": {
+      "queries": 16,
+      "quality_queries": 16,
+      "recall_at_5": 0.0,
+      "recall_at_10": 0.0,
+      "ndcg_at_10": 0.0,
+      "all_evidence_at_5": 0.0,
+      "all_evidence_at_10": 0.0
+     },
+     "unanswerable": {
+      "queries": 8,
+      "quality_queries": 0,
+      "recall_at_5": null,
+      "recall_at_10": null,
+      "ndcg_at_10": null,
+      "all_evidence_at_5": null,
+      "all_evidence_at_10": null
+     },
+     "unauthorized_probe": {
+      "queries": 8,
+      "quality_queries": 0,
+      "recall_at_5": null,
+      "recall_at_10": null,
+      "ndcg_at_10": null,
+      "all_evidence_at_5": null,
+      "all_evidence_at_10": null
+     }
+    },
+    "language": {
+     "en": {
+      "queries": 64,
+      "quality_queries": 56,
+      "recall_at_5": 0.36607142857142855,
+      "recall_at_10": 0.38392857142857145,
+      "ndcg_at_10": 0.33103978050773714,
+      "all_evidence_at_5": 0.35714285714285715,
+      "all_evidence_at_10": 0.375
+     },
+     "es": {
+      "queries": 64,
+      "quality_queries": 56,
+      "recall_at_5": 0.008928571428571428,
+      "recall_at_10": 0.017857142857142856,
+      "ndcg_at_10": 0.008639515770835302,
+      "all_evidence_at_5": 0.0,
+      "all_evidence_at_10": 0.0
+     }
+    }
+   },
+   "latency_by_workload": {
+    "quality:concurrency=1": {
+     "samples": 128,
+     "p50_ms": 4.052291042171419,
+     "p95_ms": 6.6133750369772315,
+     "p99_ms": 7.299916003830731
+    }
+   },
+   "false_abstention_rate": null,
+   "handoff_all_evidence_at_10": 0.5
+  },
+  "baseline:graphiti": {
+   "requests": 128,
+   "queries": 128,
+   "quality_queries": 112,
+   "probe_queries": 16,
+   "quality_attempt_policy": "first recorded attempt per query",
+   "response_error_count": 0,
+   "unknown_id_count": 0,
+   "cross_scope_hit_count": 0,
+   "mismatched_parent_count": 0,
+   "raw_hit_count": 1280,
+   "distinct_mapped_parent_count": 1280,
+   "duplicate_parent_count": 0,
+   "lost_unique_depth_due_to_duplicates": 0,
+   "over_limit_hit_count": 0,
+   "response_contract_violation_count": 0,
+   "namespace_clean": true,
+   "latency_samples": 128,
+   "latency_mean_ms": 29.122456090590276,
+   "latency_p50_ms": 15.238041989505291,
+   "latency_p95_ms": 20.394040970131755,
+   "latency_p99_ms": 32.22658298909664,
+   "latency_claim_boundary": "Observed endpoint request time, including IPC/network/queueing if timed by caller; not CPU-only kernel time.",
+   "probe_empty_result_rate": 0.0,
+   "probe_explicit_abstention_rate": null,
+   "recall_at_5": 0.6458333333333333,
+   "recall_at_10": 0.7038690476190476,
+   "ndcg_at_10": 0.5668463818354991,
+   "all_evidence_at_5": 0.5,
+   "all_evidence_at_10": 0.5714285714285714,
+   "mrr_at_10": 0.584077380952381,
+   "strata": {
+    "scope": {
+     "engineering": {
+      "queries": 70,
+      "quality_queries": 64,
+      "recall_at_5": 0.7005208333333334,
+      "recall_at_10": 0.7708333333333334,
+      "ndcg_at_10": 0.615263396882903,
+      "all_evidence_at_5": 0.5625,
+      "all_evidence_at_10": 0.65625
+     },
+     "finance": {
+      "queries": 10,
+      "quality_queries": 8,
+      "recall_at_5": 0.5625,
+      "recall_at_10": 0.625,
+      "ndcg_at_10": 0.5364565393614241,
+      "all_evidence_at_5": 0.125,
+      "all_evidence_at_10": 0.25
+     },
+     "security": {
+      "queries": 10,
+      "quality_queries": 8,
+      "recall_at_5": 1.0,
+      "recall_at_10": 1.0,
+      "ndcg_at_10": 0.7904332273484707,
+      "all_evidence_at_5": 1.0,
+      "all_evidence_at_10": 1.0
+     },
+     "support": {
+      "queries": 38,
+      "quality_queries": 32,
+      "recall_at_5": 0.46875,
+      "recall_at_10": 0.515625,
+      "ndcg_at_10": 0.4217131009809671,
+      "all_evidence_at_5": 0.34375,
+      "all_evidence_at_10": 0.375
+     }
+    },
+    "category": {
+     "cross_team_handoff": {
+      "queries": 16,
+      "quality_queries": 16,
+      "recall_at_5": 0.5625,
+      "recall_at_10": 0.625,
+      "ndcg_at_10": 0.48832743344374024,
+      "all_evidence_at_5": 0.4375,
+      "all_evidence_at_10": 0.4375
+     },
+     "exact_identifier": {
+      "queries": 16,
+      "quality_queries": 16,
+      "recall_at_5": 0.5625,
+      "recall_at_10": 0.5625,
+      "ndcg_at_10": 0.5163662191964322,
+      "all_evidence_at_5": 0.5625,
+      "all_evidence_at_10": 0.5625
+     },
+     "lookup": {
+      "queries": 24,
+      "quality_queries": 24,
+      "recall_at_5": 0.8333333333333334,
+      "recall_at_10": 0.8333333333333334,
+      "ndcg_at_10": 0.6083886337472815,
+      "all_evidence_at_5": 0.8333333333333334,
+      "all_evidence_at_10": 0.8333333333333334
+     },
+     "multi_evidence_2": {
+      "queries": 24,
+      "quality_queries": 24,
+      "recall_at_5": 0.5416666666666666,
+      "recall_at_10": 0.6041666666666666,
+      "ndcg_at_10": 0.5429236887389756,
+      "all_evidence_at_5": 0.25,
+      "all_evidence_at_10": 0.375
+     },
+     "multi_evidence_3": {
+      "queries": 16,
+      "quality_queries": 16,
+      "recall_at_5": 0.6458333333333333,
+      "recall_at_10": 0.7708333333333333,
+      "ndcg_at_10": 0.6746050119152062,
+      "all_evidence_at_5": 0.1875,
+      "all_evidence_at_10": 0.375
+     },
+     "temporal_evidence": {
+      "queries": 16,
+      "quality_queries": 16,
+      "recall_at_5": 0.6875,
+      "recall_at_10": 0.8125,
+      "ndcg_at_10": 0.5616575245637296,
+      "all_evidence_at_5": 0.6875,
+      "all_evidence_at_10": 0.8125
+     },
+     "unanswerable": {
+      "queries": 8,
+      "quality_queries": 0,
+      "recall_at_5": null,
+      "recall_at_10": null,
+      "ndcg_at_10": null,
+      "all_evidence_at_5": null,
+      "all_evidence_at_10": null
+     },
+     "unauthorized_probe": {
+      "queries": 8,
+      "quality_queries": 0,
+      "recall_at_5": null,
+      "recall_at_10": null,
+      "ndcg_at_10": null,
+      "all_evidence_at_5": null,
+      "all_evidence_at_10": null
+     }
+    },
+    "language": {
+     "en": {
+      "queries": 64,
+      "quality_queries": 56,
+      "recall_at_5": 0.7351190476190476,
+      "recall_at_10": 0.7916666666666667,
+      "ndcg_at_10": 0.6644953135397512,
+      "all_evidence_at_5": 0.6071428571428571,
+      "all_evidence_at_10": 0.7142857142857143
+     },
+     "es": {
+      "queries": 64,
+      "quality_queries": 56,
+      "recall_at_5": 0.5565476190476191,
+      "recall_at_10": 0.6160714285714286,
+      "ndcg_at_10": 0.4691974501312471,
+      "all_evidence_at_5": 0.39285714285714285,
+      "all_evidence_at_10": 0.42857142857142855
+     }
+    }
+   },
+   "latency_by_workload": {
+    "quality:concurrency=1": {
+     "samples": 128,
+     "p50_ms": 15.238041989505291,
+     "p95_ms": 20.394040970131755,
+     "p99_ms": 32.22658298909664
+    }
+   },
+   "false_abstention_rate": null,
+   "handoff_all_evidence_at_10": 0.4375
+  },
+  "baseline:agents-runtime-v4": {
+   "requests": 128,
+   "queries": 128,
+   "quality_queries": 112,
+   "probe_queries": 16,
+   "quality_attempt_policy": "first recorded attempt per query",
+   "response_error_count": 0,
+   "unknown_id_count": 0,
+   "cross_scope_hit_count": 0,
+   "mismatched_parent_count": 0,
+   "raw_hit_count": 1280,
+   "distinct_mapped_parent_count": 1280,
+   "duplicate_parent_count": 0,
+   "lost_unique_depth_due_to_duplicates": 0,
+   "over_limit_hit_count": 0,
+   "response_contract_violation_count": 0,
+   "namespace_clean": true,
+   "latency_samples": 128,
+   "latency_mean_ms": 19.20193587011454,
+   "latency_p50_ms": 17.584417015314102,
+   "latency_p95_ms": 22.14370807632804,
+   "latency_p99_ms": 27.889583026990294,
+   "latency_claim_boundary": "Observed endpoint request time, including IPC/network/queueing if timed by caller; not CPU-only kernel time.",
+   "probe_empty_result_rate": 0.0,
+   "probe_explicit_abstention_rate": null,
+   "recall_at_5": 0.7172619047619048,
+   "recall_at_10": 0.787202380952381,
+   "ndcg_at_10": 0.7169535213180299,
+   "all_evidence_at_5": 0.6160714285714286,
+   "all_evidence_at_10": 0.7232142857142857,
+   "mrr_at_10": 0.7547123015873015,
+   "strata": {
+    "scope": {
+     "engineering": {
+      "queries": 70,
+      "quality_queries": 64,
+      "recall_at_5": 0.8567708333333334,
+      "recall_at_10": 0.9557291666666666,
+      "ndcg_at_10": 0.8278758086881066,
+      "all_evidence_at_5": 0.78125,
+      "all_evidence_at_10": 0.921875
+     },
+     "finance": {
+      "queries": 10,
+      "quality_queries": 8,
+      "recall_at_5": 0.75,
+      "recall_at_10": 0.75,
+      "ndcg_at_10": 0.7811906094435088,
+      "all_evidence_at_5": 0.5,
+      "all_evidence_at_10": 0.5
+     },
+     "security": {
+      "queries": 10,
+      "quality_queries": 8,
+      "recall_at_5": 1.0,
+      "recall_at_10": 1.0,
+      "ndcg_at_10": 1.0,
+      "all_evidence_at_5": 1.0,
+      "all_evidence_at_10": 1.0
+     },
+     "support": {
+      "queries": 38,
+      "quality_queries": 32,
+      "recall_at_5": 0.359375,
+      "recall_at_10": 0.40625,
+      "ndcg_at_10": 0.40828805487601405,
+      "all_evidence_at_5": 0.21875,
+      "all_evidence_at_10": 0.3125
+     }
+    },
+    "category": {
+     "cross_team_handoff": {
+      "queries": 16,
+      "quality_queries": 16,
+      "recall_at_5": 0.34375,
+      "recall_at_10": 0.4375,
+      "ndcg_at_10": 0.4132893115606635,
+      "all_evidence_at_5": 0.1875,
+      "all_evidence_at_10": 0.375
+     },
+     "exact_identifier": {
+      "queries": 16,
+      "quality_queries": 16,
+      "recall_at_5": 0.6875,
+      "recall_at_10": 1.0,
+      "ndcg_at_10": 0.6980058211085821,
+      "all_evidence_at_5": 0.6875,
+      "all_evidence_at_10": 1.0
+     },
+     "lookup": {
+      "queries": 24,
+      "quality_queries": 24,
+      "recall_at_5": 0.8333333333333334,
+      "recall_at_10": 0.8333333333333334,
+      "ndcg_at_10": 0.8333333333333334,
+      "all_evidence_at_5": 0.8333333333333334,
+      "all_evidence_at_10": 0.8333333333333334
+     },
+     "multi_evidence_2": {
+      "queries": 24,
+      "quality_queries": 24,
+      "recall_at_5": 0.6041666666666666,
+      "recall_at_10": 0.6041666666666666,
+      "ndcg_at_10": 0.6391038053913548,
+      "all_evidence_at_5": 0.375,
+      "all_evidence_at_10": 0.375
+     },
+     "multi_evidence_3": {
+      "queries": 16,
+      "quality_queries": 16,
+      "recall_at_5": 0.8958333333333334,
+      "recall_at_10": 0.9791666666666666,
+      "ndcg_at_10": 0.9539420412824187,
+      "all_evidence_at_5": 0.6875,
+      "all_evidence_at_10": 0.9375
+     },
+     "temporal_evidence": {
+      "queries": 16,
+      "quality_queries": 16,
+      "recall_at_5": 0.9375,
+      "recall_at_10": 0.9375,
+      "ndcg_at_10": 0.7447817671875127,
+      "all_evidence_at_5": 0.9375,
+      "all_evidence_at_10": 0.9375
+     },
+     "unanswerable": {
+      "queries": 8,
+      "quality_queries": 0,
+      "recall_at_5": null,
+      "recall_at_10": null,
+      "ndcg_at_10": null,
+      "all_evidence_at_5": null,
+      "all_evidence_at_10": null
+     },
+     "unauthorized_probe": {
+      "queries": 8,
+      "quality_queries": 0,
+      "recall_at_5": null,
+      "recall_at_10": null,
+      "ndcg_at_10": null,
+      "all_evidence_at_5": null,
+      "all_evidence_at_10": null
+     }
+    },
+    "language": {
+     "en": {
+      "queries": 64,
+      "quality_queries": 56,
+      "recall_at_5": 0.7886904761904762,
+      "recall_at_10": 0.8333333333333333,
+      "ndcg_at_10": 0.8018687811683146,
+      "all_evidence_at_5": 0.625,
+      "all_evidence_at_10": 0.7321428571428571
+     },
+     "es": {
+      "queries": 64,
+      "quality_queries": 56,
+      "recall_at_5": 0.6458333333333333,
+      "recall_at_10": 0.7410714285714286,
+      "ndcg_at_10": 0.6320382614677451,
+      "all_evidence_at_5": 0.6071428571428571,
+      "all_evidence_at_10": 0.7142857142857143
+     }
+    }
+   },
+   "latency_by_workload": {
+    "quality:concurrency=1": {
+     "samples": 128,
+     "p50_ms": 17.584417015314102,
+     "p95_ms": 22.14370807632804,
+     "p99_ms": 27.889583026990294
+    }
+   },
+   "false_abstention_rate": null,
+   "handoff_all_evidence_at_10": 0.375
+  },
+  "baseline:memvid_hybrid": {
+   "requests": 128,
+   "queries": 128,
+   "quality_queries": 112,
+   "probe_queries": 16,
+   "quality_attempt_policy": "first recorded attempt per query",
+   "response_error_count": 0,
+   "unknown_id_count": 0,
+   "cross_scope_hit_count": 0,
+   "mismatched_parent_count": 0,
+   "raw_hit_count": 1280,
+   "distinct_mapped_parent_count": 1280,
+   "duplicate_parent_count": 0,
+   "lost_unique_depth_due_to_duplicates": 0,
+   "over_limit_hit_count": 0,
+   "response_contract_violation_count": 0,
+   "namespace_clean": true,
+   "latency_samples": 128,
+   "latency_mean_ms": 14.723723558745405,
+   "latency_p50_ms": 12.130500050261617,
+   "latency_p95_ms": 17.654665978625417,
+   "latency_p99_ms": 24.095708038657904,
+   "latency_claim_boundary": "Observed endpoint request time, including IPC/network/queueing if timed by caller; not CPU-only kernel time.",
+   "probe_empty_result_rate": 0.0,
+   "probe_explicit_abstention_rate": null,
+   "recall_at_5": 0.5892857142857143,
+   "recall_at_10": 0.681547619047619,
+   "ndcg_at_10": 0.5889631605082373,
+   "all_evidence_at_5": 0.44642857142857145,
+   "all_evidence_at_10": 0.5535714285714286,
+   "mrr_at_10": 0.6304173752834467,
+   "strata": {
+    "scope": {
+     "engineering": {
+      "queries": 70,
+      "quality_queries": 64,
+      "recall_at_5": 0.671875,
+      "recall_at_10": 0.8255208333333334,
+      "ndcg_at_10": 0.6623882199830177,
+      "all_evidence_at_5": 0.546875,
+      "all_evidence_at_10": 0.734375
+     },
+     "finance": {
+      "queries": 10,
+      "quality_queries": 8,
+      "recall_at_5": 0.625,
+      "recall_at_10": 0.6875,
+      "ndcg_at_10": 0.6576518734806549,
+      "all_evidence_at_5": 0.375,
+      "all_evidence_at_10": 0.375
+     },
+     "security": {
+      "queries": 10,
+      "quality_queries": 8,
+      "recall_at_5": 1.0,
+      "recall_at_10": 1.0,
+      "ndcg_at_10": 0.9538662191964322,
+      "all_evidence_at_5": 1.0,
+      "all_evidence_at_10": 1.0
+     },
+     "support": {
+      "queries": 38,
+      "quality_queries": 32,
+      "recall_at_5": 0.3125,
+      "recall_at_10": 0.3125,
+      "ndcg_at_10": 0.33371509864352344,
+      "all_evidence_at_5": 0.125,
+      "all_evidence_at_10": 0.125
+     }
+    },
+    "category": {
+     "cross_team_handoff": {
+      "queries": 16,
+      "quality_queries": 16,
+      "recall_at_5": 0.25,
+      "recall_at_10": 0.25,
+      "ndcg_at_10": 0.2782867981913646,
+      "all_evidence_at_5": 0.0,
+      "all_evidence_at_10": 0.0
+     },
+     "exact_identifier": {
+      "queries": 16,
+      "quality_queries": 16,
+      "recall_at_5": 0.25,
+      "recall_at_10": 0.5625,
+      "ndcg_at_10": 0.3238600916103103,
+      "all_evidence_at_5": 0.25,
+      "all_evidence_at_10": 0.5625
+     },
+     "lookup": {
+      "queries": 24,
+      "quality_queries": 24,
+      "recall_at_5": 0.8333333333333334,
+      "recall_at_10": 0.8333333333333334,
+      "ndcg_at_10": 0.7462738258966821,
+      "all_evidence_at_5": 0.8333333333333334,
+      "all_evidence_at_10": 0.8333333333333334
+     },
+     "multi_evidence_2": {
+      "queries": 24,
+      "quality_queries": 24,
+      "recall_at_5": 0.5416666666666666,
+      "recall_at_10": 0.625,
+      "ndcg_at_10": 0.5912936748098259,
+      "all_evidence_at_5": 0.2916666666666667,
+      "all_evidence_at_10": 0.4166666666666667
+     },
+     "multi_evidence_3": {
+      "queries": 16,
+      "quality_queries": 16,
+      "recall_at_5": 0.8125,
+      "recall_at_10": 0.8333333333333333,
+      "ndcg_at_10": 0.8265987101309069,
+      "all_evidence_at_5": 0.4375,
+      "all_evidence_at_10": 0.5
+     },
+     "temporal_evidence": {
+      "queries": 16,
+      "quality_queries": 16,
+      "recall_at_5": 0.75,
+      "recall_at_10": 0.9375,
+      "ndcg_at_10": 0.687645272565317,
+      "all_evidence_at_5": 0.75,
+      "all_evidence_at_10": 0.9375
+     },
+     "unanswerable": {
+      "queries": 8,
+      "quality_queries": 0,
+      "recall_at_5": null,
+      "recall_at_10": null,
+      "ndcg_at_10": null,
+      "all_evidence_at_5": null,
+      "all_evidence_at_10": null
+     },
+     "unauthorized_probe": {
+      "queries": 8,
+      "quality_queries": 0,
+      "recall_at_5": null,
+      "recall_at_10": null,
+      "ndcg_at_10": null,
+      "all_evidence_at_5": null,
+      "all_evidence_at_10": null
+     }
+    },
+    "language": {
+     "en": {
+      "queries": 64,
+      "quality_queries": 56,
+      "recall_at_5": 0.6904761904761905,
+      "recall_at_10": 0.7589285714285714,
+      "ndcg_at_10": 0.7090943009680889,
+      "all_evidence_at_5": 0.5178571428571429,
+      "all_evidence_at_10": 0.6071428571428571
+     },
+     "es": {
+      "queries": 64,
+      "quality_queries": 56,
+      "recall_at_5": 0.4880952380952381,
+      "recall_at_10": 0.6041666666666667,
+      "ndcg_at_10": 0.4688320200483856,
+      "all_evidence_at_5": 0.375,
+      "all_evidence_at_10": 0.5
+     }
+    }
+   },
+   "latency_by_workload": {
+    "quality:concurrency=1": {
+     "samples": 128,
+     "p50_ms": 12.130500050261617,
+     "p95_ms": 17.654665978625417,
+     "p99_ms": 24.095708038657904
+    }
+   },
+   "false_abstention_rate": null,
+   "handoff_all_evidence_at_10": 0.0
+  },
+  "baseline:cognee": {
+   "requests": 128,
+   "queries": 128,
+   "quality_queries": 112,
+   "probe_queries": 16,
+   "quality_attempt_policy": "first recorded attempt per query",
+   "response_error_count": 0,
+   "unknown_id_count": 0,
+   "cross_scope_hit_count": 0,
+   "mismatched_parent_count": 0,
+   "raw_hit_count": 1280,
+   "distinct_mapped_parent_count": 1280,
+   "duplicate_parent_count": 0,
+   "lost_unique_depth_due_to_duplicates": 0,
+   "over_limit_hit_count": 0,
+   "response_contract_violation_count": 0,
+   "namespace_clean": true,
+   "latency_samples": 128,
+   "latency_mean_ms": 45.13476562988217,
+   "latency_p50_ms": 43.50154101848602,
+   "latency_p95_ms": 51.08325008768588,
+   "latency_p99_ms": 56.31279095541686,
+   "latency_claim_boundary": "Observed endpoint request time, including IPC/network/queueing if timed by caller; not CPU-only kernel time.",
+   "probe_empty_result_rate": 0.0,
+   "probe_explicit_abstention_rate": null,
+   "recall_at_5": 0.6889880952380952,
+   "recall_at_10": 0.7663690476190476,
+   "ndcg_at_10": 0.7045772824459757,
+   "all_evidence_at_5": 0.5267857142857143,
+   "all_evidence_at_10": 0.6517857142857143,
+   "mrr_at_10": 0.7622874149659864,
+   "strata": {
+    "scope": {
+     "engineering": {
+      "queries": 70,
+      "quality_queries": 64,
+      "recall_at_5": 0.8229166666666666,
+      "recall_at_10": 0.9583333333333334,
+      "ndcg_at_10": 0.8299506843238511,
+      "all_evidence_at_5": 0.65625,
+      "all_evidence_at_10": 0.875
+     },
+     "finance": {
+      "queries": 10,
+      "quality_queries": 8,
+      "recall_at_5": 0.75,
+      "recall_at_10": 0.75,
+      "ndcg_at_10": 0.766433990956823,
+      "all_evidence_at_5": 0.5,
+      "all_evidence_at_10": 0.5
+     },
+     "security": {
+      "queries": 10,
+      "quality_queries": 8,
+      "recall_at_5": 1.0,
+      "recall_at_10": 1.0,
+      "ndcg_at_10": 1.0,
+      "all_evidence_at_5": 1.0,
+      "all_evidence_at_10": 1.0
+     },
+     "support": {
+      "queries": 38,
+      "quality_queries": 32,
+      "recall_at_5": 0.328125,
+      "recall_at_10": 0.328125,
+      "ndcg_at_10": 0.3645106221740072,
+      "all_evidence_at_5": 0.15625,
+      "all_evidence_at_10": 0.15625
+     }
+    },
+    "category": {
+     "cross_team_handoff": {
+      "queries": 16,
+      "quality_queries": 16,
+      "recall_at_5": 0.28125,
+      "recall_at_10": 0.28125,
+      "ndcg_at_10": 0.32573444615664976,
+      "all_evidence_at_5": 0.0625,
+      "all_evidence_at_10": 0.0625
+     },
+     "exact_identifier": {
+      "queries": 16,
+      "quality_queries": 16,
+      "recall_at_5": 1.0,
+      "recall_at_10": 1.0,
+      "ndcg_at_10": 1.0,
+      "all_evidence_at_5": 1.0,
+      "all_evidence_at_10": 1.0
+     },
+     "lookup": {
+      "queries": 24,
+      "quality_queries": 24,
+      "recall_at_5": 0.8333333333333334,
+      "recall_at_10": 0.8333333333333334,
+      "ndcg_at_10": 0.8333333333333334,
+      "all_evidence_at_5": 0.8333333333333334,
+      "all_evidence_at_10": 0.8333333333333334
+     },
+     "multi_evidence_2": {
+      "queries": 24,
+      "quality_queries": 24,
+      "recall_at_5": 0.6666666666666666,
+      "recall_at_10": 0.6666666666666666,
+      "ndcg_at_10": 0.6847669001771322,
+      "all_evidence_at_5": 0.5,
+      "all_evidence_at_10": 0.5
+     },
+     "multi_evidence_3": {
+      "queries": 16,
+      "quality_queries": 16,
+      "recall_at_5": 0.6666666666666666,
+      "recall_at_10": 0.8333333333333333,
+      "ndcg_at_10": 0.8331866237048455,
+      "all_evidence_at_5": 0.0,
+      "all_evidence_at_10": 0.5
+     },
+     "temporal_evidence": {
+      "queries": 16,
+      "quality_queries": 16,
+      "recall_at_5": 0.625,
+      "recall_at_10": 1.0,
+      "ndcg_at_10": 0.49596955699463674,
+      "all_evidence_at_5": 0.625,
+      "all_evidence_at_10": 1.0
+     },
+     "unanswerable": {
+      "queries": 8,
+      "quality_queries": 0,
+      "recall_at_5": null,
+      "recall_at_10": null,
+      "ndcg_at_10": null,
+      "all_evidence_at_5": null,
+      "all_evidence_at_10": null
+     },
+     "unauthorized_probe": {
+      "queries": 8,
+      "quality_queries": 0,
+      "recall_at_5": null,
+      "recall_at_10": null,
+      "ndcg_at_10": null,
+      "all_evidence_at_5": null,
+      "all_evidence_at_10": null
+     }
+    },
+    "language": {
+     "en": {
+      "queries": 64,
+      "quality_queries": 56,
+      "recall_at_5": 0.7470238095238095,
+      "recall_at_10": 0.7946428571428571,
+      "ndcg_at_10": 0.7566512070101836,
+      "all_evidence_at_5": 0.5178571428571429,
+      "all_evidence_at_10": 0.6607142857142857
+     },
+     "es": {
+      "queries": 64,
+      "quality_queries": 56,
+      "recall_at_5": 0.630952380952381,
+      "recall_at_10": 0.7380952380952381,
+      "ndcg_at_10": 0.6525033578817679,
+      "all_evidence_at_5": 0.5357142857142857,
+      "all_evidence_at_10": 0.6428571428571429
+     }
+    }
+   },
+   "latency_by_workload": {
+    "quality:concurrency=1": {
+     "samples": 128,
+     "p50_ms": 43.50154101848602,
+     "p95_ms": 51.08325008768588,
+     "p99_ms": 56.31279095541686
+    }
+   },
+   "false_abstention_rate": null,
+   "handoff_all_evidence_at_10": 0.0625
+  },
+  "baseline:mem0": {
+   "requests": 128,
+   "queries": 128,
+   "quality_queries": 112,
+   "probe_queries": 16,
+   "quality_attempt_policy": "first recorded attempt per query",
+   "response_error_count": 0,
+   "unknown_id_count": 0,
+   "cross_scope_hit_count": 0,
+   "mismatched_parent_count": 0,
+   "raw_hit_count": 1280,
+   "distinct_mapped_parent_count": 1280,
+   "duplicate_parent_count": 0,
+   "lost_unique_depth_due_to_duplicates": 0,
+   "over_limit_hit_count": 0,
+   "response_contract_violation_count": 0,
+   "namespace_clean": true,
+   "latency_samples": 128,
+   "latency_mean_ms": 17.13786589425581,
+   "latency_p50_ms": 16.518917051143944,
+   "latency_p95_ms": 20.850750035606325,
+   "latency_p99_ms": 22.154250065796077,
+   "latency_claim_boundary": "Observed endpoint request time, including IPC/network/queueing if timed by caller; not CPU-only kernel time.",
+   "probe_empty_result_rate": 0.0,
+   "probe_explicit_abstention_rate": null,
+   "recall_at_5": 0.5833333333333333,
+   "recall_at_10": 0.6205357142857143,
+   "ndcg_at_10": 0.5549242970954931,
+   "all_evidence_at_5": 0.4375,
+   "all_evidence_at_10": 0.48214285714285715,
+   "mrr_at_10": 0.6223568594104308,
+   "strata": {
+    "scope": {
+     "engineering": {
+      "queries": 70,
+      "quality_queries": 64,
+      "recall_at_5": 0.6536458333333334,
+      "recall_at_10": 0.7109375,
+      "ndcg_at_10": 0.6112264640839461,
+      "all_evidence_at_5": 0.53125,
+      "all_evidence_at_10": 0.59375
+     },
+     "finance": {
+      "queries": 10,
+      "quality_queries": 8,
+      "recall_at_5": 0.625,
+      "recall_at_10": 0.6875,
+      "ndcg_at_10": 0.6705905860892757,
+      "all_evidence_at_5": 0.25,
+      "all_evidence_at_10": 0.375
+     },
+     "security": {
+      "queries": 10,
+      "quality_queries": 8,
+      "recall_at_5": 1.0,
+      "recall_at_10": 1.0,
+      "ndcg_at_10": 0.9077324383928644,
+      "all_evidence_at_5": 1.0,
+      "all_evidence_at_10": 1.0
+     },
+     "support": {
+      "queries": 38,
+      "quality_queries": 32,
+      "recall_at_5": 0.328125,
+      "recall_at_10": 0.328125,
+      "ndcg_at_10": 0.32520135554579854,
+      "all_evidence_at_5": 0.15625,
+      "all_evidence_at_10": 0.15625
+     }
+    },
+    "category": {
+     "cross_team_handoff": {
+      "queries": 16,
+      "quality_queries": 16,
+      "recall_at_5": 0.28125,
+      "recall_at_10": 0.28125,
+      "ndcg_at_10": 0.24711591290023255,
+      "all_evidence_at_5": 0.0625,
+      "all_evidence_at_10": 0.0625
+     },
+     "exact_identifier": {
+      "queries": 16,
+      "quality_queries": 16,
+      "recall_at_5": 0.375,
+      "recall_at_10": 0.375,
+      "ndcg_at_10": 0.33941728487958706,
+      "all_evidence_at_5": 0.375,
+      "all_evidence_at_10": 0.375
+     },
+     "lookup": {
+      "queries": 24,
+      "quality_queries": 24,
+      "recall_at_5": 0.8333333333333334,
+      "recall_at_10": 0.8333333333333334,
+      "ndcg_at_10": 0.7564436986607204,
+      "all_evidence_at_5": 0.8333333333333334,
+      "all_evidence_at_10": 0.8333333333333334
+     },
+     "multi_evidence_2": {
+      "queries": 24,
+      "quality_queries": 24,
+      "recall_at_5": 0.5625,
+      "recall_at_10": 0.5833333333333334,
+      "ndcg_at_10": 0.5832276021546116,
+      "all_evidence_at_5": 0.2916666666666667,
+      "all_evidence_at_10": 0.3333333333333333
+     },
+     "multi_evidence_3": {
+      "queries": 16,
+      "quality_queries": 16,
+      "recall_at_5": 0.5208333333333333,
+      "recall_at_10": 0.625,
+      "ndcg_at_10": 0.5804987185272826,
+      "all_evidence_at_5": 0.125,
+      "all_evidence_at_10": 0.25
+     },
+     "temporal_evidence": {
+      "queries": 16,
+      "quality_queries": 16,
+      "recall_at_5": 0.8125,
+      "recall_at_10": 0.9375,
+      "ndcg_at_10": 0.7079312121383514,
+      "all_evidence_at_5": 0.8125,
+      "all_evidence_at_10": 0.9375
+     },
+     "unanswerable": {
+      "queries": 8,
+      "quality_queries": 0,
+      "recall_at_5": null,
+      "recall_at_10": null,
+      "ndcg_at_10": null,
+      "all_evidence_at_5": null,
+      "all_evidence_at_10": null
+     },
+     "unauthorized_probe": {
+      "queries": 8,
+      "quality_queries": 0,
+      "recall_at_5": null,
+      "recall_at_10": null,
+      "ndcg_at_10": null,
+      "all_evidence_at_5": null,
+      "all_evidence_at_10": null
+     }
+    },
+    "language": {
+     "en": {
+      "queries": 64,
+      "quality_queries": 56,
+      "recall_at_5": 0.6785714285714286,
+      "recall_at_10": 0.6904761904761905,
+      "ndcg_at_10": 0.656049570907484,
+      "all_evidence_at_5": 0.48214285714285715,
+      "all_evidence_at_10": 0.5178571428571429
+     },
+     "es": {
+      "queries": 64,
+      "quality_queries": 56,
+      "recall_at_5": 0.4880952380952381,
+      "recall_at_10": 0.550595238095238,
+      "ndcg_at_10": 0.4537990232835023,
+      "all_evidence_at_5": 0.39285714285714285,
+      "all_evidence_at_10": 0.44642857142857145
+     }
+    }
+   },
+   "latency_by_workload": {
+    "quality:concurrency=1": {
+     "samples": 128,
+     "p50_ms": 16.518917051143944,
+     "p95_ms": 20.850750035606325,
+     "p99_ms": 22.154250065796077
+    }
+   },
+   "false_abstention_rate": null,
+   "handoff_all_evidence_at_10": 0.0625
+  },
+  "cross-team-L": {
+   "requests": 128,
+   "queries": 128,
+   "quality_queries": 112,
+   "probe_queries": 16,
+   "quality_attempt_policy": "first recorded attempt per query",
+   "response_error_count": 0,
+   "unknown_id_count": 0,
+   "cross_scope_hit_count": 0,
+   "mismatched_parent_count": 0,
+   "raw_hit_count": 1280,
+   "distinct_mapped_parent_count": 1280,
+   "duplicate_parent_count": 0,
+   "lost_unique_depth_due_to_duplicates": 0,
+   "over_limit_hit_count": 0,
+   "response_contract_violation_count": 0,
+   "namespace_clean": true,
+   "latency_samples": 128,
+   "latency_mean_ms": 2.9794999765625505,
+   "latency_p50_ms": 2.969249999998283,
+   "latency_p95_ms": 4.073333000000275,
+   "latency_p99_ms": 4.495375000002241,
+   "latency_claim_boundary": "Observed endpoint request time, including IPC/network/queueing if timed by caller; not CPU-only kernel time.",
+   "probe_empty_result_rate": 0.0,
+   "probe_explicit_abstention_rate": 0.0,
+   "recall_at_5": 0.7291666666666667,
+   "recall_at_10": 0.755952380952381,
+   "ndcg_at_10": 0.7094361272263866,
+   "all_evidence_at_5": 0.5803571428571429,
+   "all_evidence_at_10": 0.6071428571428571,
+   "mrr_at_10": 0.7638392857142857,
+   "strata": {
+    "scope": {
+     "engineering": {
+      "queries": 70,
+      "quality_queries": 64,
+      "recall_at_5": 0.8385416666666666,
+      "recall_at_10": 0.8854166666666666,
+      "ndcg_at_10": 0.7936329115591729,
+      "all_evidence_at_5": 0.640625,
+      "all_evidence_at_10": 0.6875
+     },
+     "finance": {
+      "queries": 10,
+      "quality_queries": 8,
+      "recall_at_5": 0.75,
+      "recall_at_10": 0.75,
+      "ndcg_at_10": 0.7764688923132995,
+      "all_evidence_at_5": 0.5,
+      "all_evidence_at_10": 0.5
+     },
+     "security": {
+      "queries": 10,
+      "quality_queries": 8,
+      "recall_at_5": 1.0,
+      "recall_at_10": 1.0,
+      "ndcg_at_10": 1.0,
+      "all_evidence_at_5": 1.0,
+      "all_evidence_at_10": 1.0
+     },
+     "support": {
+      "queries": 38,
+      "quality_queries": 32,
+      "recall_at_5": 0.4375,
+      "recall_at_10": 0.4375,
+      "ndcg_at_10": 0.4516433990956823,
+      "all_evidence_at_5": 0.375,
+      "all_evidence_at_10": 0.375
+     }
+    },
+    "category": {
+     "cross_team_handoff": {
+      "queries": 16,
+      "quality_queries": 16,
+      "recall_at_5": 0.5,
+      "recall_at_10": 0.5,
+      "ndcg_at_10": 0.5,
+      "all_evidence_at_5": 0.5,
+      "all_evidence_at_10": 0.5
+     },
+     "exact_identifier": {
+      "queries": 16,
+      "quality_queries": 16,
+      "recall_at_5": 1.0,
+      "recall_at_10": 1.0,
+      "ndcg_at_10": 1.0,
+      "all_evidence_at_5": 1.0,
+      "all_evidence_at_10": 1.0
+     },
+     "lookup": {
+      "queries": 24,
+      "quality_queries": 24,
+      "recall_at_5": 0.8333333333333334,
+      "recall_at_10": 0.8333333333333334,
+      "ndcg_at_10": 0.8333333333333334,
+      "all_evidence_at_5": 0.8333333333333334,
+      "all_evidence_at_10": 0.8333333333333334
+     },
+     "multi_evidence_2": {
+      "queries": 24,
+      "quality_queries": 24,
+      "recall_at_5": 0.5833333333333334,
+      "recall_at_10": 0.5833333333333334,
+      "ndcg_at_10": 0.629872028359586,
+      "all_evidence_at_5": 0.3333333333333333,
+      "all_evidence_at_10": 0.3333333333333333
+     },
+     "multi_evidence_3": {
+      "queries": 16,
+      "quality_queries": 16,
+      "recall_at_5": 0.6666666666666666,
+      "recall_at_10": 0.6666666666666666,
+      "ndcg_at_10": 0.7653606369886217,
+      "all_evidence_at_5": 0.0,
+      "all_evidence_at_10": 0.0
+     },
+     "temporal_evidence": {
+      "queries": 16,
+      "quality_queries": 16,
+      "recall_at_5": 0.8125,
+      "recall_at_10": 1.0,
+      "ndcg_at_10": 0.5058842110567054,
+      "all_evidence_at_5": 0.8125,
+      "all_evidence_at_10": 1.0
+     },
+     "unanswerable": {
+      "queries": 8,
+      "quality_queries": 0,
+      "recall_at_5": null,
+      "recall_at_10": null,
+      "ndcg_at_10": null,
+      "all_evidence_at_5": null,
+      "all_evidence_at_10": null
+     },
+     "unauthorized_probe": {
+      "queries": 8,
+      "quality_queries": 0,
+      "recall_at_5": null,
+      "recall_at_10": null,
+      "ndcg_at_10": null,
+      "all_evidence_at_5": null,
+      "all_evidence_at_10": null
+     }
+    },
+    "language": {
+     "en": {
+      "queries": 64,
+      "quality_queries": 56,
+      "recall_at_5": 0.7738095238095238,
+      "recall_at_10": 0.7738095238095238,
+      "ndcg_at_10": 0.7594301685297523,
+      "all_evidence_at_5": 0.5714285714285714,
+      "all_evidence_at_10": 0.5714285714285714
+     },
+     "es": {
+      "queries": 64,
+      "quality_queries": 56,
+      "recall_at_5": 0.6845238095238095,
+      "recall_at_10": 0.7380952380952381,
+      "ndcg_at_10": 0.6594420859230208,
+      "all_evidence_at_5": 0.5892857142857143,
+      "all_evidence_at_10": 0.6428571428571429
+     }
+    }
+   },
+   "latency_by_workload": {
+    "quality:concurrency=1": {
+     "samples": 128,
+     "p50_ms": 2.969249999998283,
+     "p95_ms": 4.073333000000275,
+     "p99_ms": 4.495375000002241
+    }
+   },
+   "false_abstention_rate": 0.0,
+   "handoff_all_evidence_at_10": 0.5
+  },
+  "cross-team-V0": {
+   "requests": 128,
+   "queries": 128,
+   "quality_queries": 112,
+   "probe_queries": 16,
+   "quality_attempt_policy": "first recorded attempt per query",
+   "response_error_count": 0,
+   "unknown_id_count": 0,
+   "cross_scope_hit_count": 0,
+   "mismatched_parent_count": 0,
+   "raw_hit_count": 1280,
+   "distinct_mapped_parent_count": 1280,
+   "duplicate_parent_count": 0,
+   "lost_unique_depth_due_to_duplicates": 0,
+   "over_limit_hit_count": 0,
+   "response_contract_violation_count": 0,
+   "namespace_clean": true,
+   "latency_samples": 128,
+   "latency_mean_ms": 11.71624775781252,
+   "latency_p50_ms": 11.263249999999971,
+   "latency_p95_ms": 15.324166999999989,
+   "latency_p99_ms": 18.912834000000032,
+   "latency_claim_boundary": "Observed endpoint request time, including IPC/network/queueing if timed by caller; not CPU-only kernel time.",
+   "probe_empty_result_rate": 0.0,
+   "probe_explicit_abstention_rate": 1.0,
+   "recall_at_5": 0.7172619047619048,
+   "recall_at_10": 0.787202380952381,
+   "ndcg_at_10": 0.7167136069447861,
+   "all_evidence_at_5": 0.6160714285714286,
+   "all_evidence_at_10": 0.7232142857142857,
+   "mrr_at_10": 0.7547123015873015,
+   "strata": {
+    "scope": {
+     "engineering": {
+      "queries": 70,
+      "quality_queries": 64,
+      "recall_at_5": 0.8567708333333334,
+      "recall_at_10": 0.9557291666666666,
+      "ndcg_at_10": 0.8274559585349301,
+      "all_evidence_at_5": 0.78125,
+      "all_evidence_at_10": 0.921875
+     },
+     "finance": {
+      "queries": 10,
+      "quality_queries": 8,
+      "recall_at_5": 0.75,
+      "recall_at_10": 0.75,
+      "ndcg_at_10": 0.7811906094435088,
+      "all_evidence_at_5": 0.5,
+      "all_evidence_at_10": 0.5
+     },
+     "security": {
+      "queries": 10,
+      "quality_queries": 8,
+      "recall_at_5": 1.0,
+      "recall_at_10": 1.0,
+      "ndcg_at_10": 1.0,
+      "all_evidence_at_5": 1.0,
+      "all_evidence_at_10": 1.0
+     },
+     "support": {
+      "queries": 38,
+      "quality_queries": 32,
+      "recall_at_5": 0.359375,
+      "recall_at_10": 0.40625,
+      "ndcg_at_10": 0.40828805487601405,
+      "all_evidence_at_5": 0.21875,
+      "all_evidence_at_10": 0.3125
+     }
+    },
+    "category": {
+     "cross_team_handoff": {
+      "queries": 16,
+      "quality_queries": 16,
+      "recall_at_5": 0.34375,
+      "recall_at_10": 0.4375,
+      "ndcg_at_10": 0.4132893115606635,
+      "all_evidence_at_5": 0.1875,
+      "all_evidence_at_10": 0.375
+     },
+     "exact_identifier": {
+      "queries": 16,
+      "quality_queries": 16,
+      "recall_at_5": 0.6875,
+      "recall_at_10": 1.0,
+      "ndcg_at_10": 0.6980058211085821,
+      "all_evidence_at_5": 0.6875,
+      "all_evidence_at_10": 1.0
+     },
+     "lookup": {
+      "queries": 24,
+      "quality_queries": 24,
+      "recall_at_5": 0.8333333333333334,
+      "recall_at_10": 0.8333333333333334,
+      "ndcg_at_10": 0.8333333333333334,
+      "all_evidence_at_5": 0.8333333333333334,
+      "all_evidence_at_10": 0.8333333333333334
+     },
+     "multi_evidence_2": {
+      "queries": 24,
+      "quality_queries": 24,
+      "recall_at_5": 0.6041666666666666,
+      "recall_at_10": 0.6041666666666666,
+      "ndcg_at_10": 0.6379842049828842,
+      "all_evidence_at_5": 0.375,
+      "all_evidence_at_10": 0.375
+     },
+     "multi_evidence_3": {
+      "queries": 16,
+      "quality_queries": 16,
+      "recall_at_5": 0.8958333333333334,
+      "recall_at_10": 0.9791666666666666,
+      "ndcg_at_10": 0.9539420412824187,
+      "all_evidence_at_5": 0.6875,
+      "all_evidence_at_10": 0.9375
+     },
+     "temporal_evidence": {
+      "queries": 16,
+      "quality_queries": 16,
+      "recall_at_5": 0.9375,
+      "recall_at_10": 0.9375,
+      "ndcg_at_10": 0.7447817671875127,
+      "all_evidence_at_5": 0.9375,
+      "all_evidence_at_10": 0.9375
+     },
+     "unanswerable": {
+      "queries": 8,
+      "quality_queries": 0,
+      "recall_at_5": null,
+      "recall_at_10": null,
+      "ndcg_at_10": null,
+      "all_evidence_at_5": null,
+      "all_evidence_at_10": null
+     },
+     "unauthorized_probe": {
+      "queries": 8,
+      "quality_queries": 0,
+      "recall_at_5": null,
+      "recall_at_10": null,
+      "ndcg_at_10": null,
+      "all_evidence_at_5": null,
+      "all_evidence_at_10": null
+     }
+    },
+    "language": {
+     "en": {
+      "queries": 64,
+      "quality_queries": 56,
+      "recall_at_5": 0.7886904761904762,
+      "recall_at_10": 0.8333333333333333,
+      "ndcg_at_10": 0.8013889524218272,
+      "all_evidence_at_5": 0.625,
+      "all_evidence_at_10": 0.7321428571428571
+     },
+     "es": {
+      "queries": 64,
+      "quality_queries": 56,
+      "recall_at_5": 0.6458333333333333,
+      "recall_at_10": 0.7410714285714286,
+      "ndcg_at_10": 0.6320382614677451,
+      "all_evidence_at_5": 0.6071428571428571,
+      "all_evidence_at_10": 0.7142857142857143
+     }
+    }
+   },
+   "latency_by_workload": {
+    "quality:concurrency=1": {
+     "samples": 128,
+     "p50_ms": 11.263249999999971,
+     "p95_ms": 15.324166999999989,
+     "p99_ms": 18.912834000000032
+    }
+   },
+   "false_abstention_rate": 0.7678571428571429,
+   "handoff_all_evidence_at_10": 0.375,
+   "latency_p50_c4": 19.433250000000044,
+   "latency_p95_c4": 24.99187499999971,
+   "latency_p50_c8": 37.49937499999987,
+   "latency_p95_c8": 44.74516700000004
+  },
+  "cross-team-V1": {
+   "requests": 128,
+   "queries": 128,
+   "quality_queries": 112,
+   "probe_queries": 16,
+   "quality_attempt_policy": "first recorded attempt per query",
+   "response_error_count": 0,
+   "unknown_id_count": 0,
+   "cross_scope_hit_count": 0,
+   "mismatched_parent_count": 0,
+   "raw_hit_count": 1280,
+   "distinct_mapped_parent_count": 1280,
+   "duplicate_parent_count": 0,
+   "lost_unique_depth_due_to_duplicates": 0,
+   "over_limit_hit_count": 0,
+   "response_contract_violation_count": 0,
+   "namespace_clean": true,
+   "latency_samples": 128,
+   "latency_mean_ms": 13.9428658828125,
+   "latency_p50_ms": 13.371333999999933,
+   "latency_p95_ms": 18.57679200000007,
+   "latency_p99_ms": 21.37895800000001,
+   "latency_claim_boundary": "Observed endpoint request time, including IPC/network/queueing if timed by caller; not CPU-only kernel time.",
+   "probe_empty_result_rate": 0.0,
+   "probe_explicit_abstention_rate": 1.0,
+   "recall_at_5": 0.7083333333333333,
+   "recall_at_10": 0.8571428571428571,
+   "ndcg_at_10": 0.7002496522679046,
+   "all_evidence_at_5": 0.5803571428571429,
+   "all_evidence_at_10": 0.8125,
+   "mrr_at_10": 0.6957199546485261,
+   "strata": {
+    "scope": {
+     "engineering": {
+      "queries": 70,
+      "quality_queries": 64,
+      "recall_at_5": 0.8020833333333334,
+      "recall_at_10": 0.984375,
+      "ndcg_at_10": 0.7571176205664516,
+      "all_evidence_at_5": 0.65625,
+      "all_evidence_at_10": 0.953125
+     },
+     "finance": {
+      "queries": 10,
+      "quality_queries": 8,
+      "recall_at_5": 0.9375,
+      "recall_at_10": 1.0,
+      "ndcg_at_10": 0.9584502243609444,
+      "all_evidence_at_5": 0.875,
+      "all_evidence_at_10": 1.0
+     },
+     "security": {
+      "queries": 10,
+      "quality_queries": 8,
+      "recall_at_5": 1.0,
+      "recall_at_10": 1.0,
+      "ndcg_at_10": 0.9538662191964322,
+      "all_evidence_at_5": 1.0,
+      "all_evidence_at_10": 1.0
+     },
+     "support": {
+      "queries": 38,
+      "quality_queries": 32,
+      "recall_at_5": 0.390625,
+      "recall_at_10": 0.53125,
+      "ndcg_at_10": 0.45855943091541845,
+      "all_evidence_at_5": 0.25,
+      "all_evidence_at_10": 0.4375
+     }
+    },
+    "category": {
+     "cross_team_handoff": {
+      "queries": 16,
+      "quality_queries": 16,
+      "recall_at_5": 0.40625,
+      "recall_at_10": 0.65625,
+      "ndcg_at_10": 0.501058163790192,
+      "all_evidence_at_5": 0.25,
+      "all_evidence_at_10": 0.5625
+     },
+     "exact_identifier": {
+      "queries": 16,
+      "quality_queries": 16,
+      "recall_at_5": 0.6875,
+      "recall_at_10": 1.0,
+      "ndcg_at_10": 0.6980058211085821,
+      "all_evidence_at_5": 0.6875,
+      "all_evidence_at_10": 1.0
+     },
+     "lookup": {
+      "queries": 24,
+      "quality_queries": 24,
+      "recall_at_5": 0.8333333333333334,
+      "recall_at_10": 0.8333333333333334,
+      "ndcg_at_10": 0.7718216255952429,
+      "all_evidence_at_5": 0.8333333333333334,
+      "all_evidence_at_10": 0.8333333333333334
+     },
+     "multi_evidence_2": {
+      "queries": 24,
+      "quality_queries": 24,
+      "recall_at_5": 0.6875,
+      "recall_at_10": 0.7708333333333334,
+      "ndcg_at_10": 0.7337492583135509,
+      "all_evidence_at_5": 0.5416666666666666,
+      "all_evidence_at_10": 0.7083333333333334
+     },
+     "multi_evidence_3": {
+      "queries": 16,
+      "quality_queries": 16,
+      "recall_at_5": 0.6458333333333333,
+      "recall_at_10": 0.9375,
+      "ndcg_at_10": 0.7225308018430963,
+      "all_evidence_at_5": 0.125,
+      "all_evidence_at_10": 0.8125
+     },
+     "temporal_evidence": {
+      "queries": 16,
+      "quality_queries": 16,
+      "recall_at_5": 0.9375,
+      "recall_at_10": 1.0,
+      "ndcg_at_10": 0.7217964532702706,
+      "all_evidence_at_5": 0.9375,
+      "all_evidence_at_10": 1.0
+     },
+     "unanswerable": {
+      "queries": 8,
+      "quality_queries": 0,
+      "recall_at_5": null,
+      "recall_at_10": null,
+      "ndcg_at_10": null,
+      "all_evidence_at_5": null,
+      "all_evidence_at_10": null
+     },
+     "unauthorized_probe": {
+      "queries": 8,
+      "quality_queries": 0,
+      "recall_at_5": null,
+      "recall_at_10": null,
+      "ndcg_at_10": null,
+      "all_evidence_at_5": null,
+      "all_evidence_at_10": null
+     }
+    },
+    "language": {
+     "en": {
+      "queries": 64,
+      "quality_queries": 56,
+      "recall_at_5": 0.7916666666666667,
+      "recall_at_10": 0.8898809523809524,
+      "ndcg_at_10": 0.7931730908886223,
+      "all_evidence_at_5": 0.625,
+      "all_evidence_at_10": 0.8392857142857143
+     },
+     "es": {
+      "queries": 64,
+      "quality_queries": 56,
+      "recall_at_5": 0.625,
+      "recall_at_10": 0.8244047619047619,
+      "ndcg_at_10": 0.6073262136471868,
+      "all_evidence_at_5": 0.5357142857142857,
+      "all_evidence_at_10": 0.7857142857142857
+     }
+    }
+   },
+   "latency_by_workload": {
+    "quality:concurrency=1": {
+     "samples": 128,
+     "p50_ms": 13.371333999999933,
+     "p95_ms": 18.57679200000007,
+     "p99_ms": 21.37895800000001
+    }
+   },
+   "false_abstention_rate": 0.7678571428571429,
+   "handoff_all_evidence_at_10": 0.5625
+  },
+  "cross-team-V2": {
+   "requests": 128,
+   "queries": 128,
+   "quality_queries": 112,
+   "probe_queries": 16,
+   "quality_attempt_policy": "first recorded attempt per query",
+   "response_error_count": 0,
+   "unknown_id_count": 0,
+   "cross_scope_hit_count": 0,
+   "mismatched_parent_count": 0,
+   "raw_hit_count": 1280,
+   "distinct_mapped_parent_count": 1280,
+   "duplicate_parent_count": 0,
+   "lost_unique_depth_due_to_duplicates": 0,
+   "over_limit_hit_count": 0,
+   "response_contract_violation_count": 0,
+   "namespace_clean": true,
+   "latency_samples": 128,
+   "latency_mean_ms": 210.48944820312502,
+   "latency_p50_ms": 206.01237500000025,
+   "latency_p95_ms": 246.35520800000086,
+   "latency_p99_ms": 253.67962500000067,
+   "latency_claim_boundary": "Observed endpoint request time, including IPC/network/queueing if timed by caller; not CPU-only kernel time.",
+   "probe_empty_result_rate": 0.0,
+   "probe_explicit_abstention_rate": 0.75,
+   "recall_at_5": 0.7395833333333333,
+   "recall_at_10": 0.7886904761904762,
+   "ndcg_at_10": 0.6924062290029956,
+   "all_evidence_at_5": 0.5892857142857143,
+   "all_evidence_at_10": 0.7053571428571429,
+   "mrr_at_10": 0.7181547619047619,
+   "strata": {
+    "scope": {
+     "engineering": {
+      "queries": 70,
+      "quality_queries": 64,
+      "recall_at_5": 0.9270833333333334,
+      "recall_at_10": 0.9739583333333334,
+      "ndcg_at_10": 0.8929428199680962,
+      "all_evidence_at_5": 0.796875,
+      "all_evidence_at_10": 0.921875
+     },
+     "finance": {
+      "queries": 10,
+      "quality_queries": 8,
+      "recall_at_5": 0.6875,
+      "recall_at_10": 0.8125,
+      "ndcg_at_10": 0.7333417809890919,
+      "all_evidence_at_5": 0.375,
+      "all_evidence_at_10": 0.625
+     },
+     "security": {
+      "queries": 10,
+      "quality_queries": 8,
+      "recall_at_5": 1.0,
+      "recall_at_10": 1.0,
+      "ndcg_at_10": 0.5637581788155304,
+      "all_evidence_at_5": 1.0,
+      "all_evidence_at_10": 1.0
+     },
+     "support": {
+      "queries": 38,
+      "quality_queries": 32,
+      "recall_at_5": 0.3125,
+      "recall_at_10": 0.359375,
+      "ndcg_at_10": 0.3132611716231368,
+      "all_evidence_at_5": 0.125,
+      "all_evidence_at_10": 0.21875
+     }
+    },
+    "category": {
+     "cross_team_handoff": {
+      "queries": 16,
+      "quality_queries": 16,
+      "recall_at_5": 0.25,
+      "recall_at_10": 0.34375,
+      "ndcg_at_10": 0.2515223432462737,
+      "all_evidence_at_5": 0.0,
+      "all_evidence_at_10": 0.1875
+     },
+     "exact_identifier": {
+      "queries": 16,
+      "quality_queries": 16,
+      "recall_at_5": 1.0,
+      "recall_at_10": 1.0,
+      "ndcg_at_10": 1.0,
+      "all_evidence_at_5": 1.0,
+      "all_evidence_at_10": 1.0
+     },
+     "lookup": {
+      "queries": 24,
+      "quality_queries": 24,
+      "recall_at_5": 0.8333333333333334,
+      "recall_at_10": 0.8333333333333334,
+      "ndcg_at_10": 0.6264076852004197,
+      "all_evidence_at_5": 0.8333333333333334,
+      "all_evidence_at_10": 0.8333333333333334
+     },
+     "multi_evidence_2": {
+      "queries": 24,
+      "quality_queries": 24,
+      "recall_at_5": 0.6041666666666666,
+      "recall_at_10": 0.6875,
+      "ndcg_at_10": 0.6307571296418014,
+      "all_evidence_at_5": 0.375,
+      "all_evidence_at_10": 0.5416666666666666
+     },
+     "multi_evidence_3": {
+      "queries": 16,
+      "quality_queries": 16,
+      "recall_at_5": 0.7708333333333333,
+      "recall_at_10": 0.8958333333333334,
+      "ndcg_at_10": 0.7787747087167161,
+      "all_evidence_at_5": 0.3125,
+      "all_evidence_at_10": 0.6875
+     },
+     "temporal_evidence": {
+      "queries": 16,
+      "quality_queries": 16,
+      "recall_at_5": 1.0,
+      "recall_at_10": 1.0,
+      "ndcg_at_10": 0.9307993287946483,
+      "all_evidence_at_5": 1.0,
+      "all_evidence_at_10": 1.0
+     },
+     "unanswerable": {
+      "queries": 8,
+      "quality_queries": 0,
+      "recall_at_5": null,
+      "recall_at_10": null,
+      "ndcg_at_10": null,
+      "all_evidence_at_5": null,
+      "all_evidence_at_10": null
+     },
+     "unauthorized_probe": {
+      "queries": 8,
+      "quality_queries": 0,
+      "recall_at_5": null,
+      "recall_at_10": null,
+      "ndcg_at_10": null,
+      "all_evidence_at_5": null,
+      "all_evidence_at_10": null
+     }
+    },
+    "language": {
+     "en": {
+      "queries": 64,
+      "quality_queries": 56,
+      "recall_at_5": 0.744047619047619,
+      "recall_at_10": 0.8214285714285714,
+      "ndcg_at_10": 0.7231031633190347,
+      "all_evidence_at_5": 0.5357142857142857,
+      "all_evidence_at_10": 0.7142857142857143
+     },
+     "es": {
+      "queries": 64,
+      "quality_queries": 56,
+      "recall_at_5": 0.7351190476190476,
+      "recall_at_10": 0.755952380952381,
+      "ndcg_at_10": 0.6617092946869567,
+      "all_evidence_at_5": 0.6428571428571429,
+      "all_evidence_at_10": 0.6964285714285714
+     }
+    }
+   },
+   "latency_by_workload": {
+    "quality:concurrency=1": {
+     "samples": 128,
+     "p50_ms": 206.01237500000025,
+     "p95_ms": 246.35520800000086,
+     "p99_ms": 253.67962500000067
+    }
+   },
+   "false_abstention_rate": 0.3482142857142857,
+   "handoff_all_evidence_at_10": 0.1875
+  },
+  "cross-team-V3": {
+   "requests": 128,
+   "queries": 128,
+   "quality_queries": 112,
+   "probe_queries": 16,
+   "quality_attempt_policy": "first recorded attempt per query",
+   "response_error_count": 0,
+   "unknown_id_count": 0,
+   "cross_scope_hit_count": 0,
+   "mismatched_parent_count": 0,
+   "raw_hit_count": 1280,
+   "distinct_mapped_parent_count": 1280,
+   "duplicate_parent_count": 0,
+   "lost_unique_depth_due_to_duplicates": 0,
+   "over_limit_hit_count": 0,
+   "response_contract_violation_count": 0,
+   "namespace_clean": true,
+   "latency_samples": 128,
+   "latency_mean_ms": 8.713500984375116,
+   "latency_p50_ms": 8.661958000000595,
+   "latency_p95_ms": 10.3190829999985,
+   "latency_p99_ms": 10.633125000000291,
+   "latency_claim_boundary": "Observed endpoint request time, including IPC/network/queueing if timed by caller; not CPU-only kernel time.",
+   "probe_empty_result_rate": 0.0,
+   "probe_explicit_abstention_rate": 0.0,
+   "recall_at_5": 0.7232142857142857,
+   "recall_at_10": 0.75,
+   "ndcg_at_10": 0.7486383389348225,
+   "all_evidence_at_5": 0.5089285714285714,
+   "all_evidence_at_10": 0.5446428571428571,
+   "mrr_at_10": 0.8815830498866213,
+   "strata": {
+    "scope": {
+     "engineering": {
+      "queries": 70,
+      "quality_queries": 64,
+      "recall_at_5": 0.8125,
+      "recall_at_10": 0.828125,
+      "ndcg_at_10": 0.8532181269857119,
+      "all_evidence_at_5": 0.625,
+      "all_evidence_at_10": 0.65625
+     },
+     "finance": {
+      "queries": 10,
+      "quality_queries": 8,
+      "recall_at_5": 0.6875,
+      "recall_at_10": 0.75,
+      "ndcg_at_10": 0.7583818082377518,
+      "all_evidence_at_5": 0.375,
+      "all_evidence_at_10": 0.5
+     },
+     "security": {
+      "queries": 10,
+      "quality_queries": 8,
+      "recall_at_5": 1.0,
+      "recall_at_10": 1.0,
+      "ndcg_at_10": 1.0,
+      "all_evidence_at_5": 1.0,
+      "all_evidence_at_10": 1.0
+     },
+     "support": {
+      "queries": 38,
+      "quality_queries": 32,
+      "recall_at_5": 0.484375,
+      "recall_at_10": 0.53125,
+      "ndcg_at_10": 0.47420248024101713,
+      "all_evidence_at_5": 0.1875,
+      "all_evidence_at_10": 0.21875
+     }
+    },
+    "category": {
+     "cross_team_handoff": {
+      "queries": 16,
+      "quality_queries": 16,
+      "recall_at_5": 0.46875,
+      "recall_at_10": 0.5,
+      "ndcg_at_10": 0.4579344344795332,
+      "all_evidence_at_5": 0.0,
+      "all_evidence_at_10": 0.0
+     },
+     "exact_identifier": {
+      "queries": 16,
+      "quality_queries": 16,
+      "recall_at_5": 1.0,
+      "recall_at_10": 1.0,
+      "ndcg_at_10": 0.9616783004521589,
+      "all_evidence_at_5": 1.0,
+      "all_evidence_at_10": 1.0
+     },
+     "lookup": {
+      "queries": 24,
+      "quality_queries": 24,
+      "recall_at_5": 0.9166666666666666,
+      "recall_at_10": 0.9583333333333334,
+      "ndcg_at_10": 0.8914558185407576,
+      "all_evidence_at_5": 0.9166666666666666,
+      "all_evidence_at_10": 0.9583333333333334
+     },
+     "multi_evidence_2": {
+      "queries": 24,
+      "quality_queries": 24,
+      "recall_at_5": 0.4791666666666667,
+      "recall_at_10": 0.5416666666666666,
+      "ndcg_at_10": 0.5775681521968268,
+      "all_evidence_at_5": 0.125,
+      "all_evidence_at_10": 0.25
+     },
+     "multi_evidence_3": {
+      "queries": 16,
+      "quality_queries": 16,
+      "recall_at_5": 0.5,
+      "recall_at_10": 0.5,
+      "ndcg_at_10": 0.617319681505689,
+      "all_evidence_at_5": 0.0,
+      "all_evidence_at_10": 0.0
+     },
+     "temporal_evidence": {
+      "queries": 16,
+      "quality_queries": 16,
+      "recall_at_5": 1.0,
+      "recall_at_10": 1.0,
+      "ndcg_at_10": 1.0,
+      "all_evidence_at_5": 1.0,
+      "all_evidence_at_10": 1.0
+     },
+     "unanswerable": {
+      "queries": 8,
+      "quality_queries": 0,
+      "recall_at_5": null,
+      "recall_at_10": null,
+      "ndcg_at_10": null,
+      "all_evidence_at_5": null,
+      "all_evidence_at_10": null
+     },
+     "unauthorized_probe": {
+      "queries": 8,
+      "quality_queries": 0,
+      "recall_at_5": null,
+      "recall_at_10": null,
+      "ndcg_at_10": null,
+      "all_evidence_at_5": null,
+      "all_evidence_at_10": null
+     }
+    },
+    "language": {
+     "en": {
+      "queries": 64,
+      "quality_queries": 56,
+      "recall_at_5": 0.7380952380952381,
+      "recall_at_10": 0.7738095238095238,
+      "ndcg_at_10": 0.7786506478047713,
+      "all_evidence_at_5": 0.4642857142857143,
+      "all_evidence_at_10": 0.5178571428571429
+     },
+     "es": {
+      "queries": 64,
+      "quality_queries": 56,
+      "recall_at_5": 0.7083333333333333,
+      "recall_at_10": 0.7261904761904762,
+      "ndcg_at_10": 0.7186260300648738,
+      "all_evidence_at_5": 0.5535714285714286,
+      "all_evidence_at_10": 0.5714285714285714
+     }
+    }
+   },
+   "latency_by_workload": {
+    "quality:concurrency=1": {
+     "samples": 128,
+     "p50_ms": 8.661958000000595,
+     "p95_ms": 10.3190829999985,
+     "p99_ms": 10.633125000000291
+    }
+   },
+   "false_abstention_rate": 0.0,
+   "handoff_all_evidence_at_10": 0.0
+  },
+  "cross-team-V4": {
+   "requests": 128,
+   "queries": 128,
+   "quality_queries": 112,
+   "probe_queries": 16,
+   "quality_attempt_policy": "first recorded attempt per query",
+   "response_error_count": 0,
+   "unknown_id_count": 0,
+   "cross_scope_hit_count": 0,
+   "mismatched_parent_count": 0,
+   "raw_hit_count": 1280,
+   "distinct_mapped_parent_count": 1280,
+   "duplicate_parent_count": 0,
+   "lost_unique_depth_due_to_duplicates": 0,
+   "over_limit_hit_count": 0,
+   "response_contract_violation_count": 0,
+   "namespace_clean": true,
+   "latency_samples": 128,
+   "latency_mean_ms": 224.97882515624988,
+   "latency_p50_ms": 217.07116700000006,
+   "latency_p95_ms": 283.3747089999997,
+   "latency_p99_ms": 327.49041600000055,
+   "latency_claim_boundary": "Observed endpoint request time, including IPC/network/queueing if timed by caller; not CPU-only kernel time.",
+   "probe_empty_result_rate": 0.0,
+   "probe_explicit_abstention_rate": 0.6875,
+   "recall_at_5": 0.8229166666666667,
+   "recall_at_10": 0.900297619047619,
+   "ndcg_at_10": 0.7889540528928739,
+   "all_evidence_at_5": 0.6339285714285714,
+   "all_evidence_at_10": 0.7857142857142857,
+   "mrr_at_10": 0.8421875,
+   "strata": {
+    "scope": {
+     "engineering": {
+      "queries": 70,
+      "quality_queries": 64,
+      "recall_at_5": 0.9088541666666666,
+      "recall_at_10": 0.9739583333333334,
+      "ndcg_at_10": 0.8724413410319066,
+      "all_evidence_at_5": 0.765625,
+      "all_evidence_at_10": 0.921875
+     },
+     "finance": {
+      "queries": 10,
+      "quality_queries": 8,
+      "recall_at_5": 0.5625,
+      "recall_at_10": 0.75,
+      "ndcg_at_10": 0.6991027855202122,
+      "all_evidence_at_5": 0.125,
+      "all_evidence_at_10": 0.5
+     },
+     "security": {
+      "queries": 10,
+      "quality_queries": 8,
+      "recall_at_5": 0.75,
+      "recall_at_10": 1.0,
+      "ndcg_at_10": 0.5938826170430751,
+      "all_evidence_at_5": 0.75,
+      "all_evidence_at_10": 1.0
+     },
+     "support": {
+      "queries": 38,
+      "quality_queries": 32,
+      "recall_at_5": 0.734375,
+      "recall_at_10": 0.765625,
+      "ndcg_at_10": 0.6932101524204238,
+      "all_evidence_at_5": 0.46875,
+      "all_evidence_at_10": 0.53125
+     }
+    },
+    "category": {
+     "cross_team_handoff": {
+      "queries": 16,
+      "quality_queries": 16,
+      "recall_at_5": 0.6875,
+      "recall_at_10": 0.75,
+      "ndcg_at_10": 0.6390124783069937,
+      "all_evidence_at_5": 0.375,
+      "all_evidence_at_10": 0.5
+     },
+     "exact_identifier": {
+      "queries": 16,
+      "quality_queries": 16,
+      "recall_at_5": 1.0,
+      "recall_at_10": 1.0,
+      "ndcg_at_10": 1.0,
+      "all_evidence_at_5": 1.0,
+      "all_evidence_at_10": 1.0
+     },
+     "lookup": {
+      "queries": 24,
+      "quality_queries": 24,
+      "recall_at_5": 0.9166666666666666,
+      "recall_at_10": 1.0,
+      "ndcg_at_10": 0.7877379043417454,
+      "all_evidence_at_5": 0.9166666666666666,
+      "all_evidence_at_10": 1.0
+     },
+     "multi_evidence_2": {
+      "queries": 24,
+      "quality_queries": 24,
+      "recall_at_5": 0.6875,
+      "recall_at_10": 0.7708333333333334,
+      "ndcg_at_10": 0.7466793730354234,
+      "all_evidence_at_5": 0.375,
+      "all_evidence_at_10": 0.5416666666666666
+     },
+     "multi_evidence_3": {
+      "queries": 16,
+      "quality_queries": 16,
+      "recall_at_5": 0.6666666666666666,
+      "recall_at_10": 0.8958333333333334,
+      "ndcg_at_10": 0.7665750990916423,
+      "all_evidence_at_5": 0.125,
+      "all_evidence_at_10": 0.6875
+     },
+     "temporal_evidence": {
+      "queries": 16,
+      "quality_queries": 16,
+      "recall_at_5": 1.0,
+      "recall_at_10": 1.0,
+      "ndcg_at_10": 0.8154648767857288,
+      "all_evidence_at_5": 1.0,
+      "all_evidence_at_10": 1.0
+     },
+     "unanswerable": {
+      "queries": 8,
+      "quality_queries": 0,
+      "recall_at_5": null,
+      "recall_at_10": null,
+      "ndcg_at_10": null,
+      "all_evidence_at_5": null,
+      "all_evidence_at_10": null
+     },
+     "unauthorized_probe": {
+      "queries": 8,
+      "quality_queries": 0,
+      "recall_at_5": null,
+      "recall_at_10": null,
+      "ndcg_at_10": null,
+      "all_evidence_at_5": null,
+      "all_evidence_at_10": null
+     }
+    },
+    "language": {
+     "en": {
+      "queries": 64,
+      "quality_queries": 56,
+      "recall_at_5": 0.806547619047619,
+      "recall_at_10": 0.875,
+      "ndcg_at_10": 0.7931209027806363,
+      "all_evidence_at_5": 0.5714285714285714,
+      "all_evidence_at_10": 0.75
+     },
+     "es": {
+      "queries": 64,
+      "quality_queries": 56,
+      "recall_at_5": 0.8392857142857143,
+      "recall_at_10": 0.9255952380952381,
+      "ndcg_at_10": 0.7847872030051116,
+      "all_evidence_at_5": 0.6964285714285714,
+      "all_evidence_at_10": 0.8214285714285714
+     }
+    }
+   },
+   "latency_by_workload": {
+    "quality:concurrency=1": {
+     "samples": 128,
+     "p50_ms": 217.07116700000006,
+     "p95_ms": 283.3747089999997,
+     "p99_ms": 327.49041600000055
+    }
+   },
+   "false_abstention_rate": 0.32142857142857145,
+   "handoff_all_evidence_at_10": 0.5,
+   "latency_p50_c4": 823.9482080000016,
+   "latency_p95_c4": 1165.9447910000017,
+   "latency_p50_c8": 1607.4960410000058,
+   "latency_p95_c8": 1820.500874999998
+  },
+  "cross-team-engram-all": {
+   "requests": 128,
+   "queries": 128,
+   "quality_queries": 112,
+   "probe_queries": 16,
+   "quality_attempt_policy": "first recorded attempt per query",
+   "response_error_count": 0,
+   "unknown_id_count": 0,
+   "cross_scope_hit_count": 0,
+   "mismatched_parent_count": 0,
+   "raw_hit_count": 0,
+   "distinct_mapped_parent_count": 0,
+   "duplicate_parent_count": 0,
+   "lost_unique_depth_due_to_duplicates": 0,
+   "over_limit_hit_count": 0,
+   "response_contract_violation_count": 0,
+   "namespace_clean": true,
+   "latency_samples": 128,
+   "latency_mean_ms": 0.6321025625000054,
+   "latency_p50_ms": 0.6054579999999987,
+   "latency_p95_ms": 0.89325000000008,
+   "latency_p99_ms": 0.9616249999999127,
+   "latency_claim_boundary": "Observed endpoint request time, including IPC/network/queueing if timed by caller; not CPU-only kernel time.",
+   "probe_empty_result_rate": 1.0,
+   "probe_explicit_abstention_rate": null,
+   "recall_at_5": 0.0,
+   "recall_at_10": 0.0,
+   "ndcg_at_10": 0.0,
+   "all_evidence_at_5": 0.0,
+   "all_evidence_at_10": 0.0,
+   "mrr_at_10": 0.0,
+   "strata": {
+    "scope": {
+     "engineering": {
+      "queries": 70,
+      "quality_queries": 64,
+      "recall_at_5": 0.0,
+      "recall_at_10": 0.0,
+      "ndcg_at_10": 0.0,
+      "all_evidence_at_5": 0.0,
+      "all_evidence_at_10": 0.0
+     },
+     "finance": {
+      "queries": 10,
+      "quality_queries": 8,
+      "recall_at_5": 0.0,
+      "recall_at_10": 0.0,
+      "ndcg_at_10": 0.0,
+      "all_evidence_at_5": 0.0,
+      "all_evidence_at_10": 0.0
+     },
+     "security": {
+      "queries": 10,
+      "quality_queries": 8,
+      "recall_at_5": 0.0,
+      "recall_at_10": 0.0,
+      "ndcg_at_10": 0.0,
+      "all_evidence_at_5": 0.0,
+      "all_evidence_at_10": 0.0
+     },
+     "support": {
+      "queries": 38,
+      "quality_queries": 32,
+      "recall_at_5": 0.0,
+      "recall_at_10": 0.0,
+      "ndcg_at_10": 0.0,
+      "all_evidence_at_5": 0.0,
+      "all_evidence_at_10": 0.0
+     }
+    },
+    "category": {
+     "cross_team_handoff": {
+      "queries": 16,
+      "quality_queries": 16,
+      "recall_at_5": 0.0,
+      "recall_at_10": 0.0,
+      "ndcg_at_10": 0.0,
+      "all_evidence_at_5": 0.0,
+      "all_evidence_at_10": 0.0
+     },
+     "exact_identifier": {
+      "queries": 16,
+      "quality_queries": 16,
+      "recall_at_5": 0.0,
+      "recall_at_10": 0.0,
+      "ndcg_at_10": 0.0,
+      "all_evidence_at_5": 0.0,
+      "all_evidence_at_10": 0.0
+     },
+     "lookup": {
+      "queries": 24,
+      "quality_queries": 24,
+      "recall_at_5": 0.0,
+      "recall_at_10": 0.0,
+      "ndcg_at_10": 0.0,
+      "all_evidence_at_5": 0.0,
+      "all_evidence_at_10": 0.0
+     },
+     "multi_evidence_2": {
+      "queries": 24,
+      "quality_queries": 24,
+      "recall_at_5": 0.0,
+      "recall_at_10": 0.0,
+      "ndcg_at_10": 0.0,
+      "all_evidence_at_5": 0.0,
+      "all_evidence_at_10": 0.0
+     },
+     "multi_evidence_3": {
+      "queries": 16,
+      "quality_queries": 16,
+      "recall_at_5": 0.0,
+      "recall_at_10": 0.0,
+      "ndcg_at_10": 0.0,
+      "all_evidence_at_5": 0.0,
+      "all_evidence_at_10": 0.0
+     },
+     "temporal_evidence": {
+      "queries": 16,
+      "quality_queries": 16,
+      "recall_at_5": 0.0,
+      "recall_at_10": 0.0,
+      "ndcg_at_10": 0.0,
+      "all_evidence_at_5": 0.0,
+      "all_evidence_at_10": 0.0
+     },
+     "unanswerable": {
+      "queries": 8,
+      "quality_queries": 0,
+      "recall_at_5": null,
+      "recall_at_10": null,
+      "ndcg_at_10": null,
+      "all_evidence_at_5": null,
+      "all_evidence_at_10": null
+     },
+     "unauthorized_probe": {
+      "queries": 8,
+      "quality_queries": 0,
+      "recall_at_5": null,
+      "recall_at_10": null,
+      "ndcg_at_10": null,
+      "all_evidence_at_5": null,
+      "all_evidence_at_10": null
+     }
+    },
+    "language": {
+     "en": {
+      "queries": 64,
+      "quality_queries": 56,
+      "recall_at_5": 0.0,
+      "recall_at_10": 0.0,
+      "ndcg_at_10": 0.0,
+      "all_evidence_at_5": 0.0,
+      "all_evidence_at_10": 0.0
+     },
+     "es": {
+      "queries": 64,
+      "quality_queries": 56,
+      "recall_at_5": 0.0,
+      "recall_at_10": 0.0,
+      "ndcg_at_10": 0.0,
+      "all_evidence_at_5": 0.0,
+      "all_evidence_at_10": 0.0
+     }
+    }
+   },
+   "latency_by_workload": {
+    "quality:concurrency=1": {
+     "samples": 128,
+     "p50_ms": 0.6054579999999987,
+     "p95_ms": 0.89325000000008,
+     "p99_ms": 0.9616249999999127
+    }
+   },
+   "false_abstention_rate": null,
+   "handoff_all_evidence_at_10": 0.0
+  },
+  "cross-team-engram-any": {
+   "requests": 128,
+   "queries": 128,
+   "quality_queries": 112,
+   "probe_queries": 16,
+   "quality_attempt_policy": "first recorded attempt per query",
+   "response_error_count": 0,
+   "unknown_id_count": 0,
+   "cross_scope_hit_count": 0,
+   "mismatched_parent_count": 0,
+   "raw_hit_count": 1280,
+   "distinct_mapped_parent_count": 1280,
+   "duplicate_parent_count": 0,
+   "lost_unique_depth_due_to_duplicates": 0,
+   "over_limit_hit_count": 0,
+   "response_contract_violation_count": 0,
+   "namespace_clean": true,
+   "latency_samples": 128,
+   "latency_mean_ms": 2.2014261249999922,
+   "latency_p50_ms": 1.8689159999998992,
+   "latency_p95_ms": 4.017541000000165,
+   "latency_p99_ms": 4.894207999999935,
+   "latency_claim_boundary": "Observed endpoint request time, including IPC/network/queueing if timed by caller; not CPU-only kernel time.",
+   "probe_empty_result_rate": 0.0,
+   "probe_explicit_abstention_rate": null,
+   "recall_at_5": 0.18303571428571427,
+   "recall_at_10": 0.1875,
+   "ndcg_at_10": 0.16255820638803883,
+   "all_evidence_at_5": 0.17857142857142858,
+   "all_evidence_at_10": 0.17857142857142858,
+   "mrr_at_10": 0.1556547619047619,
+   "strata": {
+    "scope": {
+     "engineering": {
+      "queries": 70,
+      "quality_queries": 64,
+      "recall_at_5": 0.125,
+      "recall_at_10": 0.125,
+      "ndcg_at_10": 0.125,
+      "all_evidence_at_5": 0.125,
+      "all_evidence_at_10": 0.125
+     },
+     "finance": {
+      "queries": 10,
+      "quality_queries": 8,
+      "recall_at_5": 0.0625,
+      "recall_at_10": 0.0625,
+      "ndcg_at_10": 0.03832169954784115,
+      "all_evidence_at_5": 0.0,
+      "all_evidence_at_10": 0.0
+     },
+     "security": {
+      "queries": 10,
+      "quality_queries": 8,
+      "recall_at_5": 0.0,
+      "recall_at_10": 0.0,
+      "ndcg_at_10": 0.0,
+      "all_evidence_at_5": 0.0,
+      "all_evidence_at_10": 0.0
+     },
+     "support": {
+      "queries": 38,
+      "quality_queries": 32,
+      "recall_at_5": 0.375,
+      "recall_at_10": 0.390625,
+      "ndcg_at_10": 0.30937329747117565,
+      "all_evidence_at_5": 0.375,
+      "all_evidence_at_10": 0.375
+     }
+    },
+    "category": {
+     "cross_team_handoff": {
+      "queries": 16,
+      "quality_queries": 16,
+      "recall_at_5": 0.5,
+      "recall_at_10": 0.5,
+      "ndcg_at_10": 0.5,
+      "all_evidence_at_5": 0.5,
+      "all_evidence_at_10": 0.5
+     },
+     "exact_identifier": {
+      "queries": 16,
+      "quality_queries": 16,
+      "recall_at_5": 0.0,
+      "recall_at_10": 0.0,
+      "ndcg_at_10": 0.0,
+      "all_evidence_at_5": 0.0,
+      "all_evidence_at_10": 0.0
+     },
+     "lookup": {
+      "queries": 24,
+      "quality_queries": 24,
+      "recall_at_5": 0.16666666666666666,
+      "recall_at_10": 0.16666666666666666,
+      "ndcg_at_10": 0.07177942634556551,
+      "all_evidence_at_5": 0.16666666666666666,
+      "all_evidence_at_10": 0.16666666666666666
+     },
+     "multi_evidence_2": {
+      "queries": 24,
+      "quality_queries": 24,
+      "recall_at_5": 0.020833333333333332,
+      "recall_at_10": 0.041666666666666664,
+      "ndcg_at_10": 0.02015887013194904,
+      "all_evidence_at_5": 0.0,
+      "all_evidence_at_10": 0.0
+     },
+     "multi_evidence_3": {
+      "queries": 16,
+      "quality_queries": 16,
+      "recall_at_5": 0.5,
+      "recall_at_10": 0.5,
+      "ndcg_at_10": 0.5,
+      "all_evidence_at_5": 0.5,
+      "all_evidence_at_10": 0.5
+     },
+     "temporal_evidence": {
+      "queries": 16,
+      "quality_queries": 16,
+      "recall_at_5": 0.0,
+      "recall_at_10": 0.0,
+      "ndcg_at_10": 0.0,
+      "all_evidence_at_5": 0.0,
+      "all_evidence_at_10": 0.0
+     },
+     "unanswerable": {
+      "queries": 8,
+      "quality_queries": 0,
+      "recall_at_5": null,
+      "recall_at_10": null,
+      "ndcg_at_10": null,
+      "all_evidence_at_5": null,
+      "all_evidence_at_10": null
+     },
+     "unauthorized_probe": {
+      "queries": 8,
+      "quality_queries": 0,
+      "recall_at_5": null,
+      "recall_at_10": null,
+      "ndcg_at_10": null,
+      "all_evidence_at_5": null,
+      "all_evidence_at_10": null
+     }
+    },
+    "language": {
+     "en": {
+      "queries": 64,
+      "quality_queries": 56,
+      "recall_at_5": 0.35714285714285715,
+      "recall_at_10": 0.35714285714285715,
+      "ndcg_at_10": 0.31647689700524234,
+      "all_evidence_at_5": 0.35714285714285715,
+      "all_evidence_at_10": 0.35714285714285715
+     },
+     "es": {
+      "queries": 64,
+      "quality_queries": 56,
+      "recall_at_5": 0.008928571428571428,
+      "recall_at_10": 0.017857142857142856,
+      "ndcg_at_10": 0.008639515770835302,
+      "all_evidence_at_5": 0.0,
+      "all_evidence_at_10": 0.0
+     }
+    }
+   },
+   "latency_by_workload": {
+    "quality:concurrency=1": {
+     "samples": 128,
+     "p50_ms": 1.8689159999998992,
+     "p95_ms": 4.017541000000165,
+     "p99_ms": 4.894207999999935
+    }
+   },
+   "false_abstention_rate": null,
+   "handoff_all_evidence_at_10": 0.5
+  }
+ },
+ "paired": {
+  "cross-team-L - baseline:agents-runtime-v4": {
+   "paired_queries": 128,
+   "seed": 20261021,
+   "bootstrap_samples": 10000,
+   "resampling_unit": "query",
+   "difference": "A minus B",
+   "confidence": 0.95,
+   "quality_attempt_policy": "first recorded attempt per query",
+   "metrics": {
+    "recall_at_5": {
+     "n": 112,
+     "clusters": 112,
+     "mean_a": 0.7291666666666667,
+     "mean_b": 0.7172619047619048,
+     "delta": 0.011904761904761902,
+     "ci95": [
+      -0.050595238095238096,
+      0.07738095238095237
+     ],
+     "ci": [
+      -0.050595238095238096,
+      0.07738095238095237
+     ],
+     "a_win_rate": 0.125,
+     "b_win_rate": 0.16071428571428573,
+     "tie_rate": 0.7142857142857143
+    },
+    "recall_at_10": {
+     "n": 112,
+     "clusters": 112,
+     "mean_a": 0.755952380952381,
+     "mean_b": 0.787202380952381,
+     "delta": -0.03125000000000001,
+     "ci95": [
+      -0.06994047619047619,
+      0.007440476190476187
+     ],
+     "ci": [
+      -0.06845238095238096,
+      0.007440476190476187
+     ],
+     "a_win_rate": 0.05357142857142857,
+     "b_win_rate": 0.16964285714285715,
+     "tie_rate": 0.7767857142857143
+    },
+    "ndcg_at_10": {
+     "n": 112,
+     "clusters": 112,
+     "mean_a": 0.7094361272263866,
+     "mean_b": 0.7169535213180299,
+     "delta": -0.007517394091643298,
+     "ci95": [
+      -0.05080973133458255,
+      0.0372731465588324
+     ],
+     "ci": [
+      -0.050762283705626306,
+      0.0372731465588324
+     ],
+     "a_win_rate": 0.17857142857142858,
+     "b_win_rate": 0.30357142857142855,
+     "tie_rate": 0.5178571428571429
+    },
+    "all_evidence_at_5": {
+     "n": 112,
+     "clusters": 112,
+     "mean_a": 0.5803571428571429,
+     "mean_b": 0.6160714285714286,
+     "delta": -0.03571428571428571,
+     "ci95": [
+      -0.13392857142857142,
+      0.0625
+     ],
+     "ci": [
+      -0.13392857142857142,
+      0.0625
+     ],
+     "a_win_rate": 0.125,
+     "b_win_rate": 0.16071428571428573,
+     "tie_rate": 0.7142857142857143
+    },
+    "all_evidence_at_10": {
+     "n": 112,
+     "clusters": 112,
+     "mean_a": 0.6071428571428571,
+     "mean_b": 0.7232142857142857,
+     "delta": -0.11607142857142858,
+     "ci95": [
+      -0.20535714285714285,
+      -0.03571428571428571
+     ],
+     "ci": [
+      -0.20535714285714285,
+      -0.03571428571428571
+     ],
+     "a_win_rate": 0.05357142857142857,
+     "b_win_rate": 0.16964285714285715,
+     "tie_rate": 0.7767857142857143
+    }
+   },
+   "latency": {
+    "paired_queries": 128,
+    "attempt_policy": "first recorded attempt per query, same declared load stratum required",
+    "claim_boundary": "First-attempt query latency only; this interval does not estimate the pooled p95/p99 of repeated workload rounds.",
+    "quantile_method": "nearest rank",
+    "difference": "A minus B milliseconds",
+    "p95": {
+     "a_ms": 4.073333000000275,
+     "b_ms": 22.14370807632804,
+     "delta_ms": -18.070375076327764,
+     "ci95_delta_ms": [
+      -19.123125050209637,
+      -16.430708034164127
+     ],
+     "ci_delta_ms": [
+      -19.123125050209637,
+      -16.430708034164127
+     ]
+    },
+    "p99": {
+     "a_ms": 4.495375000002241,
+     "b_ms": 27.889583026990294,
+     "delta_ms": -23.394208026988053,
+     "ci95_delta_ms": [
+      -255.40579098382295,
+      -17.985916076329886
+     ],
+     "ci_delta_ms": [
+      -255.40579098382295,
+      -17.985916076329886
+     ]
+    }
+   }
+  },
+  "cross-team-V0 - baseline:agents-runtime-v4": {
+   "paired_queries": 128,
+   "seed": 20261021,
+   "bootstrap_samples": 10000,
+   "resampling_unit": "query",
+   "difference": "A minus B",
+   "confidence": 0.95,
+   "quality_attempt_policy": "first recorded attempt per query",
+   "metrics": {
+    "recall_at_5": {
+     "n": 112,
+     "clusters": 112,
+     "mean_a": 0.7172619047619048,
+     "mean_b": 0.7172619047619048,
+     "delta": 0.0,
+     "ci95": [
+      0.0,
+      0.0
+     ],
+     "ci": [
+      0.0,
+      0.0
+     ],
+     "a_win_rate": 0.0,
+     "b_win_rate": 0.0,
+     "tie_rate": 1.0
+    },
+    "recall_at_10": {
+     "n": 112,
+     "clusters": 112,
+     "mean_a": 0.787202380952381,
+     "mean_b": 0.787202380952381,
+     "delta": 0.0,
+     "ci95": [
+      0.0,
+      0.0
+     ],
+     "ci": [
+      0.0,
+      0.0
+     ],
+     "a_win_rate": 0.0,
+     "b_win_rate": 0.0,
+     "tie_rate": 1.0
+    },
+    "ndcg_at_10": {
+     "n": 112,
+     "clusters": 112,
+     "mean_a": 0.7167136069447861,
+     "mean_b": 0.7169535213180299,
+     "delta": -0.0002399143732437026,
+     "ci95": [
+      -0.0007197431197311079,
+      0.0
+     ],
+     "ci": [
+      -0.0007197431197311079,
+      0.0
+     ],
+     "a_win_rate": 0.0,
+     "b_win_rate": 0.008928571428571428,
+     "tie_rate": 0.9910714285714286
+    },
+    "all_evidence_at_5": {
+     "n": 112,
+     "clusters": 112,
+     "mean_a": 0.6160714285714286,
+     "mean_b": 0.6160714285714286,
+     "delta": 0.0,
+     "ci95": [
+      0.0,
+      0.0
+     ],
+     "ci": [
+      0.0,
+      0.0
+     ],
+     "a_win_rate": 0.0,
+     "b_win_rate": 0.0,
+     "tie_rate": 1.0
+    },
+    "all_evidence_at_10": {
+     "n": 112,
+     "clusters": 112,
+     "mean_a": 0.7232142857142857,
+     "mean_b": 0.7232142857142857,
+     "delta": 0.0,
+     "ci95": [
+      0.0,
+      0.0
+     ],
+     "ci": [
+      0.0,
+      0.0
+     ],
+     "a_win_rate": 0.0,
+     "b_win_rate": 0.0,
+     "tie_rate": 1.0
+    }
+   },
+   "latency": {
+    "paired_queries": 128,
+    "attempt_policy": "first recorded attempt per query, same declared load stratum required",
+    "claim_boundary": "First-attempt query latency only; this interval does not estimate the pooled p95/p99 of repeated workload rounds.",
+    "quantile_method": "nearest rank",
+    "difference": "A minus B milliseconds",
+    "p95": {
+     "a_ms": 15.324166999999989,
+     "b_ms": 22.14370807632804,
+     "delta_ms": -6.819541076328051,
+     "ci95_delta_ms": [
+      -8.398291040378808,
+      -4.255790996520602
+     ],
+     "ci_delta_ms": [
+      -8.398291040378808,
+      -4.255790996520602
+     ]
+    },
+    "p99": {
+     "a_ms": 18.912834000000032,
+     "b_ms": 27.889583026990294,
+     "delta_ms": -8.976749026990262,
+     "ci95_delta_ms": [
+      -243.53249898382165,
+      -2.6925000403790023
+     ],
+     "ci_delta_ms": [
+      -243.53249898382165,
+      -2.6925000403790023
+     ]
+    }
+   }
+  },
+  "cross-team-V1 - baseline:agents-runtime-v4": {
+   "paired_queries": 128,
+   "seed": 20261021,
+   "bootstrap_samples": 10000,
+   "resampling_unit": "query",
+   "difference": "A minus B",
+   "confidence": 0.95,
+   "quality_attempt_policy": "first recorded attempt per query",
+   "metrics": {
+    "recall_at_5": {
+     "n": 112,
+     "clusters": 112,
+     "mean_a": 0.7083333333333333,
+     "mean_b": 0.7172619047619048,
+     "delta": -0.008928571428571433,
+     "ci95": [
+      -0.055059523809523815,
+      0.03571428571428571
+     ],
+     "ci": [
+      -0.055059523809523815,
+      0.03571428571428571
+     ],
+     "a_win_rate": 0.09821428571428571,
+     "b_win_rate": 0.13392857142857142,
+     "tie_rate": 0.7678571428571429
+    },
+    "recall_at_10": {
+     "n": 112,
+     "clusters": 112,
+     "mean_a": 0.8571428571428571,
+     "mean_b": 0.787202380952381,
+     "delta": 0.06994047619047619,
+     "ci95": [
+      0.03273809523809524,
+      0.11160714285714286
+     ],
+     "ci": [
+      0.03273809523809524,
+      0.11160714285714286
+     ],
+     "a_win_rate": 0.14285714285714285,
+     "b_win_rate": 0.026785714285714284,
+     "tie_rate": 0.8303571428571429
+    },
+    "ndcg_at_10": {
+     "n": 112,
+     "clusters": 112,
+     "mean_a": 0.7002496522679046,
+     "mean_b": 0.7169535213180299,
+     "delta": -0.016703869050125376,
+     "ci95": [
+      -0.05125830567922162,
+      0.017858591776665763
+     ],
+     "ci": [
+      -0.05124125125135587,
+      0.017858591776665763
+     ],
+     "a_win_rate": 0.14285714285714285,
+     "b_win_rate": 0.32142857142857145,
+     "tie_rate": 0.5357142857142857
+    },
+    "all_evidence_at_5": {
+     "n": 112,
+     "clusters": 112,
+     "mean_a": 0.5803571428571429,
+     "mean_b": 0.6160714285714286,
+     "delta": -0.03571428571428571,
+     "ci95": [
+      -0.125,
+      0.05357142857142857
+     ],
+     "ci": [
+      -0.125,
+      0.05357142857142857
+     ],
+     "a_win_rate": 0.08928571428571429,
+     "b_win_rate": 0.125,
+     "tie_rate": 0.7857142857142857
+    },
+    "all_evidence_at_10": {
+     "n": 112,
+     "clusters": 112,
+     "mean_a": 0.8125,
+     "mean_b": 0.7232142857142857,
+     "delta": 0.08928571428571429,
+     "ci95": [
+      0.026785714285714284,
+      0.16071428571428573
+     ],
+     "ci": [
+      0.026785714285714284,
+      0.16071428571428573
+     ],
+     "a_win_rate": 0.11607142857142858,
+     "b_win_rate": 0.026785714285714284,
+     "tie_rate": 0.8571428571428571
+    }
+   },
+   "latency": {
+    "paired_queries": 128,
+    "attempt_policy": "first recorded attempt per query, same declared load stratum required",
+    "claim_boundary": "First-attempt query latency only; this interval does not estimate the pooled p95/p99 of repeated workload rounds.",
+    "quantile_method": "nearest rank",
+    "difference": "A minus B milliseconds",
+    "p95": {
+     "a_ms": 18.57679200000007,
+     "b_ms": 22.14370807632804,
+     "delta_ms": -3.5669160763279706,
+     "ci95_delta_ms": [
+      -5.332084055528071,
+      -1.4135830659015483
+     ],
+     "ci_delta_ms": [
+      -5.332084055528071,
+      -1.4135830659015483
+     ]
+    },
+    "p99": {
+     "a_ms": 21.37895800000001,
+     "b_ms": 27.889583026990294,
+     "delta_ms": -6.510625026990283,
+     "ci95_delta_ms": [
+      -240.44695798382168,
+      4.53754195962108
+     ],
+     "ci_delta_ms": [
+      -239.97437398382158,
+      4.53754195962108
+     ]
+    }
+   }
+  },
+  "cross-team-V2 - baseline:agents-runtime-v4": {
+   "paired_queries": 128,
+   "seed": 20261021,
+   "bootstrap_samples": 10000,
+   "resampling_unit": "query",
+   "difference": "A minus B",
+   "confidence": 0.95,
+   "quality_attempt_policy": "first recorded attempt per query",
+   "metrics": {
+    "recall_at_5": {
+     "n": 112,
+     "clusters": 112,
+     "mean_a": 0.7395833333333333,
+     "mean_b": 0.7172619047619048,
+     "delta": 0.022321428571428572,
+     "ci95": [
+      -0.029761904761904764,
+      0.07886904761904763
+     ],
+     "ci": [
+      -0.029761904761904764,
+      0.07886904761904763
+     ],
+     "a_win_rate": 0.09821428571428571,
+     "b_win_rate": 0.125,
+     "tie_rate": 0.7767857142857143
+    },
+    "recall_at_10": {
+     "n": 112,
+     "clusters": 112,
+     "mean_a": 0.7886904761904762,
+     "mean_b": 0.787202380952381,
+     "delta": 0.0014880952380952367,
+     "ci95": [
+      -0.029761904761904764,
+      0.03571428571428571
+     ],
+     "ci": [
+      -0.029761904761904764,
+      0.03571428571428571
+     ],
+     "a_win_rate": 0.05357142857142857,
+     "b_win_rate": 0.07142857142857142,
+     "tie_rate": 0.875
+    },
+    "ndcg_at_10": {
+     "n": 112,
+     "clusters": 112,
+     "mean_a": 0.6924062290029956,
+     "mean_b": 0.7169535213180299,
+     "delta": -0.024547292315034188,
+     "ci95": [
+      -0.0788359546592079,
+      0.031763514750621155
+     ],
+     "ci": [
+      -0.07882844930541723,
+      0.031763514750621155
+     ],
+     "a_win_rate": 0.19642857142857142,
+     "b_win_rate": 0.375,
+     "tie_rate": 0.42857142857142855
+    },
+    "all_evidence_at_5": {
+     "n": 112,
+     "clusters": 112,
+     "mean_a": 0.5892857142857143,
+     "mean_b": 0.6160714285714286,
+     "delta": -0.026785714285714284,
+     "ci95": [
+      -0.11607142857142858,
+      0.0625
+     ],
+     "ci": [
+      -0.11607142857142858,
+      0.0625
+     ],
+     "a_win_rate": 0.09821428571428571,
+     "b_win_rate": 0.125,
+     "tie_rate": 0.7767857142857143
+    },
+    "all_evidence_at_10": {
+     "n": 112,
+     "clusters": 112,
+     "mean_a": 0.7053571428571429,
+     "mean_b": 0.7232142857142857,
+     "delta": -0.017857142857142856,
+     "ci95": [
+      -0.08035714285714286,
+      0.044642857142857144
+     ],
+     "ci": [
+      -0.08035714285714286,
+      0.044642857142857144
+     ],
+     "a_win_rate": 0.05357142857142857,
+     "b_win_rate": 0.07142857142857142,
+     "tie_rate": 0.875
+    }
+   },
+   "latency": {
+    "paired_queries": 128,
+    "attempt_policy": "first recorded attempt per query, same declared load stratum required",
+    "claim_boundary": "First-attempt query latency only; this interval does not estimate the pooled p95/p99 of repeated workload rounds.",
+    "quantile_method": "nearest rank",
+    "difference": "A minus B milliseconds",
+    "p95": {
+     "a_ms": 246.35520800000086,
+     "b_ms": 22.14370807632804,
+     "delta_ms": 224.21149992367282,
+     "ci95_delta_ms": [
+      219.7147079596216,
+      230.58270794447208
+     ],
+     "ci_delta_ms": [
+      219.7147079596216,
+      230.58270794447208
+     ]
+    },
+    "p99": {
+     "a_ms": 253.67962500000067,
+     "b_ms": 27.889583026990294,
+     "delta_ms": 225.79004197301037,
+     "ci95_delta_ms": [
+      -8.590915983821105,
+      234.0928339596212
+     ],
+     "ci_delta_ms": [
+      -8.590915983821105,
+      234.0928339596212
+     ]
+    }
+   }
+  },
+  "cross-team-V3 - baseline:agents-runtime-v4": {
+   "paired_queries": 128,
+   "seed": 20261021,
+   "bootstrap_samples": 10000,
+   "resampling_unit": "query",
+   "difference": "A minus B",
+   "confidence": 0.95,
+   "quality_attempt_policy": "first recorded attempt per query",
+   "metrics": {
+    "recall_at_5": {
+     "n": 112,
+     "clusters": 112,
+     "mean_a": 0.7232142857142857,
+     "mean_b": 0.7172619047619048,
+     "delta": 0.005952380952380947,
+     "ci95": [
+      -0.06250000000000001,
+      0.07589285714285714
+     ],
+     "ci": [
+      -0.06250000000000001,
+      0.07589285714285714
+     ],
+     "a_win_rate": 0.13392857142857142,
+     "b_win_rate": 0.1875,
+     "tie_rate": 0.6785714285714286
+    },
+    "recall_at_10": {
+     "n": 112,
+     "clusters": 112,
+     "mean_a": 0.75,
+     "mean_b": 0.787202380952381,
+     "delta": -0.037202380952380966,
+     "ci95": [
+      -0.09672619047619048,
+      0.025297619047619044
+     ],
+     "ci": [
+      -0.09672619047619048,
+      0.025297619047619044
+     ],
+     "a_win_rate": 0.10714285714285714,
+     "b_win_rate": 0.21428571428571427,
+     "tie_rate": 0.6785714285714286
+    },
+    "ndcg_at_10": {
+     "n": 112,
+     "clusters": 112,
+     "mean_a": 0.7486383389348225,
+     "mean_b": 0.7169535213180299,
+     "delta": 0.031684817616792676,
+     "ci95": [
+      -0.024304807334357404,
+      0.08704253020425252
+     ],
+     "ci": [
+      -0.02426990727595826,
+      0.08704253020425252
+     ],
+     "a_win_rate": 0.25892857142857145,
+     "b_win_rate": 0.26785714285714285,
+     "tie_rate": 0.4732142857142857
+    },
+    "all_evidence_at_5": {
+     "n": 112,
+     "clusters": 112,
+     "mean_a": 0.5089285714285714,
+     "mean_b": 0.6160714285714286,
+     "delta": -0.10714285714285714,
+     "ci95": [
+      -0.19642857142857142,
+      -0.017857142857142856
+     ],
+     "ci": [
+      -0.19642857142857142,
+      -0.017857142857142856
+     ],
+     "a_win_rate": 0.07142857142857142,
+     "b_win_rate": 0.17857142857142858,
+     "tie_rate": 0.75
+    },
+    "all_evidence_at_10": {
+     "n": 112,
+     "clusters": 112,
+     "mean_a": 0.5446428571428571,
+     "mean_b": 0.7232142857142857,
+     "delta": -0.17857142857142858,
+     "ci95": [
+      -0.26785714285714285,
+      -0.08928571428571429
+     ],
+     "ci": [
+      -0.26785714285714285,
+      -0.08928571428571429
+     ],
+     "a_win_rate": 0.03571428571428571,
+     "b_win_rate": 0.21428571428571427,
+     "tie_rate": 0.75
+    }
+   },
+   "latency": {
+    "paired_queries": 128,
+    "attempt_policy": "first recorded attempt per query, same declared load stratum required",
+    "claim_boundary": "First-attempt query latency only; this interval does not estimate the pooled p95/p99 of repeated workload rounds.",
+    "quantile_method": "nearest rank",
+    "difference": "A minus B milliseconds",
+    "p95": {
+     "a_ms": 10.3190829999985,
+     "b_ms": 22.14370807632804,
+     "delta_ms": -11.82462507632954,
+     "ci95_delta_ms": [
+      -12.914792050210963,
+      -10.19245804395905
+     ],
+     "ci_delta_ms": [
+      -12.914792050210963,
+      -10.19245804395905
+     ]
+    },
+    "p99": {
+     "a_ms": 10.633125000000291,
+     "b_ms": 27.889583026990294,
+     "delta_ms": -17.256458026990003,
+     "ci95_delta_ms": [
+      -249.07233298381834,
+      -11.709708065900486
+     ],
+     "ci_delta_ms": [
+      -249.07233298381834,
+      -11.709708065900486
+     ]
+    }
+   }
+  },
+  "cross-team-V4 - baseline:agents-runtime-v4": {
+   "paired_queries": 128,
+   "seed": 20261021,
+   "bootstrap_samples": 10000,
+   "resampling_unit": "query",
+   "difference": "A minus B",
+   "confidence": 0.95,
+   "quality_attempt_policy": "first recorded attempt per query",
+   "metrics": {
+    "recall_at_5": {
+     "n": 112,
+     "clusters": 112,
+     "mean_a": 0.8229166666666667,
+     "mean_b": 0.7172619047619048,
+     "delta": 0.10565476190476189,
+     "ci95": [
+      0.020833333333333332,
+      0.19196428571428573
+     ],
+     "ci": [
+      0.020833333333333332,
+      0.19196428571428573
+     ],
+     "a_win_rate": 0.23214285714285715,
+     "b_win_rate": 0.16964285714285715,
+     "tie_rate": 0.5982142857142857
+    },
+    "recall_at_10": {
+     "n": 112,
+     "clusters": 112,
+     "mean_a": 0.900297619047619,
+     "mean_b": 0.787202380952381,
+     "delta": 0.1130952380952381,
+     "ci95": [
+      0.047619047619047616,
+      0.18154761904761904
+     ],
+     "ci": [
+      0.047619047619047616,
+      0.18154761904761904
+     ],
+     "a_win_rate": 0.1875,
+     "b_win_rate": 0.08035714285714286,
+     "tie_rate": 0.7321428571428571
+    },
+    "ndcg_at_10": {
+     "n": 112,
+     "clusters": 112,
+     "mean_a": 0.7889540528928739,
+     "mean_b": 0.7169535213180299,
+     "delta": 0.07200053157484411,
+     "ci95": [
+      -0.003418798112609451,
+      0.15025259691379161
+     ],
+     "ci": [
+      -0.0034089838518994173,
+      0.15025259691379161
+     ],
+     "a_win_rate": 0.30357142857142855,
+     "b_win_rate": 0.35714285714285715,
+     "tie_rate": 0.3392857142857143
+    },
+    "all_evidence_at_5": {
+     "n": 112,
+     "clusters": 112,
+     "mean_a": 0.6339285714285714,
+     "mean_b": 0.6160714285714286,
+     "delta": 0.017857142857142856,
+     "ci95": [
+      -0.08928571428571429,
+      0.13392857142857142
+     ],
+     "ci": [
+      -0.08928571428571429,
+      0.13392857142857142
+     ],
+     "a_win_rate": 0.1875,
+     "b_win_rate": 0.16964285714285715,
+     "tie_rate": 0.6428571428571429
+    },
+    "all_evidence_at_10": {
+     "n": 112,
+     "clusters": 112,
+     "mean_a": 0.7857142857142857,
+     "mean_b": 0.7232142857142857,
+     "delta": 0.0625,
+     "ci95": [
+      -0.017857142857142856,
+      0.15178571428571427
+     ],
+     "ci": [
+      -0.017857142857142856,
+      0.15178571428571427
+     ],
+     "a_win_rate": 0.14285714285714285,
+     "b_win_rate": 0.08035714285714286,
+     "tie_rate": 0.7767857142857143
+    }
+   },
+   "latency": {
+    "paired_queries": 128,
+    "attempt_policy": "first recorded attempt per query, same declared load stratum required",
+    "claim_boundary": "First-attempt query latency only; this interval does not estimate the pooled p95/p99 of repeated workload rounds.",
+    "quantile_method": "nearest rank",
+    "difference": "A minus B milliseconds",
+    "p95": {
+     "a_ms": 283.3747089999997,
+     "b_ms": 22.14370807632804,
+     "delta_ms": 261.2310009236717,
+     "ci95_delta_ms": [
+      234.31370893409985,
+      281.5519169340978
+     ],
+     "ci_delta_ms": [
+      234.36808198965082,
+      281.5519169340978
+     ]
+    },
+    "p99": {
+     "a_ms": 327.49041600000055,
+     "b_ms": 27.889583026990294,
+     "delta_ms": 299.60083297301026,
+     "ci95_delta_ms": [
+      30.605292016178282,
+      318.35679195962075
+     ],
+     "ci_delta_ms": [
+      30.605292016178282,
+      318.35679195962075
+     ]
+    }
+   }
+  },
+  "cross-team-engram-all - baseline:agents-runtime-v4": {
+   "paired_queries": 128,
+   "seed": 20261021,
+   "bootstrap_samples": 10000,
+   "resampling_unit": "query",
+   "difference": "A minus B",
+   "confidence": 0.95,
+   "quality_attempt_policy": "first recorded attempt per query",
+   "metrics": {
+    "recall_at_5": {
+     "n": 112,
+     "clusters": 112,
+     "mean_a": 0.0,
+     "mean_b": 0.7172619047619048,
+     "delta": -0.7172619047619048,
+     "ci95": [
+      -0.7901785714285714,
+      -0.6413690476190476
+     ],
+     "ci": [
+      -0.7901785714285714,
+      -0.6413690476190476
+     ],
+     "a_win_rate": 0.0,
+     "b_win_rate": 0.8035714285714286,
+     "tie_rate": 0.19642857142857142
+    },
+    "recall_at_10": {
+     "n": 112,
+     "clusters": 112,
+     "mean_a": 0.0,
+     "mean_b": 0.787202380952381,
+     "delta": -0.787202380952381,
+     "ci95": [
+      -0.8541666666666667,
+      -0.7172619047619048
+     ],
+     "ci": [
+      -0.8541666666666667,
+      -0.7172619047619048
+     ],
+     "a_win_rate": 0.0,
+     "b_win_rate": 0.8482142857142857,
+     "tie_rate": 0.15178571428571427
+    },
+    "ndcg_at_10": {
+     "n": 112,
+     "clusters": 112,
+     "mean_a": 0.0,
+     "mean_b": 0.7169535213180299,
+     "delta": -0.7169535213180299,
+     "ci95": [
+      -0.7816827104335422,
+      -0.6501361810589794
+     ],
+     "ci": [
+      -0.7816587817358702,
+      -0.6501361810589794
+     ],
+     "a_win_rate": 0.0,
+     "b_win_rate": 0.8482142857142857,
+     "tie_rate": 0.15178571428571427
+    },
+    "all_evidence_at_5": {
+     "n": 112,
+     "clusters": 112,
+     "mean_a": 0.0,
+     "mean_b": 0.6160714285714286,
+     "delta": -0.6160714285714286,
+     "ci95": [
+      -0.7053571428571429,
+      -0.5267857142857143
+     ],
+     "ci": [
+      -0.7053571428571429,
+      -0.5267857142857143
+     ],
+     "a_win_rate": 0.0,
+     "b_win_rate": 0.6160714285714286,
+     "tie_rate": 0.38392857142857145
+    },
+    "all_evidence_at_10": {
+     "n": 112,
+     "clusters": 112,
+     "mean_a": 0.0,
+     "mean_b": 0.7232142857142857,
+     "delta": -0.7232142857142857,
+     "ci95": [
+      -0.8035714285714286,
+      -0.6339285714285714
+     ],
+     "ci": [
+      -0.8035714285714286,
+      -0.6339285714285714
+     ],
+     "a_win_rate": 0.0,
+     "b_win_rate": 0.7232142857142857,
+     "tie_rate": 0.2767857142857143
+    }
+   },
+   "latency": {
+    "paired_queries": 128,
+    "attempt_policy": "first recorded attempt per query, same declared load stratum required",
+    "claim_boundary": "First-attempt query latency only; this interval does not estimate the pooled p95/p99 of repeated workload rounds.",
+    "quantile_method": "nearest rank",
+    "difference": "A minus B milliseconds",
+    "p95": {
+     "a_ms": 0.89325000000008,
+     "b_ms": 22.14370807632804,
+     "delta_ms": -21.25045807632796,
+     "ci95_delta_ms": [
+      -22.32491705020948,
+      -19.686040951109362
+     ],
+     "ci_delta_ms": [
+      -22.32491705020948,
+      -19.686040951109362
+     ]
+    },
+    "p99": {
+     "a_ms": 0.9616249999999127,
+     "b_ms": 27.889583026990294,
+     "delta_ms": -26.92795802699038,
+     "ci95_delta_ms": [
+      -258.69737498382165,
+      -21.426749065901504
+     ],
+     "ci_delta_ms": [
+      -258.69737498382165,
+      -21.426749065901504
+     ]
+    }
+   }
+  },
+  "cross-team-engram-any - baseline:agents-runtime-v4": {
+   "paired_queries": 128,
+   "seed": 20261021,
+   "bootstrap_samples": 10000,
+   "resampling_unit": "query",
+   "difference": "A minus B",
+   "confidence": 0.95,
+   "quality_attempt_policy": "first recorded attempt per query",
+   "metrics": {
+    "recall_at_5": {
+     "n": 112,
+     "clusters": 112,
+     "mean_a": 0.18303571428571427,
+     "mean_b": 0.7172619047619048,
+     "delta": -0.5342261904761905,
+     "ci95": [
+      -0.6428571428571429,
+      -0.4255952380952381
+     ],
+     "ci": [
+      -0.6428571428571429,
+      -0.4255952380952381
+     ],
+     "a_win_rate": 0.11607142857142858,
+     "b_win_rate": 0.6607142857142857,
+     "tie_rate": 0.22321428571428573
+    },
+    "recall_at_10": {
+     "n": 112,
+     "clusters": 112,
+     "mean_a": 0.1875,
+     "mean_b": 0.787202380952381,
+     "delta": -0.599702380952381,
+     "ci95": [
+      -0.7008928571428571,
+      -0.4955357142857143
+     ],
+     "ci": [
+      -0.7008928571428571,
+      -0.4955357142857143
+     ],
+     "a_win_rate": 0.07142857142857142,
+     "b_win_rate": 0.7053571428571429,
+     "tie_rate": 0.22321428571428573
+    },
+    "ndcg_at_10": {
+     "n": 112,
+     "clusters": 112,
+     "mean_a": 0.16255820638803883,
+     "mean_b": 0.7169535213180299,
+     "delta": -0.5543953149299911,
+     "ci95": [
+      -0.6427269916852929,
+      -0.466837123262005
+     ],
+     "ci": [
+      -0.6426279273302823,
+      -0.466837123262005
+     ],
+     "a_win_rate": 0.15178571428571427,
+     "b_win_rate": 0.7053571428571429,
+     "tie_rate": 0.14285714285714285
+    },
+    "all_evidence_at_5": {
+     "n": 112,
+     "clusters": 112,
+     "mean_a": 0.17857142857142858,
+     "mean_b": 0.6160714285714286,
+     "delta": -0.4375,
+     "ci95": [
+      -0.5625,
+      -0.30357142857142855
+     ],
+     "ci": [
+      -0.5625,
+      -0.30357142857142855
+     ],
+     "a_win_rate": 0.11607142857142858,
+     "b_win_rate": 0.5535714285714286,
+     "tie_rate": 0.33035714285714285
+    },
+    "all_evidence_at_10": {
+     "n": 112,
+     "clusters": 112,
+     "mean_a": 0.17857142857142858,
+     "mean_b": 0.7232142857142857,
+     "delta": -0.5446428571428571,
+     "ci95": [
+      -0.6517857142857143,
+      -0.42857142857142855
+     ],
+     "ci": [
+      -0.6517857142857143,
+      -0.42857142857142855
+     ],
+     "a_win_rate": 0.0625,
+     "b_win_rate": 0.6071428571428571,
+     "tie_rate": 0.33035714285714285
+    }
+   },
+   "latency": {
+    "paired_queries": 128,
+    "attempt_policy": "first recorded attempt per query, same declared load stratum required",
+    "claim_boundary": "First-attempt query latency only; this interval does not estimate the pooled p95/p99 of repeated workload rounds.",
+    "quantile_method": "nearest rank",
+    "difference": "A minus B milliseconds",
+    "p95": {
+     "a_ms": 4.017541000000165,
+     "b_ms": 22.14370807632804,
+     "delta_ms": -18.126167076327874,
+     "ci95_delta_ms": [
+      -19.280542050209533,
+      -16.519915996520467
+     ],
+     "ci_delta_ms": [
+      -19.280542050209533,
+      -16.519915996520467
+     ]
+    },
+    "p99": {
+     "a_ms": 4.894207999999935,
+     "b_ms": 27.889583026990294,
+     "delta_ms": -22.99537502699036,
+     "ci95_delta_ms": [
+      -254.7121249838217,
+      -17.332708040378975
+     ],
+     "ci_delta_ms": [
+      -254.7121249838217,
+      -17.332708040378975
+     ]
+    }
+   }
+  }
+ }
+}

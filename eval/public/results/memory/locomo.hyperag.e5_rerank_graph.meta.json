@@ -1,0 +1,63 @@
+{
+  "system": "hyperag",
+  "version": "0.1.0",
+  "profile": "e5+rerank+graph",
+  "config": {
+    "embedding": {
+      "model": "Xenova/multilingual-e5-small#q8",
+      "revision": "761b726dd34fb83930e26aab4e9ac3899aa1fa78",
+      "dimensions": 384,
+      "normalized": true,
+      "preprocessing": "mean pooling; prefixes query=\"query: \" document=\"passage: \""
+    },
+    "reranker": "Xenova/bge-reranker-base@280bcc2#q8",
+    "rrfK": 60,
+    "graph": "conversation-graph.ts: NEXT_TURN, SAME_ENTITY (exact match); 2 hops"
+  },
+  "bench": "locomo",
+  "units": 10,
+  "questions": 1986,
+  "expectedQuestions": 1986,
+  "failedSearches": 0,
+  "k": 10,
+  "workers": 2,
+  "llm": {
+    "model": "llama-3.3-70b-instruct",
+    "calls": 1986,
+    "prompt": 1366104,
+    "completion": 23282
+  },
+  "accuracy": "score_locomo.py",
+  "wallSeconds": 1131.2362075,
+  "ingestP50Ms": 111730.32270799996,
+  "searchP50Ms": 53661.29599999997,
+  "searchP95Ms": 117341.11433300003,
+  "rssPeakBytes": 2173668760,
+  "systemRssPeakBytes": 182871654,
+  "date": "2026-10-24T02:55:26.120Z",
+  "locomo": {
+    "f1_cat1_4": 0.4655,
+    "per_category": {
+      "1": {
+        "n": 282,
+        "f1": 0.3191
+      },
+      "2": {
+        "n": 321,
+        "f1": 0.343
+      },
+      "3": {
+        "n": 96,
+        "f1": 0.162
+      },
+      "4": {
+        "n": 841,
+        "f1": 0.596
+      },
+      "5": {
+        "n": 446,
+        "f1": 0.8296
+      }
+    }
+  }
+}

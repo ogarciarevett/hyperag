@@ -1,0 +1,25 @@
+{
+  "system": "letta",
+  "version": "letta server 0.16.8 (docker letta/letta:0.16.8)",
+  "profile": "default",
+  "config": {
+    "ingest": "POST /v1/agents/{id}/archival-memory, one per doc, doc id tag",
+    "search": "GET archival-memory/search (semantic), top_k",
+    "embedding": "openai-compatible BAAI/bge-small-en-v1.5, server default chunk size 300",
+    "llm": "not called on this path",
+    "concurrency": 8
+  },
+  "dataset": "arguana",
+  "split": "test",
+  "documents": 8674,
+  "queries": 1406,
+  "k": 100,
+  "ingestMs": 388504.76537499996,
+  "latencyP50Ms": 181.19195900007617,
+  "latencyP95Ms": 245.89570799999638,
+  "rssPeakBytes": 113263336,
+  "systemRssPeakBytes": 970194944,
+  "failedQueries": 0,
+  "errors": {},
+  "date": "2026-10-23T21:10:09.599Z"
+}

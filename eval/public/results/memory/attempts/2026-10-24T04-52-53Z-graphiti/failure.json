@@ -1,0 +1,17 @@
+{
+  "system": "graphiti",
+  "profile": "default",
+  "bench": "locomo",
+  "status": "failed_partial",
+  "score": null,
+  "answerRows": 105,
+  "uniqueIDs": 105,
+  "finishedAt": "2026-10-24T04:52:53Z",
+  "error": {
+    "httpStatus": 400,
+    "contextLimit": 32768,
+    "requestedOutputTokens": 16384,
+    "reportedMinimumInputTokens": 16385
+  },
+  "cause": "Graphiti 0.31.2 edge extraction explicitly requests 16384 output tokens, overriding the generic client default of 8192."
+}

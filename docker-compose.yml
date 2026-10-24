@@ -1,0 +1,50 @@
+# Local stack: Postgres with pgvector and Neo4j Community; with `--profile service`, also the
+# Hyperag service (HTTP API and MCP at /mcp, models in process). Ports bind to loopback only.
+#   docker compose -p hyperag --profile service up -d
+services:
+  postgres:
+    image: pgvector/pgvector:pg18@sha256:2358fcba361ed2233a5ed81b5fe4ca779ccb304120ce531a3bf51c0ed7e2bc11
+    environment:
+      POSTGRES_USER: hyperag
+      POSTGRES_PASSWORD: fake-test-only
+      POSTGRES_DB: hyperag
+    ports: ["127.0.0.1:55432:5432"]
+    volumes: [pgdata:/var/lib/postgresql]
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "hyperag"]
+      interval: 2s
+      retries: 30
+  neo4j:
+    image: neo4j:5.26.28-community@sha256:ff32db30b2baff97971e441b46bfd9c832c1b62c970398ef579244c06b21d357
+    environment:
+      NEO4J_AUTH: neo4j/fake-test-only
+      NEO4J_server_memory_heap_max__size: 512m
+      NEO4J_server_memory_pagecache_size: 256m
+    ports: ["127.0.0.1:57474:7474"]
+    volumes: [neo4jdata:/data]
+  hyperag:
+    profiles: [service]
+    build: .
+    image: hyperag:local
+    depends_on:
+      postgres: { condition: service_healthy }
+      neo4j: { condition: service_started }
+    environment:
+      HYPERAG_PG_URL: postgres://hyperag:fake-test-only@postgres:5432/hyperag
+      HYPERAG_NEO4J_URL: http://neo4j:7474
+      HYPERAG_NEO4J_PASSWORD: fake-test-only
+      HYPERAG_TOKENS_FILE: /config/tokens.json
+      HYPERAG_ADMINS: ${HYPERAG_ADMINS:-admin}
+      HYPERAG_EMBEDDING: ${HYPERAG_EMBEDDING:-}
+      HYPERAG_RERANKER: ${HYPERAG_RERANKER:-}
+      HYPERAG_MCP_ALLOWED_HOSTS: localhost,hyperag
+    ports: ["127.0.0.1:7480:7480"]
+    volumes:
+      # Named volumes, owned by the service user inside the image, so the stack starts on any host.
+      - config:/config
+      - models:/home/hyperag/models
+volumes:
+  pgdata:
+  neo4jdata:
+  models:
+  config:

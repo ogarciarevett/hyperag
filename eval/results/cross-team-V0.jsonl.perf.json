@@ -1,0 +1,20 @@
+{
+  "variant": "V0",
+  "database": "eval_cross_team_bge",
+  "startupMs": 40.207125000000005,
+  "ingest": {
+    "documents": 1536,
+    "ingestMs": 31070.362916,
+    "graphEdges": 1248,
+    "graphMs": 2261.283542000001
+  },
+  "throughputQps": {
+    "c1": 95.77867048187832,
+    "c4": 201.55913073688168,
+    "c8": 207.00433417427067
+  },
+  "rssPeakBytes": 25264800,
+  "memories": 1536,
+  "versions": 1536,
+  "databaseBytes": 17921727
+}

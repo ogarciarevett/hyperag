@@ -1,0 +1,20 @@
+{
+  "system": "hyperag",
+  "version": "0.1.0",
+  "profile": "bm25",
+  "config": {
+    "embedding": null,
+    "reranker": null,
+    "rrfK": 60
+  },
+  "dataset": "scifact",
+  "split": "test",
+  "documents": 5183,
+  "queries": 300,
+  "k": 100,
+  "ingestMs": 55070.950292,
+  "latencyP50Ms": 127.69674999999552,
+  "latencyP95Ms": 159.18037499999627,
+  "rssPeakBytes": 41992912,
+  "date": "2026-10-23T17:17:33.285Z"
+}

@@ -1,0 +1,18 @@
+{
+  "build": "ts",
+  "variant": "V3",
+  "database": "evalhttp_ts_e5",
+  "serviceStartupMs": 102.5805,
+  "ingest": {
+    "documents": 1536,
+    "ingestMs": 31672.550667,
+    "graphEdges": 1248,
+    "graphMs": 2749.456083000001
+  },
+  "throughputQps": {
+    "c1": 94.71484385839567,
+    "c4": 217.14171270909256,
+    "c8": 246.89097810177597
+  },
+  "serviceRssPeakBytes": 800145408
+}

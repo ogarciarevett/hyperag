@@ -1,0 +1,8 @@
+{
+  "engine": "engram",
+  "version": "3.3.2",
+  "matchMode": "all",
+  "documents": 1536,
+  "ingestMs": 1213.464375,
+  "dataDirBytes": 8704000
+}

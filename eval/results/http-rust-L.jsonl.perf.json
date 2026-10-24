@@ -1,0 +1,18 @@
+{
+  "build": "rust",
+  "variant": "L",
+  "database": "evalhttp_rust_lex",
+  "serviceStartupMs": 607.754416,
+  "ingest": {
+    "documents": 1536,
+    "ingestMs": 19019.421041,
+    "graphEdges": 1248,
+    "graphMs": 3481.0913330000003
+  },
+  "throughputQps": {
+    "c1": 284.02873682934626,
+    "c4": 814.7231523308949,
+    "c8": 1028.098684011998
+  },
+  "serviceRssPeakBytes": 15925248
+}

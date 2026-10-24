@@ -1,0 +1,60 @@
+{
+  "system": "engram",
+  "version": "engram 3.3.2",
+  "profile": "any",
+  "config": {
+    "transport": "mcp stdio",
+    "match_mode": "any"
+  },
+  "bench": "LME oracle haystack, top-10 retrieval",
+  "units": 500,
+  "questions": 500,
+  "expectedQuestions": 500,
+  "failedSearches": 0,
+  "k": 10,
+  "workers": 4,
+  "llm": {
+    "model": "llama-3.3-70b-instruct",
+    "calls": 1000,
+    "prompt": 500638,
+    "completion": 33794
+  },
+  "accuracy": 0.386,
+  "byType": {
+    "temporal-reasoning": {
+      "n": 127,
+      "correct": 34
+    },
+    "abstention": {
+      "n": 30,
+      "correct": 27
+    },
+    "multi-session": {
+      "n": 121,
+      "correct": 6
+    },
+    "knowledge-update": {
+      "n": 72,
+      "correct": 37
+    },
+    "single-session-preference": {
+      "n": 30,
+      "correct": 15
+    },
+    "single-session-assistant": {
+      "n": 56,
+      "correct": 21
+    },
+    "single-session-user": {
+      "n": 64,
+      "correct": 53
+    }
+  },
+  "wallSeconds": 299.89735675,
+  "ingestP50Ms": 294.82137499999953,
+  "searchP50Ms": 1.4707500000076834,
+  "searchP95Ms": 3.9219160000002375,
+  "rssPeakBytes": 69829376,
+  "systemRssPeakBytes": 276676608,
+  "date": "2026-10-24T02:33:39.521Z"
+}

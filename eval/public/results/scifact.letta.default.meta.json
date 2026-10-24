@@ -1,0 +1,25 @@
+{
+  "system": "letta",
+  "version": "letta server 0.16.8 (docker letta/letta:0.16.8)",
+  "profile": "default",
+  "config": {
+    "ingest": "POST /v1/agents/{id}/archival-memory, one per doc, doc id tag",
+    "search": "GET archival-memory/search (semantic), top_k",
+    "embedding": "openai-compatible BAAI/bge-small-en-v1.5, server default chunk size 300",
+    "llm": "not called on this path",
+    "concurrency": 8
+  },
+  "dataset": "scifact",
+  "split": "test",
+  "documents": 5183,
+  "queries": 300,
+  "k": 100,
+  "ingestMs": 363680.77400000003,
+  "latencyP50Ms": 111.21604100003606,
+  "latencyP95Ms": 129.44787500001257,
+  "rssPeakBytes": 39862968,
+  "systemRssPeakBytes": 970801152,
+  "failedQueries": 0,
+  "errors": {},
+  "date": "2026-10-23T20:04:26.231Z"
+}

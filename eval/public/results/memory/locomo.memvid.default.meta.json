@@ -1,0 +1,56 @@
+{
+  "system": "memvid",
+  "version": "memvid-sdk 2.0.160",
+  "profile": "default",
+  "config": {
+    "create": "defaults (lex only)",
+    "ingest": "put_many, then commit",
+    "find": "mode=auto (lex without OpenAI key)"
+  },
+  "bench": "locomo",
+  "units": 10,
+  "questions": 1986,
+  "expectedQuestions": 1986,
+  "failedSearches": 5,
+  "k": 10,
+  "workers": 4,
+  "llm": {
+    "model": "llama-3.3-70b-instruct",
+    "calls": 1986,
+    "prompt": 173931,
+    "completion": 20526
+  },
+  "accuracy": "score_locomo.py",
+  "wallSeconds": 337.86724525,
+  "ingestP50Ms": 131415.695542,
+  "searchP50Ms": 41.64862500000163,
+  "searchP95Ms": 115.39208299998427,
+  "rssPeakBytes": 22725304,
+  "systemRssPeakBytes": 102367232,
+  "date": "2026-10-23T22:35:40.860Z",
+  "locomo": {
+    "f1_cat1_4": 0.0174,
+    "per_category": {
+      "1": {
+        "n": 282,
+        "f1": 0.0153
+      },
+      "2": {
+        "n": 321,
+        "f1": 0.0055
+      },
+      "3": {
+        "n": 96,
+        "f1": 0.071
+      },
+      "4": {
+        "n": 841,
+        "f1": 0.0164
+      },
+      "5": {
+        "n": 446,
+        "f1": 0.9215
+      }
+    }
+  }
+}

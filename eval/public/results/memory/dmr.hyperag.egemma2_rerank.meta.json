@@ -1,0 +1,45 @@
+{
+  "system": "hyperag",
+  "version": "0.1.0",
+  "profile": "egemma2+rerank",
+  "config": {
+    "embedding": {
+      "model": "onnx-community/embeddinggemma-2-ONNX#q8",
+      "revision": "daa72c51243991dfcaf9f9137d2c573d8f7790c0",
+      "dimensions": 768,
+      "normalized": true,
+      "preprocessing": "sentence_embedding; max_length=512; prompts query=\"task: search result | query: \" document=\"title: none | text: \""
+    },
+    "reranker": "Xenova/bge-reranker-base@280bcc2#q8",
+    "rrfK": 60,
+    "graph": null
+  },
+  "transportRetry": "Common proxy: ECONNRESET only, 3 total upstream attempts, 250/500ms backoff, identical payload; HTTP errors unchanged; native client retries remain; upstream keep-alive disabled",
+  "bench": "dmr",
+  "units": 500,
+  "questions": 500,
+  "expectedQuestions": 500,
+  "failedSearches": 0,
+  "k": 10,
+  "workers": 2,
+  "llm": {
+    "model": "llama-3.3-70b-instruct",
+    "calls": 1000,
+    "prompt": 319239,
+    "completion": 18153
+  },
+  "accuracy": 0.762,
+  "byType": {
+    "dmr": {
+      "n": 500,
+      "correct": 381
+    }
+  },
+  "wallSeconds": 2208.6174576249996,
+  "ingestP50Ms": 3917.444790999987,
+  "searchP50Ms": 535.563582999981,
+  "searchP95Ms": 815.6976670000004,
+  "rssPeakBytes": 2720518392,
+  "systemRssPeakBytes": 179516211,
+  "date": "2026-10-24T08:47:14.374Z"
+}

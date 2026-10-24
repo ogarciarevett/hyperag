@@ -1,0 +1,62 @@
+{
+  "system": "memvid",
+  "version": "memvid-sdk 2.0.160",
+  "profile": "default",
+  "config": {
+    "create": "defaults (lex only)",
+    "ingest": "put_many, then commit",
+    "find": "mode=auto (lex without OpenAI key)"
+  },
+  "transportRetry": "Common proxy: ECONNRESET only, 3 total upstream attempts, 250/500ms backoff, identical payload; HTTP errors unchanged; native client retries remain; upstream keep-alive disabled",
+  "bench": "LME oracle haystack, top-10 retrieval",
+  "units": 500,
+  "questions": 500,
+  "expectedQuestions": 500,
+  "failedSearches": 2,
+  "k": 10,
+  "workers": 4,
+  "llm": {
+    "model": "llama-3.3-70b-instruct",
+    "calls": 998,
+    "prompt": 177045,
+    "completion": 29546
+  },
+  "accuracy": 0.108,
+  "byType": {
+    "temporal-reasoning": {
+      "n": 127,
+      "correct": 18
+    },
+    "abstention": {
+      "n": 30,
+      "correct": 26
+    },
+    "multi-session": {
+      "n": 121,
+      "correct": 1
+    },
+    "knowledge-update": {
+      "n": 72,
+      "correct": 2
+    },
+    "single-session-preference": {
+      "n": 30,
+      "correct": 2
+    },
+    "single-session-assistant": {
+      "n": 56,
+      "correct": 4
+    },
+    "single-session-user": {
+      "n": 64,
+      "correct": 1
+    }
+  },
+  "wallSeconds": 1206.3877863750001,
+  "ingestP50Ms": 4439.149291999871,
+  "searchP50Ms": 0.7848749998956919,
+  "searchP95Ms": 1.5835420000366867,
+  "rssPeakBytes": 37323472,
+  "systemRssPeakBytes": 367493120,
+  "date": "2026-10-24T12:25:31.272Z"
+}

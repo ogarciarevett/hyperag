@@ -1,0 +1,110 @@
+name: ci
+on:
+  pull_request:
+  push:
+    branches: [main]
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: pgvector/pgvector:pg18@sha256:2358fcba361ed2233a5ed81b5fe4ca779ccb304120ce531a3bf51c0ed7e2bc11
+        env:
+          POSTGRES_USER: hyperag
+          POSTGRES_PASSWORD: fake-test-only
+          POSTGRES_DB: hyperag
+        ports: ["55432:5432"]
+        options: --health-cmd "pg_isready -U hyperag" --health-interval 2s --health-retries 30
+      neo4j:
+        image: neo4j:5.26.28-community@sha256:ff32db30b2baff97971e441b46bfd9c832c1b62c970398ef579244c06b21d357
+        env:
+          NEO4J_AUTH: neo4j/fake-test-only
+        ports: ["57474:7474"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.3
+      - run: bun install --frozen-lockfile
+      - run: bunx tsc --noEmit -p tsconfig.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: bun run build
+      - run: node scripts/package-smoke.mjs . "$(npm pack --ignore-scripts --silent)"
+      - run: python3 -I eval/public/test_readme_table.py
+      - run: python3 -I eval/public/test_benchmark_charts.py
+      - run: python3 -I eval/public/benchmark_charts.py --check
+      - run: python3 -I scripts/test_install.py
+      - run: python3 -I scripts/test_homebrew_formula.py
+      - uses: actions/cache@v4
+        with:
+          path: node_modules/@huggingface/transformers/.cache
+          key: hf-models-e5small-761b726-bgereranker-280bcc2
+      - name: wait for neo4j
+        # The root page answers before the Query API accepts queries: wait for a real query, or fail.
+        run: |
+          for i in $(seq 1 90); do
+            # The Query API answers 202 even when the query fails: require the result itself.
+            curl -sf -u neo4j:fake-test-only -H 'content-type: application/json' -d '{"statement":"RETURN 1"}' "${HYPERAG_NEO4J_URL:-http://127.0.0.1:57474}/db/neo4j/query/v2" | grep -Eq '"values": *\[ *\[ *1 *\] *\]' && exit 0
+            sleep 2
+          done
+          echo "neo4j did not accept queries" && exit 1
+      - run: bun test --timeout 180000
+  rust:
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: pgvector/pgvector:pg18@sha256:2358fcba361ed2233a5ed81b5fe4ca779ccb304120ce531a3bf51c0ed7e2bc11
+        env:
+          POSTGRES_USER: hyperag
+          POSTGRES_PASSWORD: fake-test-only
+          POSTGRES_DB: hyperag
+        ports: ["55432:5432"]
+        options: --health-cmd "pg_isready -U hyperag" --health-interval 2s --health-retries 30
+      neo4j:
+        image: neo4j:5.26.28-community@sha256:ff32db30b2baff97971e441b46bfd9c832c1b62c970398ef579244c06b21d357
+        env:
+          NEO4J_AUTH: neo4j/fake-test-only
+        ports: ["57474:7474"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.99.0
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            target
+            ~/.cache/hyperag/models
+          key: rust-${{ hashFiles('Cargo.lock') }}
+      - run: cargo build --release -p hyperag
+      - run: cargo test --release -p hyperag
+      - name: crate package includes its runtime assets
+        run: |
+          cargo package --list --locked --manifest-path crates/hyperag/Cargo.toml > /tmp/crate-files.txt
+          grep -qx 'migrations/0001_init.sql' /tmp/crate-files.txt
+          grep -qx 'migrations/0002_settings.sql' /tmp/crate-files.txt
+          grep -qx 'LICENSE' /tmp/crate-files.txt
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.3
+      - run: bun install --frozen-lockfile
+      - name: wait for neo4j
+        # The root page answers before the Query API accepts queries: wait for a real query, or fail.
+        run: |
+          for i in $(seq 1 90); do
+            # The Query API answers 202 even when the query fails: require the result itself.
+            curl -sf -u neo4j:fake-test-only -H 'content-type: application/json' -d '{"statement":"RETURN 1"}' "${HYPERAG_NEO4J_URL:-http://127.0.0.1:57474}/db/neo4j/query/v2" | grep -Eq '"values": *\[ *\[ *1 *\] *\]' && exit 0
+            sleep 2
+          done
+          echo "neo4j did not accept queries" && exit 1
+      - name: scenarios against the Rust service
+        run: |
+          HYPERAG_SERVICE_CMD="target/release/hyperag serve" bun eval/scenarios.ts --hyperag http --build rust --systems hyperag --out /tmp/scenarios.json | tee /tmp/out.txt
+          grep -q "hyperag-http-rust: 13/13" /tmp/out.txt
+      - name: model switch under concurrent writes
+        run: HYPERAG_SERVICE_CMD="target/release/hyperag serve" bun eval/switch-race.ts
+      - name: MCP end to end against the Rust service
+        run: HYPERAG_SERVICE_CMD="target/release/hyperag serve" bun eval/mcp-smoke.ts
+      - name: recent context and harness hooks
+        run: HYPERAG_SERVICE_CMD="target/release/hyperag serve" bun eval/hooks-smoke.ts

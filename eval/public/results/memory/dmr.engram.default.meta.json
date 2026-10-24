@@ -1,0 +1,36 @@
+{
+  "system": "engram",
+  "version": "engram 3.3.2",
+  "profile": "default",
+  "config": {
+    "transport": "mcp stdio",
+    "match_mode": "all (default)"
+  },
+  "bench": "dmr",
+  "units": 500,
+  "questions": 500,
+  "expectedQuestions": 500,
+  "failedSearches": 0,
+  "k": 10,
+  "workers": 4,
+  "llm": {
+    "model": "llama-3.3-70b-instruct",
+    "calls": 1000,
+    "prompt": 156172,
+    "completion": 27979
+  },
+  "accuracy": 0.03,
+  "byType": {
+    "dmr": {
+      "n": 500,
+      "correct": 15
+    }
+  },
+  "wallSeconds": 262.72658141600004,
+  "ingestP50Ms": 574.945458000002,
+  "searchP50Ms": 1.0583340000011958,
+  "searchP95Ms": 1.6449999999895226,
+  "rssPeakBytes": 48399080,
+  "systemRssPeakBytes": 287834112,
+  "date": "2026-10-24T00:59:08.693Z"
+}

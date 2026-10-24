@@ -1,0 +1,63 @@
+{
+  "system": "hyperag",
+  "version": "0.1.0",
+  "profile": "nemotron+nvrerank",
+  "config": {
+    "embedding": {
+      "model": "nvidia/Nemotron-3.5-Embed-8B-BF16#first-1024-dims",
+      "revision": "781e779ee4ca9c2d2a4f38321993556baeab49a1",
+      "dimensions": 1024,
+      "normalized": true,
+      "preprocessing": "server /v2/embed, input_type query|document, truncate END; mean pooling; first 1024 of 4096 dims, re-normalised"
+    },
+    "reranker": "nvidia/Nemotron-3.5-Rerank-8B-BF16@f88f8d9104726747791283ab156d2fcdb29e90a7",
+    "rrfK": 60,
+    "graph": null
+  },
+  "bench": "locomo",
+  "units": 10,
+  "questions": 1986,
+  "expectedQuestions": 1986,
+  "failedSearches": 0,
+  "k": 10,
+  "workers": 2,
+  "llm": {
+    "model": "llama-3.3-70b-instruct",
+    "calls": 1986,
+    "prompt": 1291786,
+    "completion": 23891
+  },
+  "accuracy": "score_locomo.py",
+  "wallSeconds": 360.90667554199996,
+  "ingestP50Ms": 27386.173833000008,
+  "searchP50Ms": 6408.679416999978,
+  "searchP95Ms": 12407.437458,
+  "rssPeakBytes": 47973216,
+  "systemRssPeakBytes": 183291085,
+  "date": "2026-10-24T06:34:11.699Z",
+  "locomo": {
+    "f1_cat1_4": 0.5101,
+    "per_category": {
+      "1": {
+        "n": 282,
+        "f1": 0.4142
+      },
+      "2": {
+        "n": 321,
+        "f1": 0.3612
+      },
+      "3": {
+        "n": 96,
+        "f1": 0.1988
+      },
+      "4": {
+        "n": 841,
+        "f1": 0.6347
+      },
+      "5": {
+        "n": 446,
+        "f1": 0.8094
+      }
+    }
+  }
+}

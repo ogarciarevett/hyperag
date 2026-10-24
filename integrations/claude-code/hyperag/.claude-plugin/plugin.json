@@ -1,0 +1,8 @@
+{
+  "name": "hyperag",
+  "description": "Shared memory and retrieval for AI agents: recent project memory at session start, prompts saved, MCP tools for search, ingest and provenance.",
+  "version": "0.2.0",
+  "author": { "name": "ogarciarevett" },
+  "repository": "https://github.com/ogarciarevett/hyperag",
+  "license": "Apache-2.0"
+}

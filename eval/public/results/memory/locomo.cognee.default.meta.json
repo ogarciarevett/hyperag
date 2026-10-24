@@ -1,0 +1,58 @@
+{
+  "system": "cognee",
+  "version": "cognee 1.6.5, ladybug 0.19.0, litellm 1.106.2",
+  "profile": "default",
+  "config": {
+    "pipeline": "add + cognify (defaults)",
+    "search": "SearchType.CHUNKS, top_k",
+    "stores": "defaults (sqlite, lancedb, ladybug graph)",
+    "llm": "shared endpoint via provider custom",
+    "embedder": "openai_compatible BAAI/bge-small-en-v1.5"
+  },
+  "bench": "locomo",
+  "units": 10,
+  "questions": 1986,
+  "expectedQuestions": 1986,
+  "failedSearches": 0,
+  "k": 10,
+  "workers": 4,
+  "llm": {
+    "model": "llama-3.3-70b-instruct",
+    "calls": 1986,
+    "prompt": 1218528,
+    "completion": 22152
+  },
+  "accuracy": "score_locomo.py",
+  "wallSeconds": 2379.9932347920003,
+  "ingestP50Ms": 700911.313,
+  "searchP50Ms": 6068.685540999984,
+  "searchP95Ms": 13322.271042000037,
+  "rssPeakBytes": 27198136,
+  "systemRssPeakBytes": 1478426624,
+  "date": "2026-10-24T00:06:04.035Z",
+  "locomo": {
+    "f1_cat1_4": 0.4111,
+    "per_category": {
+      "1": {
+        "n": 282,
+        "f1": 0.2902
+      },
+      "2": {
+        "n": 321,
+        "f1": 0.3135
+      },
+      "3": {
+        "n": 96,
+        "f1": 0.1365
+      },
+      "4": {
+        "n": 841,
+        "f1": 0.5203
+      },
+      "5": {
+        "n": 446,
+        "f1": 0.8475
+      }
+    }
+  }
+}

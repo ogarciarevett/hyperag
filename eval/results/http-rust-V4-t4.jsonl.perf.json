@@ -1,0 +1,17 @@
+{
+  "build": "rust",
+  "variant": "V4",
+  "memory": "shared",
+  "database": "evalhttp_rust_e5_teams",
+  "serviceStartupMs": 1829.0245,
+  "ingest": {
+    "documents": 1536,
+    "ingestMs": 37956.473875,
+    "graphEdges": 1248,
+    "graphMs": 17721.758875
+  },
+  "throughputQps": {
+    "c1": 3.811477413807694
+  },
+  "serviceRssPeakBytes": 1658290176
+}
