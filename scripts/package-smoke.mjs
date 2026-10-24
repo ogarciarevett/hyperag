@@ -24,7 +24,7 @@ try {
   await mkdir(join(temp, "node_modules"));
   await symlink(root, join(temp, "node_modules/hyperag"), "dir");
   await writeFile(join(temp, "consumer.mts"), 'import { Hyperag, createPostgresStore } from "hyperag";\nvoid Hyperag; void createPostgresStore;\n');
-  const check = spawnSync(process.execPath, [join(root, "node_modules/typescript/bin/tsc"), "--noEmit", "--strict", "--skipLibCheck", "--module", "NodeNext", "--moduleResolution", "NodeNext", "--target", "ES2022", join(temp, "consumer.mts")], { encoding: "utf8" });
+  const check = spawnSync(process.execPath, [join(root, "node_modules/typescript/bin/tsc"), "--ignoreConfig", "--noEmit", "--strict", "--skipLibCheck", "--module", "NodeNext", "--moduleResolution", "NodeNext", "--target", "ES2022", join(temp, "consumer.mts")], { encoding: "utf8" });
   assert.equal(check.status, 0, check.stdout + check.stderr);
 } finally {
   await rm(temp, { recursive: true, force: true });

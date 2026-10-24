@@ -21,15 +21,20 @@ jobs:
           NEO4J_AUTH: neo4j/fake-test-only
         ports: ["57474:7474"]
     steps:
-      - uses: actions/checkout@v5
-      - uses: oven-sh/setup-bun@v2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24.22.1"
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+      - name: Bootstrap patched Python trust tooling
+        run: sh scripts/bootstrap-python-ca.sh python
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: 1.4.3
       - run: bun install --frozen-lockfile
       - run: bunx tsc --noEmit -p tsconfig.json
-      - uses: actions/setup-node@v5
-        with:
-          node-version: '22'
       - run: bun run build
       - run: node scripts/package-smoke.mjs . "$(npm pack --ignore-scripts --silent)"
       - run: python3 -I eval/public/test_readme_table.py
@@ -37,7 +42,7 @@ jobs:
       - run: python3 -I eval/public/benchmark_charts.py --check
       - run: python3 -I scripts/test_install.py
       - run: python3 -I scripts/test_homebrew_formula.py
-      - uses: actions/cache@v6.1.0
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: node_modules/@huggingface/transformers/.cache
           key: hf-models-e5small-761b726-bgereranker-280bcc2
@@ -68,9 +73,14 @@ jobs:
           NEO4J_AUTH: neo4j/fake-test-only
         ports: ["57474:7474"]
     steps:
-      - uses: actions/checkout@v5
-      - uses: dtolnay/rust-toolchain@1.99.0
-      - uses: actions/cache@v6.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24.22.1"
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable (2026-10-16; composite)
+        with:
+          toolchain: "1.99.0"
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/.cargo/registry
@@ -85,7 +95,7 @@ jobs:
           grep -qx 'migrations/0001_init.sql' /tmp/crate-files.txt
           grep -qx 'migrations/0002_settings.sql' /tmp/crate-files.txt
           grep -qx 'LICENSE' /tmp/crate-files.txt
-      - uses: oven-sh/setup-bun@v2
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: 1.4.3
       - run: bun install --frozen-lockfile

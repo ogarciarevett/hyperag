@@ -95,6 +95,15 @@ Graph experiments use two deterministic conversation rules: link each turn to it
 
 Postgres 18 with pgvector stores versions, grants, BM25 statistics and separate vector indexes per embedding space. Neo4j 5.26 Community supplies typed graph expansion. The default model slots are pinned EmbeddingGemma 2 q8 and bge-reranker-v2-m3 q8; `hyperag models recommend` suggests alternatives for the resources free on your machine. Hyperag returns evidence; your application supplies the answer model.
 
+## Developer tooling
+
+The TypeScript SDK/tooling requires Node 24.22.1 and TypeScript 7.0.2.
+Optional Python benchmark environments require uv >=0.13.4 and use the
+CA constraints in `eval/public/python-ca-constraints.txt`. Run
+`sh scripts/bootstrap-python-ca.sh python3` with Python >=3.10 to bootstrap
+hash-verified pip 26.2.2, certifi >=2026.10.19 and uv >=0.13.4 before package downloads.
+This does not rerun or change recorded benchmark results.
+
 ## Docs
 
 [Install](docs/install.md) · [Concepts](docs/concepts.md) · [Configuration](docs/configuration.md) · [API](docs/api.md) · [MCP](docs/mcp.md) · [Hosting](docs/cloud.md) · [Export and import](docs/export.md) · [Models](docs/models.md) · [Architecture](docs/architecture.md) · [Status and limits](docs/status.md) · [FAQ](docs/faq.md) · [Contributing](CONTRIBUTING.md)

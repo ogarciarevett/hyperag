@@ -3,7 +3,7 @@ find() mode "auto" (lexical when no OpenAI key is set). One .mv2 file per namesp
 Semantic mode is blocked on this SDK version: see SYSTEMS.md.
 
   uv venv --python 3.12 eval/public/.venv-memvid
-  uv pip install --python eval/public/.venv-memvid/bin/python memvid-sdk==2.0.160
+  uv pip install -c eval/public/python-ca-constraints.txt --python eval/public/.venv-memvid/bin/python memvid-sdk==2.0.160
 """
 import os
 from importlib.metadata import version
