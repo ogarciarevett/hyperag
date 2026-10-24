@@ -7,7 +7,7 @@ search type (an LLM answer) has no ranked list. The LLM is the shared endpoint t
 One ingest() call is one cognify() (a session for the memory benchmarks, a batch for BEIR). Each
 doc is one data item with its id in external_metadata, so chunks map back to docs.
 
-  uv venv --python 3.12 eval/public/.venv-cognee && uv pip install --python eval/public/.venv-cognee/bin/python cognee==1.6.5
+  uv venv --python 3.12 eval/public/.venv-cognee && uv pip install -c eval/public/python-ca-constraints.txt --python eval/public/.venv-cognee/bin/python cognee==1.6.5
   brew install openssl@3   # the ladybug wheel links /opt/homebrew/opt/openssl@3
 """
 import asyncio

@@ -3,7 +3,7 @@ snap-research/locomo@3eb6f2c task_eval/evaluation.py (normalize_answer, Porter-s
 category 1 split into sub-answers; category 3 keeps the first ';' answer) and gpt_utils.py
 get_cat_5_answer (category 5: the chosen option must be "Not mentioned").
 
-  uv pip install --python .venv-bench/bin/python nltk==3.9.2 regex==2025.11.3
+  uv pip install -c eval/public/python-ca-constraints.txt --python .venv-bench/bin/python nltk==3.9.2 regex==2025.11.3
   .venv-bench/bin/python -I eval/public/score_locomo.py eval/public/results/memory/locomo.*.jsonl
 """
 import json

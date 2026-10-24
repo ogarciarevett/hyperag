@@ -8,7 +8,7 @@ Memories carry no source ids, so the adapter records which doc ids each memory k
 updated from (one manager call per namespace at a time keeps that exact). A BEIR doc is one
 call; docs with a speaker in one ingest() call are one session and one call.
 
-  uv venv --python 3.12 eval/public/.venv-langmem && uv pip install --python eval/public/.venv-langmem/bin/python langmem==0.0.30
+  uv venv --python 3.12 eval/public/.venv-langmem && uv pip install -c eval/public/python-ca-constraints.txt --python eval/public/.venv-langmem/bin/python langmem==0.0.30
 """
 from importlib.metadata import version
 

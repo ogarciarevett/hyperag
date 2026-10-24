@@ -8,7 +8,7 @@ session and go in one add() as a message list (per-session extraction). Each mem
 doc ids of its source in metadata, so hits map back to docs.
 
   uv venv --python 3.12 eval/public/.venv-mem0
-  uv pip install --python eval/public/.venv-mem0/bin/python "mem0ai[nlp]==2.2.1" \
+  uv pip install -c eval/public/python-ca-constraints.txt --python eval/public/.venv-mem0/bin/python "mem0ai[nlp]==2.2.1" \
     "en_core_web_sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl"
 """
 import asyncio
