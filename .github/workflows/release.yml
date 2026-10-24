@@ -28,11 +28,12 @@ jobs:
         with:
           targets: ${{ matrix.target }}
       - name: cache the source-built ONNX runtime
+        id: onnx-cache
         if: matrix.source_ort
-        uses: actions/cache@v6.1.0
+        uses: actions/cache/restore@v6.1.0
         with:
           path: ${{ runner.temp }}/hyperag-onnx/lib
-          key: onnx-api24-v1-${{ runner.os }}-${{ matrix.target }}-3a728b75062256951b6e19ce718907cf1a1d4cf0
+          key: onnx-api24-v2-${{ runner.os }}-${{ matrix.target }}-3a728b75062256951b6e19ce718907cf1a1d4cf0
       - name: build a compatible static ONNX CPU runtime
         if: matrix.source_ort
         shell: bash
@@ -40,6 +41,12 @@ jobs:
           python3 scripts/build-onnx-runtime.py --out "$RUNNER_TEMP/hyperag-onnx"
           echo "ORT_LIB_PATH=$RUNNER_TEMP/hyperag-onnx/lib" >> "$GITHUB_ENV"
           echo "ORT_PREFER_DYNAMIC_LINK=0" >> "$GITHUB_ENV"
+      - name: save the validated native runtime before linking Rust
+        if: matrix.source_ort && steps.onnx-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6.1.0
+        with:
+          path: ${{ runner.temp }}/hyperag-onnx/lib
+          key: onnx-api24-v2-${{ runner.os }}-${{ matrix.target }}-3a728b75062256951b6e19ce718907cf1a1d4cf0
       - run: cargo build --release --locked -p hyperag --target ${{ matrix.target }}
       - name: release CLI smoke
         run: python scripts/release-smoke.py target/${{ matrix.target }}/release/hyperag${{ runner.os == 'Windows' && '.exe' || '' }}

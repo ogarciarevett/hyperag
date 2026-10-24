@@ -24,7 +24,7 @@ def main():
     out = args.out.resolve()
     library = out / "lib" / "libonnxruntime.a"
     manifest = out / "lib" / "build.json"
-    identity = {"revision": REVISION, "system": platform.system(), "machine": platform.machine()}
+    identity = {"format": 2, "revision": REVISION, "system": platform.system(), "machine": platform.machine()}
     if manifest.exists() and library.exists():
         cached = json.loads(manifest.read_text())
         if all(cached.get(key) == value for key, value in identity.items()):
@@ -44,11 +44,13 @@ def main():
     run("git", "-C", source, "checkout", "--detach", "FETCH_HEAD")
     command = [sys.executable, source / "tools/ci_build/build.py", "--build_dir", build,
                "--config", "Release", "--update", "--build", "--parallel", "2", "--skip_tests",
-               "--cmake_extra_defines", "onnxruntime_BUILD_UNIT_TESTS=OFF"]
+               "--cmake_extra_defines", "onnxruntime_BUILD_UNIT_TESTS=OFF", "BUILD_SHARED_LIBS=OFF"]
     run(*command)
+    # Upstream excludes RE2 from ALL; static-only builds do not otherwise build it.
+    run("cmake", "--build", build / "Release", "--config", "Release", "--target", "re2", "--parallel", "2")
     archives = sorted((build / "Release").rglob("*.a"))
-    if not archives:
-        raise RuntimeError("ONNX build produced no static archives")
+    if not any(path.name == "libre2.a" for path in archives):
+        raise RuntimeError("ONNX static runtime is incomplete: libre2.a is missing")
     library.parent.mkdir(parents=True, exist_ok=True)
     if library.exists():
         library.unlink()
