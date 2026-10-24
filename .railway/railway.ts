@@ -1,11 +1,7 @@
-// Hyperag on Railway: the default template (Postgres with pgvector, Neo4j graph on, the Hyperag
-// service with its local models). Only the Hyperag service may get a public domain; Postgres and
-// Neo4j are reached over the private network. Review with `railway config plan` before any apply;
-// nothing here has been applied. Secrets are never in this file: `preserve()` keeps values set in
-// Railway (set POSTGRES_PASSWORD and NEO4J_PASSWORD right after the first apply; each redeploys). Composed values
-// (the Postgres URL, NEO4J_AUTH) use Railway's `${{service.VARIABLE}}` variable syntax; the first
-// `railway config plan` must show them resolving.
-import { defineRailway, github, image, preserve, project, service, volume } from "railway/iac";
+// Source blueprint for Railway's template composer; see docs/cloud.md.
+// secret() expressions run when a template is deployed, not during ordinary IaC apply.
+// Only Hyperag gets public HTTPS in the composer; neither database gets a domain or TCP proxy.
+import { defineRailway, github, image, project, service, volume } from "railway/iac";
 
 export default defineRailway(() => {
   // The same pinned image as docker-compose.yml, so pgvector is present.
@@ -14,19 +10,21 @@ export default defineRailway(() => {
     env: {
       POSTGRES_USER: "hyperag",
       POSTGRES_DB: "hyperag",
-      POSTGRES_PASSWORD: preserve(),
-      // The volume's root holds a lost+found directory, so the cluster lives one level down.
-      PGDATA: "/var/lib/postgresql/data/pgdata",
+      POSTGRES_PASSWORD: '${{secret(64, "abcdef0123456789")}}',
+      // Postgres 18 stores clusters below the versioned directory.
+      PGDATA: "/var/lib/postgresql/18/docker",
     },
-    volumeMounts: { "/var/lib/postgresql/data": volume("pgdata", { sizeMB: 5120 }) },
+    volumeMounts: { "/var/lib/postgresql": volume("pgdata", { sizeMB: 5120 }) },
   });
 
   const neo4j = service("neo4j", {
     source: image("neo4j:5.26.28-community@sha256:ff32db30b2baff97971e441b46bfd9c832c1b62c970398ef579244c06b21d357"),
     env: {
-      // One password, set here; NEO4J_AUTH and Hyperag's login both read it.
-      NEO4J_PASSWORD: preserve(),
+      // Generate once; NEO4J_AUTH and Hyperag both reference this same value.
+      NEO4J_PASSWORD: '${{secret(64, "abcdef0123456789")}}',
       NEO4J_AUTH: "neo4j/${{NEO4J_PASSWORD}}",
+      NEO4J_server_http_listen__address: "[::]:7474",
+      NEO4J_server_bolt_listen__address: "[::]:7687",
       NEO4J_server_memory_heap_max__size: "512m",
       NEO4J_server_memory_pagecache_size: "256m",
     },
@@ -44,8 +42,9 @@ export default defineRailway(() => {
       HYPERAG_NEO4J_URL: "http://${{neo4j.RAILWAY_PRIVATE_DOMAIN}}:7474",
       HYPERAG_NEO4J_USER: "neo4j",
       HYPERAG_NEO4J_PASSWORD: neo4j.env.NEO4J_PASSWORD,
-      HYPERAG_ADMINS: preserve(),
-      // Railway's private network is IPv6; "::" listens on both, so the in-process MCP call to 127.0.0.1 still works.
+      // This is a principal name, not a credential; issue its token in the service console.
+      HYPERAG_ADMINS: "admin",
+      // Listen on IPv6 and IPv4, including the local MCP callback.
       HYPERAG_HOST: "::",
       HYPERAG_PORT: "7480",
       PORT: "7480",
