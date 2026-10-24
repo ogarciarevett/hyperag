@@ -85,11 +85,15 @@ jobs:
   installer:
     if: github.event_name == 'release'
     needs: publish
-    runs-on: ubuntu-24.04
-    container: ubuntu:24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, ubuntu-22.04-arm]
+    runs-on: ${{ matrix.os }}
+    container: ubuntu:22.04
     steps:
       - name: install prerequisites in a clean container
-        run: apt-get update && apt-get install -y --no-install-recommends ca-certificates curl tar coreutils
+        run: apt-get update && apt-get install -y --no-install-recommends ca-certificates curl tar coreutils libstdc++6
       - name: install the published binary and verify it
         env:
           HYPERAG_VERSION: ${{ github.event.release.tag_name }}
