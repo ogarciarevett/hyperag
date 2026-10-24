@@ -12,4 +12,4 @@ Homebrew audits and installs a formula by its tapped name. For a new tap, commit
 
 If the tap is already installed, update the formula in the checkout reported by `brew --repo ogarciarevett/tap` instead of tapping a different clone URL. Preserve local changes before updating it.
 
-Run `brew audit --strict --online ogarciarevett/tap/hyperag` and `brew install --build-from-source ogarciarevett/tap/hyperag` against the newly generated formula, then commit any remaining change and push from that tap checkout. Set its origin to `https://github.com/ogarciarevett/homebrew-tap.git` for future updates. The expected user command after publication is `brew install ogarciarevett/tap/hyperag`.
+Run `brew audit --strict --online ogarciarevett/tap/hyperag` and `brew install --build-from-source ogarciarevett/tap/hyperag` against the newly generated formula, then commit any remaining change. Before pushing from that tap checkout, set its origin to `https://github.com/ogarciarevett/homebrew-tap.git` so publication and future updates use GitHub. The expected user command after publication is `brew install ogarciarevett/tap/hyperag`.
