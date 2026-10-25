@@ -8,7 +8,11 @@ import { type EmbeddingSpace, type Hit, HyperagError, type Memory } from "../typ
 const BM25_K1 = 1.2;
 const BM25_B = 0.75;
 
-const MIGRATION = new URL("../../crates/hyperag/migrations/0001_init.sql", import.meta.url);
+const MIGRATIONS = [
+  new URL("../../crates/hyperag/migrations/0001_init.sql", import.meta.url),
+  new URL("../../crates/hyperag/migrations/0002_settings.sql", import.meta.url),
+  new URL("../../crates/hyperag/migrations/0003_memory_text_limit.sql", import.meta.url),
+];
 
 type VersionRow = {
   id: string;
@@ -179,7 +183,7 @@ export function createPostgresStore(pool: Pool) {
 
   return {
     async migrate() {
-      await pool.query(readFileSync(MIGRATION, "utf8"));
+      for (const migration of MIGRATIONS) await pool.query(readFileSync(migration, "utf8"));
     },
 
     async scopes(principal: string, permission: "read" | "write"): Promise<string[]> {

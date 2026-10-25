@@ -18,9 +18,10 @@ macro_rules! sql {
     ($($t:tt)*) => { sqlx::AssertSqlSafe(format!($($t)*)) };
 }
 
-const MIGRATIONS: [&str; 2] = [
+const MIGRATIONS: [&str; 3] = [
     include_str!("../migrations/0001_init.sql"),
     include_str!("../migrations/0002_settings.sql"),
+    include_str!("../migrations/0003_memory_text_limit.sql"),
 ];
 // Okapi BM25 constants, as the original agent memory store uses them.
 const BM25_K1: f64 = 1.2;

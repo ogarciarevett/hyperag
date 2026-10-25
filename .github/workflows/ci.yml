@@ -94,6 +94,7 @@ jobs:
           cargo package --list --locked --manifest-path crates/hyperag/Cargo.toml > /tmp/crate-files.txt
           grep -qx 'migrations/0001_init.sql' /tmp/crate-files.txt
           grep -qx 'migrations/0002_settings.sql' /tmp/crate-files.txt
+          grep -qx 'migrations/0003_memory_text_limit.sql' /tmp/crate-files.txt
           grep -qx 'LICENSE' /tmp/crate-files.txt
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
