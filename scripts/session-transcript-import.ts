@@ -31,13 +31,14 @@ export async function importTranscripts(inputs: Input[], snapshot: string, call:
       const a = old.parsed.session, b = p.session;
       if (a.cwd && b.cwd && a.cwd !== b.cwd) throw new Error("conflicting source session cwd");
       a.cwd ??= b.cwd; a.model = b.model ?? a.model;
-      for (const k of ["startedAt", "lastEventAt", "endedAt"] as const) if (b[k] && (!a[k] || (k === "startedAt" ? Date.parse(b[k]!) < Date.parse(a[k]!) : Date.parse(b[k]!) > Date.parse(a[k]!)))) a[k] = b[k];
+      for (const k of ["startedAt", "firstEventAt", "lastEventAt", "endedAt"] as const) if (b[k] && (!a[k] || ((k === "startedAt" || k === "firstEventAt") ? Date.parse(b[k]!) < Date.parse(a[k]!) : Date.parse(b[k]!) > Date.parse(a[k]!)))) a[k] = b[k];
     }
   }
   const granted = new Set<string>();
   for (const [key, { source, parsed: p, files }] of sessions) {
     const s = p.session, c = counters[source]!, owner = ownership.get(s.id!);
     if (!owner?.project && !s.cwd) { c.skipped.missingProjectOrCwd = (c.skipped.missingProjectOrCwd ?? 0) + 1; continue; }
+    if (owner?.project && redact(owner.project) !== owner.project) throw new Error("unsafe project mapping");
     const scope = owner?.project ? `project:${owner.project.toLowerCase()}` : `project:cwd-${hash(s.cwd!)}`;
     if (!granted.has(scope)) {
       for (const permission of ["read", "write"]) await call("POST", "/v1/grants", { principal: "personal-import", scope, permission });
@@ -56,7 +57,7 @@ export async function importTranscripts(inputs: Input[], snapshot: string, call:
       if (old.missing) c.created++; else c.updated++;
       return id;
     };
-    const session = { ...s, cwd: s.cwd ? redact(s.cwd) : null, model: s.model ? redact(s.model) : null, project: owner?.project ? redact(owner.project) : null };
+    const session = { ...s, id: redact(s.id!), cwd: s.cwd ? redact(s.cwd) : null, model: s.model ? redact(s.model) : null, project: owner?.project ? redact(owner.project) : null };
     const sessionId = await save(key, `Session ${source}\n${JSON.stringify(session)}`, "session", { transcript: { source, ...session, sourceFiles: [...new Set(files)].sort() } });
     c.sessions++;
     for (const id of owner?.memories ?? []) await call("POST", "/v1/relations", { from: sessionId, to: id, type: "RELATED" });
@@ -65,7 +66,7 @@ export async function importTranscripts(inputs: Input[], snapshot: string, call:
       const identity = `${key}:prompt:${hash(JSON.stringify(prompt))}`;
       if (seen.has(identity)) { c.skipped.duplicateFilePrompt = (c.skipped.duplicateFilePrompt ?? 0) + 1; continue; }
       seen.add(identity);
-      const id = await save(identity, `User prompt\n${prompt.text}`, "user_prompt", { transcript: { source, sessionId: s.id, timestamp: prompt.timestamp, project: session.project, cwd: session.cwd } });
+      const id = await save(identity, `User prompt\n${prompt.text}`, "user_prompt", { transcript: { source, sessionId: session.id, timestamp: prompt.timestamp, project: session.project, cwd: session.cwd } });
       await call("POST", "/v1/relations", { from: id, to: sessionId, type: "RELATED" });
       c.prompts++;
     }

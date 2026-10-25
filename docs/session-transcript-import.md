@@ -22,10 +22,15 @@ version updates make replay skip unchanged memories. Every written record is rea
 
 The importer excludes tool outputs, generated context, oversized records/prompts and
 mirrored user events. Conventional credentials, private keys, phone numbers, environment
-dumps and process argument lines are redacted before any prompt is stored. Conservative
+dumps and process argument lines are redacted before any prompt is stored. Inputs
+containing structured env/argv dumps are replaced as a whole; arbitrary nested values
+are never salvaged. Credential flags support both space and equals forms, and URL
+userinfo is removed for any scheme. National phone coverage includes Spanish nine-digit
+6/7/9 numbers, UK 0-prefixed numbers, formatted North American numbers and labeled numbers. Conservative
 opaque-identifier redaction may also remove non-secret identifiers. This is a bounded
 local redaction policy; review new source formats before using them. No raw text is logged.
-Missing session IDs or project/cwd mappings are counted as skips. Missing end times stay
+Unmatched user events survive partially mirrored streams; only corresponding mirrors are
+suppressed. Missing session IDs or project/cwd mappings are counted as skips. Missing end times stay
 null; the final event time is recorded separately and is not treated as session closure.
 The model field is the last observed model; no missing model or timestamps are invented.
 
