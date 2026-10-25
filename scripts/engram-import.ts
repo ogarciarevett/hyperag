@@ -143,7 +143,7 @@ export async function importSource(snapshot: ReturnType<typeof readSource>, call
   for (const o of obs) {
     const e = await call("GET", `/v1/memories/${encodeURIComponent(storedId(o))}/explain`);
     const versions = e.versions as Array<{ text: string; kind: string; metadata: { engram?: { id: number } } }> | undefined;
-    if (versions?.length === expectedVersions.get(storedId(o))
+    if (versions && versions.length === expectedVersions.get(storedId(o))
         && versions.at(-1)?.text === textOf(o.title, o.content)
         && versions.at(-1)?.kind === expectedKinds.get(storedId(o)) && versions.at(-1)?.metadata?.engram?.id === o.id) verified++;
   }
