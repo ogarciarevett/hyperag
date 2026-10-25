@@ -35,7 +35,7 @@ test("P2: partly mirrored streams keep unmatched user events", () => {
   expect(p.skipped.mirroredUserEvent).toBe(1);
 });
 
-async function rejectStorageMarkers(prompts: string[], markers: string[]) {
+async function rejectStorageMarkers(prompts: string[], markers: string[], exact = false) {
   const dir=mkdtempSync(join(tmpdir(),"credential-classes-")),dbPath=join(dir,"source.db"),path=join(dir,"source.jsonl");
   const db=new Database(dbPath);db.exec("create table sessions(id text,project text); create table observations(id integer,sync_id text,session_id text,scope text,project text,deleted_at text)");db.close();
   writeFileSync(path,jsonl([{type:"session_meta",payload:{id:"synthetic-classes",cwd:"/demo"}},...prompts.map((text,i)=>({type:"response_item",timestamp:`2026-01-01T00:00:${String(i).padStart(2,'0')}Z`,payload:{type:"message",role:"user",content:[{type:"input_text",text}]}}))]));
@@ -46,7 +46,7 @@ async function rejectStorageMarkers(prompts: string[], markers: string[]) {
     if(method==="GET")return memories.get(decodeURIComponent(route.slice(13,-8)))??{missing:true};
     const id=`${body.scope}/${body.id}`;memories.set(id,{id,currentVersion:1,versions:[{...body,version:1}]});writes++;return{id,version:1};
   };
-  try{await importTranscripts([{source:"codex",path}],dbPath,call);expect(writes).toBeGreaterThan(1);}finally{rmSync(dir,{recursive:true});}
+  try{await importTranscripts([{source:"codex",path}],dbPath,call);expect(writes).toBeGreaterThan(1);if(exact)expect([...memories.values()].filter(m=>m.versions[0].kind==="user_prompt").map(m=>m.versions[0].text)).toEqual(prompts.map(p=>`User prompt\n${p}`));}finally{rmSync(dir,{recursive:true});}
 }
 
 test("P1: authorization tails never reach outgoing storage", async () => {
@@ -56,7 +56,7 @@ test("P2: quoted phone string and numeric values never reach outgoing storage", 
   await rejectStorageMarkers(['{"phone":"2125550198"}', '{"PHONE":2125550199}'],['2125550198','2125550199']);
 });
 test("rule a: credential labels consume punctuation-rich values until whitespace or closing quote", async () => {
-  await rejectStorageMarkers(['Basic synthetic~basic-tail!value', 'token synthetic~token-tail%value', 'password synthetic~password-tail^value'],['basic-tail','token-tail','password-tail']);
+  await rejectStorageMarkers(['Basic synthetic~basic-tail!value', 'token: synthetic~token-tail%value', 'password=synthetic~password-tail^value'],['basic-tail','token-tail','password-tail']);
 });
 test("rule b: structured key names are case-insensitive and redact whole values", async () => {
   const keys=['phone','tel','mobile','password','secret','token','key','auth','credential','cookie','session'];
@@ -65,4 +65,15 @@ test("rule b: structured key names are case-insensitive and redact whole values"
 });
 test("rule c: unlabeled mixed alphanumeric tokens of twenty characters are removed", async () => {
   await rejectStorageMarkers(['Remember opaque value AbCdEfGhIj0123456789.'],['AbCdEfGhIj0123456789']);
+});
+
+test("ordinary prose with credential words survives storage byte for byte", async () => {
+  await rejectStorageMarkers([
+    "Please keep this session open and remember the key decision for the next review.",
+    "The monkey jumps over the branch while the author writes a note.",
+    "The session and token belong in our design notes.",
+    "Explain why the key and password matter to this story.",
+    "Discuss auth with the team before the next session.",
+    "The fields monkey=jumps and author=writes describe the story.",
+  ], [], true);
 });

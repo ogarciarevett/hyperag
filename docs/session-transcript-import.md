@@ -24,8 +24,11 @@ The importer excludes tool outputs, generated context, oversized records/prompts
 mirrored user events. Conventional credentials, private keys, phone numbers, environment
 dumps and process argument lines are redacted before any prompt is stored. Inputs
 containing structured env/argv dumps are replaced as a whole; arbitrary nested values
-are never salvaged. Credential labels consume whole values, including punctuation, up to whitespace or
-the closing quote. Quoted or bare phone/tel/mobile and credential key names are matched
+are never salvaged. Whole key names require explicit colon/equal or JSON quote-colon syntax; ordinary
+prose containing session, token, key, password or auth stays unchanged. Whitespace-only
+credential matching is reserved for Bearer/Basic and explicit authorization/cookie
+headers. Explicit labels consume whole values, including punctuation, up to whitespace
+or the closing quote. Quoted or bare phone/tel/mobile and credential key names are matched
 case-insensitively; nested credential objects are removed as whole blocks. A final
 pass removes 20+ character mixed letter/digit tokens (including token punctuation).
 Credential flags support both space and equals forms, and URL
