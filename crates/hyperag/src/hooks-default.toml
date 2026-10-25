@@ -1,0 +1,30 @@
+# Shared by every installed harness. Environment overrides: HYPERAG_URL, HYPERAG_SCOPE.
+url = "http://127.0.0.1:7480"
+# Name of an environment variable; never put the token itself in this file.
+token_env = "HYPERAG_TOKEN"
+# "project" derives project:<git-root-folder>; any other string is a fixed scope.
+scope = "project"
+# One overall hook budget, including reading stdin (100..2000 milliseconds).
+timeout_ms = 1500
+
+[events]
+session-start = true
+prompt = true
+session-end = true
+
+# Re-run install after changing event subscriptions. Runtime also checks these switches.
+[harnesses.claude-code]
+enabled = true
+events = ["session-start", "prompt", "session-end"]
+[harnesses.codex]
+enabled = true
+events = ["session-start", "prompt", "session-end"]
+[harnesses.cursor]
+enabled = true
+events = ["session-start", "prompt", "session-end"]
+[harnesses.gemini]
+enabled = true
+events = ["session-start", "prompt", "session-end"]
+[harnesses.kimi]
+enabled = true
+events = ["session-start", "prompt", "session-end"]

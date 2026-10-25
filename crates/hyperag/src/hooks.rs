@@ -28,40 +28,62 @@ pub fn scope_for(cwd: &Path) -> String {
 }
 
 pub async fn run(event: &str) -> i32 {
-    // Writes ignore errors (a closed stdout must not panic): the hook always exits 0.
+    run_for(event, None).await
+}
+
+pub async fn run_for(event: &str, harness: Option<&str>) -> i32 {
     use std::io::Write;
-    match handle(event).await {
-        Ok(out) => {
-            if !out.is_empty() {
-                let _ = writeln!(std::io::stdout(), "{out}");
-            }
+    let result: anyhow::Result<String> = async {
+        let config = crate::hook_setup::Config::load(&crate::hook_setup::home()?)?;
+        if let Some(name) = harness {
+            anyhow::ensure!(crate::hook_setup::HARNESSES.contains(&name), "unknown harness");
         }
+        anyhow::ensure!(crate::hook_setup::EVENTS.contains(&event), "unknown common hook event");
+        if !config.enabled(harness.unwrap_or(""), event) { return Ok(String::new()); }
+        tokio::time::timeout(std::time::Duration::from_millis(config.timeout_ms), handle(event, harness, &config)).await
+            .map_err(|_| anyhow::anyhow!("hook timed out"))?
+    }.await;
+    let out = match result {
+        Ok(text) => text,
         Err(e) => {
             let _ = writeln!(std::io::stderr(), "hyperag hook {event}: {e}");
+            String::new()
         }
-    }
+    };
+    let output = match harness {
+        Some("cursor") if event == "session-start" && !out.is_empty() => json!({"additional_context": out}).to_string(),
+        Some("gemini") if event == "session-start" && !out.is_empty() => json!({"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": out}}).to_string(),
+        Some("cursor") if event == "prompt" => json!({"continue": true}).to_string(),
+        Some("cursor" | "gemini") => "{}".into(),
+        _ => out,
+    };
+    if !output.is_empty() { let _ = writeln!(std::io::stdout(), "{output}"); }
     0
 }
 
-async fn handle(event: &str) -> anyhow::Result<String> {
+async fn handle(event: &str, harness: Option<&str>, config: &crate::hook_setup::Config) -> anyhow::Result<String> {
+    use tokio::io::AsyncReadExt;
     let mut raw = String::new();
-    std::io::Read::read_to_string(&mut std::io::stdin(), &mut raw)?;
+    // Bounded input and an outer deadline also protect malformed/incomplete stdin.
+    tokio::io::stdin().take(1_048_577).read_to_string(&mut raw).await?;
+    anyhow::ensure!(raw.len() <= 1_048_576, "hook input exceeds 1 MiB");
     let input: Value = if raw.trim().is_empty() { json!({}) } else { serde_json::from_str(&raw)? };
-    let cwd = match input["cwd"].as_str() {
+    let cwd_hint = input["cwd"].as_str().or_else(|| if harness == Some("cursor") { input["workspace_roots"][0].as_str() } else { None });
+    let cwd = match cwd_hint {
         Some(c) => std::path::PathBuf::from(c),
         None => std::env::current_dir()?,
     };
-    let scope = scope_for(&cwd);
-    let session = input["session_id"].as_str().unwrap_or("unknown").to_owned();
-    let base = std::env::var("HYPERAG_URL").unwrap_or_else(|_| "http://127.0.0.1:7480".into());
-    let token = std::env::var("HYPERAG_TOKEN").map_err(|_| anyhow::anyhow!("HYPERAG_TOKEN is not set"))?;
-    // Under the harness's hook timeouts (5 s and 10 s), so the hook can log its own error.
-    let http = reqwest::Client::builder().timeout(std::time::Duration::from_secs(4)).build()?;
+    let scope = std::env::var("HYPERAG_SCOPE").ok().filter(|s| !s.is_empty())
+        .unwrap_or_else(|| if config.scope == "project" { scope_for(&cwd) } else { config.scope.clone() });
+    let session = input["session_id"].as_str().or_else(|| input["conversation_id"].as_str()).unwrap_or("unknown").to_owned();
+    let base = std::env::var("HYPERAG_URL").unwrap_or_else(|_| config.url.clone());
+    let token = std::env::var(&config.token_env).map_err(|_| anyhow::anyhow!("{} is not set", config.token_env))?;
+    let http = reqwest::Client::builder().timeout(std::time::Duration::from_millis(config.timeout_ms)).build()?;
     let send = |req: reqwest::RequestBuilder| async move {
         let r = req.bearer_auth(&token).send().await?;
         let status = r.status();
         let body: Value = r.json().await.unwrap_or(Value::Null);
-        anyhow::ensure!(status.is_success(), "service answered {status}: {body}");
+        anyhow::ensure!(status.is_success(), "service answered {status}");
         Ok::<Value, anyhow::Error>(body)
     };
     match event {

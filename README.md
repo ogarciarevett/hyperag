@@ -121,3 +121,85 @@ This does not rerun or change recorded benchmark results.
 [Install](docs/install.md) · [Concepts](docs/concepts.md) · [Configuration](docs/configuration.md) · [API](docs/api.md) · [MCP](docs/mcp.md) · [Hosting](docs/cloud.md) · [Export and import](docs/export.md) · [Models](docs/models.md) · [Architecture](docs/architecture.md) · [Status and limits](docs/status.md) · [FAQ](docs/faq.md) · [Contributing](CONTRIBUTING.md)
 
 Apache-2.0. See [LICENSE](LICENSE) and [NOTICE](NOTICE).
+
+## Shared harness hooks
+
+With `hyperag` installed and `HYPERAG_TOKEN` set in the harness environment:
+
+```sh
+hyperag hooks install --harness all
+```
+
+Install merges hooks into existing user profiles. Missing profile directories and unknown
+harness names are skipped. Use `--harness claude-code,codex` to select targets or `--dry-run`
+to preview owned entries without writing or printing unrelated settings. `hyperag hooks status` checks recorded entries locally;
+it does not verify service connectivity or whether a harness has enabled/trusted them.
+`hyperag hooks uninstall` removes the recorded handlers and preserves unrelated settings
+and hooks, including handlers added later to the same group. Edited handlers are preserved.
+Both install and uninstall save unique sibling `*.hyperag-backup-*` copies before changes;
+keep those backups private because existing settings may contain credentials.
+
+Every handler runs the installed executable's absolute path with `hyperag hook <event>`.
+Re-run install after moving/upgrading the executable. Setup records ownership in
+`~/.config/hyperag/hooks-installed.json`; keep this file until uninstall completes.
+Avoid running an older plugin hook setup alongside these subscriptions to prevent duplicate events.
+
+The shared file is `~/.config/hyperag/hooks.toml` (`$XDG_CONFIG_HOME/hyperag/hooks.toml`
+when set). Install creates it with defaults; hooks also work when it is absent:
+
+```toml
+# Environment overrides: HYPERAG_URL and HYPERAG_SCOPE.
+url = "http://127.0.0.1:7480"
+# Environment variable NAME, never a literal token.
+token_env = "HYPERAG_TOKEN"
+# "project" => project:<lowercase-git-root-folder>; otherwise a fixed scope.
+scope = "project"
+# Overall deadline, including stdin, in milliseconds (100..2000).
+timeout_ms = 1500
+
+[events]
+session-start = true
+prompt = true
+session-end = true
+
+# Repeat for claude-code, codex, cursor, gemini, or kimi.
+[harnesses.codex]
+enabled = true
+events = ["session-start", "prompt", "session-end"]
+```
+
+All supported harnesses and events are enabled by default. Event/harness switches apply
+at runtime; re-run install to reconcile the native subscriptions. Session start fetches
+recent context, prompt stores up to 4,000 characters, and session end stores a marker.
+The token stays in the environment and is never copied into generated settings.
+Gemini's [environment redaction](https://geminicli.com/docs/hooks/best-practices/#sanitize-environment)
+filters token names. Setup adds only `token_env` to
+`security.environmentVariableRedaction.allowed`, retaining other allowance/block lists
+and the redaction switch. This exposes that variable to Gemini's local hook/tool processes;
+uninstall removes only an allowance added by this setup. Re-run install after changing
+`token_env`; pre-existing allowances are preserved.
+Malformed input, missing credentials, service errors and timeouts exit 0; Cursor and Gemini
+receive valid JSON, including on failure. Network work shares the overall deadline.
+These command adapters target local POSIX shells.
+
+| Harness | User config | Native events: start / prompt / end | Notes and current format docs |
+| --- | --- | --- | --- |
+| Claude Code | `~/.claude/settings.json` | `SessionStart` / `UserPromptSubmit` / `SessionEnd` | [Grouped command hooks](https://code.claude.com/docs/en/hooks); restart the session after setup. |
+| Codex | `~/.codex/config.toml` | `SessionStart` / `UserPromptSubmit` / `SessionEnd` | [Inline TOML hooks](https://learn.chatgpt.com/docs/hooks); review/trust new definitions in `/hooks`. `features.hooks = false` prevents execution. |
+| Cursor | `~/.cursor/hooks.json` | `sessionStart` / `beforeSubmitPrompt` / `sessionEnd` | [Version 1 command hooks](https://cursor.com/docs/hooks); [CLI lifecycle support](https://cursor.com/docs/cli/changelog) depends on the version. User hooks do not transfer to cloud agents. |
+| Gemini CLI | `~/.gemini/settings.json` | `SessionStart` / `BeforeAgent` / `SessionEnd` | [Grouped command hooks](https://geminicli.com/docs/hooks/); `hooksConfig.enabled = false` prevents execution. Native timeout values use milliseconds. |
+| Kimi Code CLI | `~/.kimi-code/config.toml` | `SessionStart` / `UserPromptSubmit` / `SessionEnd` | [Flat `[[hooks]]` rules](https://www.kimi.com/code/docs/en/kimi-code-cli/customization/hooks.html); legacy `~/.kimi` profiles are skipped. |
+| OpenCode | — | — | Skipped: its [JavaScript plugin API](https://opencode.ai/docs/plugins/) requires a separate adapter. |
+
+Native timeout fields use three seconds (3,000 milliseconds for Gemini), above the shared
+two-second maximum. Existing feature flags, hook disable lists, alternate profile locations,
+plugins and trust settings are preserved. `status` reports configuration presence rather
+than live harness execution. Check the harness's own hooks panel/logs after enabling it.
+
+The installer contract suite uses only temporary HOME directories and a synthetic loopback
+service; it never starts a harness or uses live profiles:
+
+```sh
+# Python 3.11+ and Node 22.18+ (for the pinned Gemini sanitizer fixture).
+HYPERAG_BIN=target/release/hyperag python3 crates/hyperag/tests/hooks_install.py
+```

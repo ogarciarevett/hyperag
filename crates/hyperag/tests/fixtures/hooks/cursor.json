@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "hooks": {
+    "beforeSubmitPrompt": [
+      {
+        "command": "'<hyperag>' hook prompt --harness cursor # hyperag-managed:v1",
+        "timeout": 3
+      }
+    ],
+    "sessionEnd": [
+      {
+        "command": "'<hyperag>' hook session-end --harness cursor # hyperag-managed:v1",
+        "timeout": 3
+      }
+    ],
+    "sessionStart": [
+      {
+        "command": "'<hyperag>' hook session-start --harness cursor # hyperag-managed:v1",
+        "timeout": 3
+      }
+    ]
+  }
+}

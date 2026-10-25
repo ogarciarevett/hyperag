@@ -1,0 +1,19 @@
+{
+  "hooks": [
+    {
+      "event": "SessionEnd",
+      "command": "'<hyperag>' hook session-end --harness kimi # hyperag-managed:v1",
+      "timeout": 3
+    },
+    {
+      "event": "SessionStart",
+      "command": "'<hyperag>' hook session-start --harness kimi # hyperag-managed:v1",
+      "timeout": 3
+    },
+    {
+      "event": "UserPromptSubmit",
+      "command": "'<hyperag>' hook prompt --harness kimi # hyperag-managed:v1",
+      "timeout": 3
+    }
+  ]
+}
