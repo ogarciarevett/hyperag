@@ -34,3 +34,35 @@ test("P2: partly mirrored streams keep unmatched user events", () => {
   expect(p.prompts.map(p=>p.text)).toEqual(["Synthetic A","Synthetic B"]);
   expect(p.skipped.mirroredUserEvent).toBe(1);
 });
+
+async function rejectStorageMarkers(prompts: string[], markers: string[]) {
+  const dir=mkdtempSync(join(tmpdir(),"credential-classes-")),dbPath=join(dir,"source.db"),path=join(dir,"source.jsonl");
+  const db=new Database(dbPath);db.exec("create table sessions(id text,project text); create table observations(id integer,sync_id text,session_id text,scope text,project text,deleted_at text)");db.close();
+  writeFileSync(path,jsonl([{type:"session_meta",payload:{id:"synthetic-classes",cwd:"/demo"}},...prompts.map((text,i)=>({type:"response_item",timestamp:`2026-01-01T00:00:${String(i).padStart(2,'0')}Z`,payload:{type:"message",role:"user",content:[{type:"input_text",text}]}}))]));
+  const memories=new Map<string,any>();let writes=0;
+  const call=async(method:string,route:string,body?:any):Promise<any>=>{
+    if(body)for(const marker of markers)expect(JSON.stringify(body)).not.toContain(marker);
+    if(route==="/v1/whoami")return{principal:"personal-import"};if(route==="/v1/grants"||route==="/v1/relations")return{};
+    if(method==="GET")return memories.get(decodeURIComponent(route.slice(13,-8)))??{missing:true};
+    const id=`${body.scope}/${body.id}`;memories.set(id,{id,currentVersion:1,versions:[{...body,version:1}]});writes++;return{id,version:1};
+  };
+  try{await importTranscripts([{source:"codex",path}],dbPath,call);expect(writes).toBeGreaterThan(1);}finally{rmSync(dir,{recursive:true});}
+}
+
+test("P1: authorization tails never reach outgoing storage", async () => {
+  await rejectStorageMarkers(['Authorization: Bearer synthetic~synthetic-bearer-tail'],['synthetic-bearer-tail']);
+});
+test("P2: quoted phone string and numeric values never reach outgoing storage", async () => {
+  await rejectStorageMarkers(['{"phone":"2125550198"}', '{"PHONE":2125550199}'],['2125550198','2125550199']);
+});
+test("rule a: credential labels consume punctuation-rich values until whitespace or closing quote", async () => {
+  await rejectStorageMarkers(['Basic synthetic~basic-tail!value', 'token synthetic~token-tail%value', 'password synthetic~password-tail^value'],['basic-tail','token-tail','password-tail']);
+});
+test("rule b: structured key names are case-insensitive and redact whole values", async () => {
+  const keys=['phone','tel','mobile','password','secret','token','key','auth','credential','cookie','session'];
+  const markers=keys.map((_,i)=>`v${i}~tail!punct`);
+  await rejectStorageMarkers(keys.flatMap((k,i)=>[JSON.stringify({[k[0]!.toLowerCase()+k.slice(1).toUpperCase()]:markers[i]}),`${k}=${markers[i]}`]),markers);
+});
+test("rule c: unlabeled mixed alphanumeric tokens of twenty characters are removed", async () => {
+  await rejectStorageMarkers(['Remember opaque value AbCdEfGhIj0123456789.'],['AbCdEfGhIj0123456789']);
+});

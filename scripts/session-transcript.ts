@@ -6,20 +6,24 @@ export const hash = (s: string) => createHash("sha256").update(s).digest("hex");
 export function redact(text: string) {
   // A structured env/argv dump can hide secrets under arbitrary field names: drop the whole input.
   if (/["']?(?:argv|args|arguments|process[._ ]args|process\.env|env|environment(?:[_ ]dump)?|command[_ ]line)["']?\s*[:=]/i.test(text) || /["'][A-Z][A-Z0-9_]+["']\s*:|^\s*(?:export\s+)?[A-Z_][A-Z0-9_]*=/m.test(text)) return "[REDACTED_PROCESS_OR_ENV_BLOCK]";
+  const keys = String.raw`(?:phone|tel|mobile|password|secret|token|key|auth|credential|cookie|session)`;
+  const credentials = String.raw`(?:authorization|[\w-]*(?:password|passwd|secret|token|key|auth|credential|cookie|session)[\w-]*)`;
+  const value = String.raw`(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^\s"']+)`;
+  if (new RegExp(String.raw`\b${keys}\b["']?\s*[:=]\s*[\[{]`, "i").test(text)) return "[REDACTED_CREDENTIAL_BLOCK]";
   return text
     .replace(/-----BEGIN [\w ]*PRIVATE KEY-----[\s\S]*?-----END [\w ]*PRIVATE KEY-----/g, "[REDACTED_PRIVATE_KEY]")
     .replace(/^.*(?:\b(?:argv|args|arguments|process[_ ]?args|command[_ ]?line|environment[_ ]?dump)\s*[:=]|^\s*(?:export\s+)?[A-Z_][A-Z0-9_]*=).*$/gm, "[REDACTED_PROCESS_OR_ENV]")
     .replace(/^\s*(?:[$>]\s*)?(?:\/[\w./-]+\/)?(?:env|printenv|ps|curl|ssh|docker|node|bun|python3?|codex|claude|hyperag|engram)\s+.*$/gm, "[REDACTED_PROCESS_OR_ENV]")
-    .replace(/\b(Bearer|Basic)\s+[\w.+/=:-]+/gi, "$1 [REDACTED]")
-    .replace(/((?:[\w-]*(?:token|secret|password|passwd|api[_-]?key|access[_-]?key|credential)[\w-]*)["']?\s*(?:[:=]|\bis\b)\s*)(?:"[^"\n]*"|'[^'\n]*'|[^\s,;]+)/gi, "$1[REDACTED]")
+    .replace(new RegExp(String.raw`(\b(?:Bearer|Basic)\s+)${value}`, "gi"), "$1[REDACTED]")
+    .replace(new RegExp(String.raw`(\b${keys}\b["']?\s*[:=]\s*)${value}`, "gi"), "$1[REDACTED]")
+    .replace(new RegExp(String.raw`(\b${credentials}\b["']?\s*(?:[:=]|\bis\b|\s)\s*)${value}`, "gi"), "$1[REDACTED]")
     .replace(/([a-z][a-z0-9+.-]*:\/\/)[^\s/@]+@/gi, "$1[REDACTED]@")
-    .replace(/--(?:token|password|secret|api-key|key)(?:\s+|=)(?:"[^"\n]*"|'[^'\n]*'|[^\s]+)/gi, "[REDACTED_CREDENTIAL_ARG]")
     .replace(/\b(?:AKIA|ASIA)[A-Z0-9]{16}\b|\beyJ[\w-]+\.[\w-]+\.[\w-]+\b/g, "[REDACTED_TOKEN]")
     .replace(/\b(?:sk-|ghp_|github_pat_|xox[baprs]-)[\w-]{10,}/g, "[REDACTED_TOKEN]")
     .replace(/\+\d[\d ().-]{7,}\d|(?:\(\d{3}\)\s*|\b\d{3}[ .-])\d{3}[ .-]\d{4}\b/g, "[REDACTED_PHONE]")
     .replace(/((?:phone|telephone|tel|mobile|m[oó]vil|tel[eé]fono)\s*[:=]?\s*["']?)\d[\d ().-]{5,}\d/gi, "$1[REDACTED_PHONE]")
     .replace(/\b(?:[679]\d{8}|0\d{9,10})\b/g, "[REDACTED_PHONE]")
-    .replace(/\b[A-Za-z0-9_+/=-]{32,}\b/g, value => /[a-zA-Z]/.test(value) && /\d/.test(value) ? "[REDACTED_OPAQUE]" : value);
+    .replace(/[A-Za-z0-9_+/=~.-]{20,}/g, v => /[a-zA-Z]/.test(v) && /\d/.test(v) ? "[REDACTED_OPAQUE]" : v);
 }
 
 type Prompt = { text: string; timestamp: string | null; mirrorKey: string; order: number };

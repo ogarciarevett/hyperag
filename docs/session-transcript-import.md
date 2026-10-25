@@ -24,7 +24,11 @@ The importer excludes tool outputs, generated context, oversized records/prompts
 mirrored user events. Conventional credentials, private keys, phone numbers, environment
 dumps and process argument lines are redacted before any prompt is stored. Inputs
 containing structured env/argv dumps are replaced as a whole; arbitrary nested values
-are never salvaged. Credential flags support both space and equals forms, and URL
+are never salvaged. Credential labels consume whole values, including punctuation, up to whitespace or
+the closing quote. Quoted or bare phone/tel/mobile and credential key names are matched
+case-insensitively; nested credential objects are removed as whole blocks. A final
+pass removes 20+ character mixed letter/digit tokens (including token punctuation).
+Credential flags support both space and equals forms, and URL
 userinfo is removed for any scheme. National phone coverage includes Spanish nine-digit
 6/7/9 numbers, UK 0-prefixed numbers, formatted North American numbers and labeled numbers. Conservative
 opaque-identifier redaction may also remove non-secret identifiers. This is a bounded
