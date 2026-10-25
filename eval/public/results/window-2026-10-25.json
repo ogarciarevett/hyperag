@@ -1,0 +1,153 @@
+{
+  "window": "2026-10-24/25",
+  "endedUtc": "2026-10-25T00:57:48Z",
+  "pathsRelativeTo": "eval/public/results",
+  "memory": [
+    {
+      "bench": "locomo",
+      "system": "hyperag",
+      "profile": "e5+bgev2m3",
+      "questions": 1986,
+      "failedSearches": 0,
+      "metric": "F1 categories 1-4",
+      "score": 0.4635,
+      "file": "memory/locomo.hyperag.e5_bgev2m3.jsonl",
+      "sha256": "d8624b8767f004291b0fddc917c55fa3af7784732fa2bc130aaca9e26e2829de",
+      "metaSha256": "51457968bb00dbf28ad5e1b15230dcc599b6f155f81abdb7ed07b72c78859729",
+      "date": "2026-10-24T21:53:07.849Z",
+      "validatedSourceParity": [
+        "unique IDs",
+        "question text",
+        "gold answers",
+        "categories"
+      ]
+    },
+    {
+      "bench": "locomo",
+      "system": "hyperag",
+      "profile": "egemma2+bgev2m3+graph",
+      "questions": 1986,
+      "failedSearches": 0,
+      "metric": "F1 categories 1-4",
+      "score": 0.4913,
+      "file": "memory/locomo.hyperag.egemma2_bgev2m3_graph.jsonl",
+      "sha256": "b5139a88faa88cd2f3cf2b73c3573a9a8bb11ef99629a03507a2703622bf3c64",
+      "metaSha256": "cc69e112d88a2f751411ce9bad96fc167b1e316f62cc4aa276327f796edc96b9",
+      "date": "2026-10-25T00:11:05.854Z",
+      "validatedSourceParity": [
+        "unique IDs",
+        "question text",
+        "gold answers",
+        "categories"
+      ]
+    },
+    {
+      "bench": "dmr",
+      "system": "hyperag",
+      "profile": "egemma2+bgev2m3+graph",
+      "questions": 500,
+      "failedSearches": 0,
+      "metric": "accuracy",
+      "score": 0.822,
+      "file": "memory/dmr.hyperag.egemma2_bgev2m3_graph.jsonl",
+      "sha256": "116f475eaaff95b42e24a9e4f47d9402b52c982fb0089802f833affdcd8ce7bb",
+      "metaSha256": "50eccc11c633654807ac7c1a8859da51fc17e8f19730e37508ee56ae9d26b422",
+      "date": "2026-10-24T22:51:05.553Z",
+      "validatedSourceParity": [
+        "unique IDs",
+        "question text",
+        "gold answers",
+        "categories"
+      ]
+    }
+  ],
+  "beir": [
+    {
+      "dataset": "arguana",
+      "system": "hyperag",
+      "version": "0.1.0",
+      "profile": "nemotron",
+      "queries": 1406,
+      "test_queries": 1406,
+      "ndcg@10": 0.5003796282622514,
+      "recall@100": 0.9893314366998578,
+      "map@100": 0.42251691457624646,
+      "p50_ms": 851.3980000000447,
+      "p95_ms": 1046.9619170000078,
+      "ingest_s": 436.01026874999997,
+      "date": "2026-10-25",
+      "file": "beir/arguana.hyperag.nemotron.run",
+      "sha256": "12353d079733c15ea6a4b31ef6c06bf226cd97a6d1680ef0b6fc8ba2ae6c645d",
+      "metaSha256": "734c982975ebe2c4b35e8387087d211313ec18f3d25c78e209b296281a423c77",
+      "failedQueries": 0,
+      "validatedSourceParity": [
+        "official test query IDs",
+        "valid corpus IDs",
+        "100 unique hits per query",
+        "ranks 1-100"
+      ]
+    },
+    {
+      "dataset": "nfcorpus",
+      "system": "hyperag",
+      "version": "0.1.0",
+      "profile": "nemotron",
+      "queries": 323,
+      "test_queries": 323,
+      "ndcg@10": 0.37240269236215867,
+      "recall@100": 0.34406542068476165,
+      "map@100": 0.18234769889538507,
+      "p50_ms": 404.3460830000113,
+      "p95_ms": 502.5657080000383,
+      "ingest_s": 209.25797599999999,
+      "date": "2026-10-25",
+      "file": "beir/nfcorpus.hyperag.nemotron.run",
+      "sha256": "bb4c2d237823e6a68396d51f2f46171cc267ca4407f294ac916b0c97b3d945aa",
+      "metaSha256": "444a5d099874303c7d3d562960bec2ff46d661114583ebe5d17ce90a142ec8ef",
+      "failedQueries": 0,
+      "validatedSourceParity": [
+        "official test query IDs",
+        "valid corpus IDs",
+        "100 unique hits per query",
+        "ranks 1-100"
+      ]
+    },
+    {
+      "dataset": "nfcorpus",
+      "system": "hyperag",
+      "version": "0.1.0",
+      "profile": "nemotron+nvrerank",
+      "queries": 323,
+      "test_queries": 323,
+      "ndcg@10": 0.448086475165091,
+      "recall@100": 0.34406542068476165,
+      "map@100": 0.22023355864739458,
+      "p50_ms": 1733.6529999999912,
+      "p95_ms": 2480.7180830000434,
+      "ingest_s": 13.349533874999999,
+      "date": "2026-10-25",
+      "file": "beir/nfcorpus.hyperag.nemotron_nvrerank.run",
+      "sha256": "9a2cfa8566c456934a063c40170d1263eea3a252e5903f483e7a24e88c48e6be",
+      "metaSha256": "1fe52aa71e11ed88135170b670c8eda7240acdadaab6b73efc577fbd8eac68c8",
+      "failedQueries": 0,
+      "validatedSourceParity": [
+        "official test query IDs",
+        "valid corpus IDs",
+        "100 unique hits per query",
+        "ranks 1-100"
+      ]
+    }
+  ],
+  "timingComparable": false,
+  "budget": {
+    "priorWindowUsd": 63.6,
+    "window2CreateUtc": "2026-10-24T19:41:43Z",
+    "usdPerHour": 4.5,
+    "queueEndEstimatedTotalUsd": 87.31,
+    "queueEndEstimatedWindowUsd": 23.71,
+    "noNewStartTotalUsd": 90,
+    "hardStopTotalUsd": 95,
+    "vmHardStopUtc": "2026-10-25T02:11:43Z",
+    "note": "Elapsed-time estimate through queue end; VM deletion was requested through the coordinator. Provider-billed final spend is not established here."
+  }
+}

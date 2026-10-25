@@ -1,0 +1,47 @@
+{
+  "system": "hyperag",
+  "version": "0.1.0",
+  "profile": "egemma2+bgev2m3+graph",
+  "config": {
+    "embedding": {
+      "model": "onnx-community/embeddinggemma-2-ONNX#q8",
+      "revision": "daa72c51243991dfcaf9f9137d2c573d8f7790c0",
+      "dimensions": 768,
+      "normalized": true,
+      "preprocessing": "sentence_embedding; max_length=512; prompts query=\"task: search result | query: \" document=\"title: none | text: \""
+    },
+    "reranker": "onnx-community/bge-reranker-v2-m3-ONNX@6f5ff65#q8",
+    "rrfK": 60,
+    "graph": "conversations: NEXT_TURN, SAME_ENTITY (exact match), 2 hops; BEIR: graph enabled, no edges or relationship contribution",
+    "asOf": "none (asOf filters validity, not relative-date anchoring; validFrom and validTo are null)"
+  },
+  "transportRetry": "Common proxy: ECONNRESET only, 3 total upstream attempts, 250/500ms backoff, identical payload; HTTP errors unchanged; native client retries remain; upstream keep-alive disabled",
+  "bench": "dmr",
+  "units": 500,
+  "asOfUse": "none (asOf filters validity, not relative-date anchoring; validFrom and validTo are null)",
+  "questions": 500,
+  "expectedQuestions": 500,
+  "failedSearches": 0,
+  "k": 10,
+  "workers": 2,
+  "llm": {
+    "model": "llama-3.3-70b-instruct",
+    "calls": 1000,
+    "prompt": 322655,
+    "completion": 17058
+  },
+  "accuracy": 0.822,
+  "byType": {
+    "dmr": {
+      "n": 500,
+      "correct": 411
+    }
+  },
+  "wallSeconds": 2978.36942675,
+  "ingestP50Ms": 6833.203624999849,
+  "searchP50Ms": 1416.6917499999981,
+  "searchP95Ms": 2062.658249999862,
+  "rssPeakBytes": 3599275480,
+  "systemRssPeakBytes": 177943347,
+  "date": "2026-10-24T22:51:05.553Z"
+}

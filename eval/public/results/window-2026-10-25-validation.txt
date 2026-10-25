@@ -1,0 +1,7 @@
+locomo.hyperag.e5_bgev2m3 1986 source-matched unique answers; F1 categories 1-4 0.4635
+locomo.hyperag.egemma2_bgev2m3_graph 1986 source-matched unique answers; F1 categories 1-4 0.4913
+dmr.hyperag.egemma2_bgev2m3_graph 500 source-matched unique answers; accuracy 0.822
+arguana nemotron 1406 official queries; nDCG@10 0.5003796282622514
+nfcorpus nemotron 323 official queries; nDCG@10 0.37240269236215867
+nfcorpus nemotron+nvrerank 323 official queries; nDCG@10 0.448086475165091
+PASS: six complete rows; no selective question reruns; original question/corpus parity and output hashes recorded.
