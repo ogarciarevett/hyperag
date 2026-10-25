@@ -75,5 +75,6 @@ test("ordinary prose with credential words survives storage byte for byte", asyn
     "Explain why the key and password matter to this story.",
     "Discuss auth with the team before the next session.",
     "The fields monkey=jumps and author=writes describe the story.",
+    "The field motel:2125550198 is a room label.",
   ], [], true);
 });

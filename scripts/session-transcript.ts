@@ -22,7 +22,7 @@ export function redact(text: string) {
     .replace(/\b(?:AKIA|ASIA)[A-Z0-9]{16}\b|\beyJ[\w-]+\.[\w-]+\.[\w-]+\b/g, "[REDACTED_TOKEN]")
     .replace(/\b(?:sk-|ghp_|github_pat_|xox[baprs]-)[\w-]{10,}/g, "[REDACTED_TOKEN]")
     .replace(/\+\d[\d ().-]{7,}\d|(?:\(\d{3}\)\s*|\b\d{3}[ .-])\d{3}[ .-]\d{4}\b/g, "[REDACTED_PHONE]")
-    .replace(/((?:phone|telephone|tel|mobile|m[oó]vil|tel[eé]fono)\s*[:=]\s*["']?)\d[\d ().-]{5,}\d/gi, "$1[REDACTED_PHONE]")
+    .replace(/(\b(?:phone|telephone|tel|mobile|m[oó]vil|tel[eé]fono)\s*[:=]\s*["']?)\d[\d ().-]{5,}\d/gi, "$1[REDACTED_PHONE]")
     .replace(/\b(?:[679]\d{8}|0\d{9,10})\b/g, "[REDACTED_PHONE]")
     .replace(/[A-Za-z0-9_+/=~.-]{20,}/g, v => /[a-zA-Z]/.test(v) && /\d/.test(v) ? "[REDACTED_OPAQUE]" : v);
 }
