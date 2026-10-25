@@ -24,6 +24,10 @@ const MIGRATIONS: [&str; 3] = [
     include_str!("../migrations/0003_memory_text_limit.sql"),
 ];
 
+// Legacy corpus BM25 remains available for runtime comparison and rollback.
+const BM25_K1: f64 = 1.2;
+const BM25_B: f64 = 0.75;
+
 /// The rows a caller may rank: current, active, not deleted, in a readable scope, valid at `asOf`.
 const RANKABLE: &str = "m.deleted_at IS NULL AND v.version = m.current_version AND v.status = 'active'
   AND m.scope = ANY($1::text[])
@@ -33,28 +37,87 @@ const RANKABLE: &str = "m.deleted_at IS NULL AND v.version = m.current_version A
 const VERSION_COLUMNS: &str = "m.id, m.scope, m.kind, v.version, v.text, v.source, v.author, v.valid_from,
   v.valid_to, v.recorded_at, v.status, v.status_reason, v.superseded_by, v.metadata";
 
-/// Indexed lexical candidates. Authorization/current-version checks precede the candidate limit;
-/// only bounded ids and scores leave this query for fusion and payload loading. The public bm25
-/// channel name remains compatible; the Rust score is PostgreSQL cover-density rank.
+/// BM25 over the caller's readable corpus only (see the TypeScript store for the full rationale).
 fn bm25_sql() -> String {
     format!(
-        "with query as (
-  select replace(plainto_tsquery('simple', $3)::text, ' & ', ' | ')::tsquery as q
+        "with scoped as (
+  select v.memory_id, v.version, v.text_search, extract(epoch from v.recorded_at)::float8 as at
+    from memories m join memory_versions v on v.memory_id = m.id
+   where {RANKABLE}
+),
+stats as (select count(*)::float8 as n, coalesce(avg(length(text_search)), 0)::float8 as avgdl from scoped),
+query as (select replace(plainto_tsquery('simple', $3)::text, ' & ', ' | ')::tsquery as q),
+terms as (select distinct lexeme from unnest(to_tsvector('simple', $3))),
+postings as (
+  select s.memory_id, s.version, s.at, length(s.text_search)::float8 as dl, u.lexeme,
+         coalesce(array_length(u.positions, 1), 1)::float8 as tf
+    from scoped s cross join query cross join lateral unnest(s.text_search) u
+   where s.text_search @@ query.q and u.lexeme in (select lexeme from terms)
+),
+df as (select lexeme, count(*)::float8 as df from postings group by lexeme)
+select p.memory_id as id, p.at,
+       sum(ln(1 + (st.n - df.df + 0.5) / (df.df + 0.5)) * (p.tf * ({BM25_K1} + 1))
+           / (p.tf + {BM25_K1} * (1 - {BM25_B} + {BM25_B} * p.dl / greatest(st.avgdl, 1)))) as score
+  from postings p join df using (lexeme) cross join stats st
+ group by p.memory_id, p.version, p.at
+ order by score desc, p.at desc, p.memory_id
+ limit $4"
+    )
+}
+
+/// Per-term indexed candidates preserve rare-term coverage before the final budget. Only the query
+/// vector is unpacked; document vectors are scored in PostgreSQL without expanding their lexemes.
+fn fast_lexical_sql() -> String {
+    format!(
+        "with terms as materialized (
+  select lexeme, plainto_tsquery('simple', lexeme) as q
+    from unnest(to_tsvector('simple', $3))
+   where ts_lexize('english_stem', lexeme) is distinct from '{{}}'::text[]
+),
+per_term as materialized (
+  select t.lexeme, h.*, row_number() over (
+    partition by t.lexeme order by h.score desc, h.at desc, h.id
+  ) as term_rank
+    from terms t cross join lateral (
+      select v.memory_id as id, v.version,
+             extract(epoch from v.recorded_at)::float8 as at,
+             ts_rank_cd(v.text_search, t.q)::float8 as score
+        from memory_versions v
+       where v.text_search @@ t.q
+         and exists (select 1 from memories m where m.id = v.memory_id and {RANKABLE})
+       order by score desc, at desc, id
+       limit $4
+    ) h
+),
+covered as (
+  select id, version, at, min(term_rank) as best_term_rank,
+         count(*) as terms_matched, sum(1.0 / (60.0 + term_rank))::float8 as score
+    from per_term group by id, version, at
 ),
 candidates as materialized (
-  select v.memory_id as id, extract(epoch from v.recorded_at)::float8 as at,
-         ts_rank_cd(v.text_search, query.q)::float8 as score
-    from memory_versions v cross join query
-   where v.text_search @@ query.q
-     and exists (
-       select 1 from memories m where m.id = v.memory_id and {RANKABLE}
-     )
-   order by score desc, at desc, id
+  select * from covered
+   order by best_term_rank, terms_matched desc, score desc, at desc, id
    limit $4
 )
 select id, at, score from candidates
- order by score desc, at desc, id"
+ order by best_term_rank, terms_matched desc, score desc, at desc, id"
     )
+}
+
+#[derive(Debug, PartialEq)]
+enum LexicalScorer { Bm25, Fast }
+
+impl LexicalScorer {
+    fn parse(value: Option<&str>) -> Result<Self> {
+        match value {
+            None | Some("bm25") => Ok(Self::Bm25),
+            Some("fast") => Ok(Self::Fast),
+            _ => Err(Error::InvalidInput("HYPERAG_LEXICAL_SCORER must be bm25 or fast".into())),
+        }
+    }
+    fn selected() -> Result<Self> {
+        Self::parse(std::env::var("HYPERAG_LEXICAL_SCORER").ok().as_deref())
+    }
 }
 
 pub fn space_id(space: &EmbeddingSpace) -> String {
@@ -262,6 +325,7 @@ impl Store {
     }
 
     pub async fn migrate(&self) -> Result<()> {
+        LexicalScorer::selected()?;
         for m in MIGRATIONS {
             sqlx::raw_sql(m).execute(&self.pool).await?;
         }
@@ -482,7 +546,8 @@ impl Store {
         if scopes.is_empty() || text.trim().is_empty() {
             return Ok(vec![]);
         }
-        let rows = sqlx::query(sqlx::AssertSqlSafe(bm25_sql())).bind(scopes).bind(as_of).bind(text).bind(limit).fetch_all(&self.pool).await?;
+        let sql = match LexicalScorer::selected()? { LexicalScorer::Bm25 => bm25_sql(), LexicalScorer::Fast => fast_lexical_sql() };
+        let rows = sqlx::query(sqlx::AssertSqlSafe(sql)).bind(scopes).bind(as_of).bind(text).bind(limit).fetch_all(&self.pool).await?;
         Ok(rows.iter().map(|r| Hit { id: r.get("id"), score: r.get("score"), at: r.get("at") }).collect())
     }
 
@@ -640,5 +705,17 @@ impl Store {
             .execute(&self.pool)
             .await?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod lexical_scorer_tests {
+    use super::*;
+    #[test]
+    fn lexical_scorer_defaults_to_bm25_and_rejects_unknown_settings() {
+        assert_eq!(LexicalScorer::parse(None).unwrap(), LexicalScorer::Bm25);
+        assert_eq!(LexicalScorer::parse(Some("bm25")).unwrap(), LexicalScorer::Bm25);
+        assert_eq!(LexicalScorer::parse(Some("fast")).unwrap(), LexicalScorer::Fast);
+        assert!(LexicalScorer::parse(Some("unknown")).is_err());
     }
 }
