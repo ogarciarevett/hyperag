@@ -1,0 +1,28 @@
+# Dedicated memory stores. Start as an independent Compose project.
+name: hyperag-memory
+services:
+  postgres:
+    image: pgvector/pgvector:pg18@sha256:2358fcba361ed2233a5ed81b5fe4ca779ccb304120ce531a3bf51c0ed7e2bc11
+    environment:
+      POSTGRES_USER: hyperag_memory
+      POSTGRES_PASSWORD: ${HYPERAG_MEMORY_PG_PASSWORD:?set HYPERAG_MEMORY_PG_PASSWORD}
+      POSTGRES_DB: hyperag_memory
+    ports: ["127.0.0.1:55433:5432"]
+    volumes: [memory_pgdata:/var/lib/postgresql]
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "hyperag_memory", "-d", "hyperag_memory"]
+      interval: 2s
+      retries: 30
+  neo4j:
+    image: neo4j:5.26.28-community@sha256:ff32db30b2baff97971e441b46bfd9c832c1b62c970398ef579244c06b21d357
+    environment:
+      NEO4J_AUTH: neo4j/${HYPERAG_MEMORY_NEO4J_PASSWORD:?set HYPERAG_MEMORY_NEO4J_PASSWORD}
+      NEO4J_server_memory_heap_max__size: 512m
+      NEO4J_server_memory_pagecache_size: 256m
+    ports: ["127.0.0.1:57475:7474"]
+    volumes: [memory_neo4jdata:/data]
+volumes:
+  memory_pgdata:
+    name: hyperag-memory_pgdata
+  memory_neo4jdata:
+    name: hyperag-memory_neo4jdata
