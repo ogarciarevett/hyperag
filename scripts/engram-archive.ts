@@ -7,6 +7,11 @@ import { isDeepStrictEqual, parseArgs } from "node:util";
 type Call = (method: string, path: string, body?: unknown) => Promise<Record<string, any>>;
 const digest = (value: string) => createHash("sha256").update(value).digest("hex");
 const scope = "project:engram-archive";
+const envelope = "engram-archive-v1\n";
+export function decodeArchiveChunk(text: string) {
+  if (!text.startsWith(envelope)) throw new Error("unsupported archive chunk format");
+  return text.slice(envelope.length);
+}
 const quoted = (name: string) => '"' + name.replaceAll('"', '""') + '"';
 const json = (row: Record<string, unknown>) => JSON.stringify(Object.fromEntries(Object.entries(row).map(([k,v]) => [k, v instanceof Uint8Array ? { $blob: Buffer.from(v).toString("base64") } : v])));
 
@@ -23,10 +28,11 @@ export async function archiveSource(path: string, call: Call) {
     const excludedDerivedTables = listed.filter(t => t.type !== "table").map(t => t.name).sort();
     for (const permission of ["read", "write"]) await call("POST", "/v1/grants", { principal: "personal-import", scope, permission });
     const put = async (table: string, identity: unknown, record: string, payload: string) => {
-      const hash = digest(payload), key = digest(JSON.stringify([table, identity, hash]));
-      const chars = [...payload], total = Math.max(1, Math.ceil(chars.length / 80_000));
+      const hash = digest(payload), key = digest(JSON.stringify(["envelope-v1", table, identity, hash]));
+      const chars = [...payload], capacity = 80_000 - envelope.length;
+      const total = Math.max(1, Math.ceil(chars.length / capacity));
       for (let part = 0; part < total; part++) {
-        const text = chars.slice(part * 80_000, (part + 1) * 80_000).join("");
+        const text = envelope + chars.slice(part * capacity, (part + 1) * capacity).join("");
         const id = `engram-archive-${key}-${part}`, fullId = `${scope}/${id}`;
         const metadata = { engramArchive: { table, identity, record, sha256: hash, part, total } };
         const route = `/v1/memories/${encodeURIComponent(fullId)}/explain`;

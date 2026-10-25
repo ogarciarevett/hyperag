@@ -15,7 +15,10 @@ Each source row becomes one or more immutable `engram_archive` memories in the s
 part is read back and checked. Table manifests link row identities to their hashes;
 the root manifest links table manifests and schemas. Old snapshots remain accessible.
 BLOBs use tagged base64, and integers outside JavaScript's exact range use tagged decimals.
-Chunks contain at most 80,000 Unicode code points. Empty tables retain their schema.
+Chunks contain at most 80,000 Unicode code points, including the nonempty
+`engram-archive-v1\n` envelope. Rebuild a payload by ordering its parts, calling
+`decodeArchiveChunk(part.text)` on each and joining the results before JSON parsing.
+This keeps whitespace-only interior parts valid. Empty tables retain their schema.
 
 Derived virtual/FTS shadow tables are listed as excluded: their content duplicates base
 rows or stores index internals. Their definitions remain in the archived SQLite schema.
