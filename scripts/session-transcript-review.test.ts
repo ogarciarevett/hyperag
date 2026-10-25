@@ -3,7 +3,7 @@ import { Database } from "bun:sqlite";
 import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { parseTranscript } from "./session-transcript";
+import { parseTranscript, redact } from "./session-transcript";
 import { importTranscripts } from "./session-transcript-import";
 const jsonl = (rows: unknown[]) => rows.map(r=>JSON.stringify(r)).join("\n");
 
@@ -77,4 +77,13 @@ test("ordinary prose with credential words survives storage byte for byte", asyn
     "The fields monkey=jumps and author=writes describe the story.",
     "The field motel:2125550198 is a room label.",
   ], [], true);
+});
+
+test.each(["--key ", "--key=", "--token ", "--token=", "--api-key ", "--access_key=", "--auth ", "--password="])("isolated credential flag %s removes its whole value", async flag => {
+  await rejectStorageMarkers([`Use ${flag}synthetic~cli-value for this synthetic request.`], ["synthetic~cli-value"]);
+});
+
+test("repeated redaction retains surrounding text after a credential value is removed", () => {
+  const first = redact("Keep the instruction --key=synthetic-secret and continue this review.");
+  expect(redact(first)).toBe(first);
 });

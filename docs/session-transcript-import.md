@@ -31,7 +31,7 @@ headers. Explicit labels consume whole values, including punctuation, up to whit
 or the closing quote. Quoted or bare phone/tel/mobile and credential key names are matched
 case-insensitively; nested credential objects are removed as whole blocks. A final
 pass removes 20+ character mixed letter/digit tokens (including token punctuation).
-Credential flags support both space and equals forms, and URL
+Dedicated double-dash credential flags support both space and equals forms, and URL
 userinfo is removed for any scheme. National phone coverage includes Spanish nine-digit
 6/7/9 numbers, UK 0-prefixed numbers, formatted North American numbers and labeled numbers. Conservative
 opaque-identifier redaction may also remove non-secret identifiers. This is a bounded
