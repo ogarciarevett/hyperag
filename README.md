@@ -4,6 +4,14 @@ Shared memory and retrieval for agents, with permissions, version history and ci
 
 ## Install
 
+With Homebrew:
+
+```sh
+brew install ogarciarevett/tap/hyperag
+```
+
+Or with the standalone installer:
+
 ```sh
 curl -fsSL https://raw.githubusercontent.com/ogarciarevett/hyperag/main/scripts/install.sh | sh
 ```
