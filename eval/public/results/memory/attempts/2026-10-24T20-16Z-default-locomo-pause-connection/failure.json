@@ -1,0 +1,10 @@
+{
+  "bench": "locomo",
+  "system": "hyperag",
+  "profile": "egemma2+bgev2m3+graph",
+  "status": "failed",
+  "score": null,
+  "answers": 0,
+  "reason": "Postgres connection terminated unexpectedly on resume after machine-gate startup load pause",
+  "retry": "full row required; no partial score"
+}

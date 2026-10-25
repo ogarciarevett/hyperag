@@ -1,4 +1,4 @@
-"""Generate five source-backed SVG benchmark figures; incomplete runs remain unscored.
+"""Generate seven source-backed SVG benchmark figures; incomplete runs remain unscored.
 
     python3 -I eval/public/benchmark_charts.py --results eval/public/results --out docs/benchmarks
 """
@@ -16,7 +16,9 @@ CHARTS = [("locomo", "LoCoMo", "F1, categories 1–4", False),
           ("dmr", "DMR", "Answer accuracy", True),
           ("lme-oracle", "LongMemEval oracle", "Oracle haystack, top-10 retrieval · accuracy", True),
           ("lme-s100", "LongMemEval S100", "Reporting subset, 100 questions · accuracy", True),
-          ("scifact", "BEIR SciFact", "Official test split · nDCG@10", False)]
+          ("scifact", "BEIR SciFact", "Official test split · nDCG@10", False),
+          ("nfcorpus", "BEIR NFCorpus", "Official test split · nDCG@10", False),
+          ("arguana", "BEIR ArguAna", "Official test split · nDCG@10", False)]
 
 
 def score(value):
@@ -69,10 +71,10 @@ def render(bench, title, metric, percent, keys, values):
     esc = html.escape
     out = [f'<svg xmlns="http://www.w3.org/2000/svg" width="880" height="{height}" viewBox="0 0 880 {height}" role="img" aria-labelledby="title description">',
            f'<title id="title">{esc(title)} — {esc(metric)}</title>',
-           '<desc id="description">Completed runs from one evaluation window. N/D means not run or incomplete, never zero. Hyperag is blue; competitor colors are fixed across charts.</desc>',
+           '<desc id="description">Completed runs from two evaluation windows. N/D means not run or incomplete, never zero. Hyperag is blue; competitor colors are fixed across charts.</desc>',
            '<style>text{font-family:system-ui,-apple-system,Segoe UI,sans-serif;fill:#59636e;font-size:14px}.title{font-size:22px;font-weight:650}.small{font-size:12px}.grid{stroke:#a0a8b0;stroke-opacity:.25}.axis{stroke:#89939d}@media(prefers-color-scheme:dark){text{fill:#a9b3bd}.grid{stroke:#84909b;stroke-opacity:.28}.axis{stroke:#9ca7b2}}</style>',
            f'<text class="title" x="14" y="30">{esc(title)}</text>',
-           f'<text x="14" y="54">{esc(metric)} · higher is better · one window, October 23–24, 2026</text>']
+           f'<text x="14" y="54">{esc(metric)} · higher is better · two windows, October 23–25, 2026</text>']
     for tick in (0, .25, .5, .75, 1):
         x = left + width * tick
         tick_label = f"{tick:.0%}" if percent else f"{tick:g}"
@@ -120,4 +122,4 @@ if __name__ == "__main__":
         print("Benchmark figures match the result metadata.")
     else:
         generate(args.results, args.out)
-        print("Generated five benchmark figures from result metadata.")
+        print("Generated seven benchmark figures from result metadata.")

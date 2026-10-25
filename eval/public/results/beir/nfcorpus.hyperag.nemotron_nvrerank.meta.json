@@ -1,0 +1,33 @@
+{
+  "system": "hyperag",
+  "version": "0.1.0",
+  "profile": "nemotron+nvrerank",
+  "config": {
+    "embedding": {
+      "model": "nvidia/Nemotron-3.5-Embed-8B-BF16#first-1024-dims",
+      "revision": "781e779ee4ca9c2d2a4f38321993556baeab49a1",
+      "dimensions": 1024,
+      "normalized": true,
+      "preprocessing": "server /v2/embed, input_type query|document, truncate END; mean pooling; first 1024 of 4096 dims, re-normalised"
+    },
+    "reranker": "nvidia/Nemotron-3.5-Rerank-8B-BF16@f88f8d9104726747791283ab156d2fcdb29e90a7",
+    "rrfK": 60,
+    "graph": null,
+    "asOf": "none (asOf filters validity, not relative-date anchoring; validFrom and validTo are null)",
+    "gpuRequestDeadline": "No extra adapter wall-clock deadline through the shared proxy; window budget and VM cutoff remain"
+  },
+  "transportRetry": "Common proxy: ECONNRESET only, 3 total upstream attempts, 250/500ms backoff, identical payload; HTTP errors unchanged; native client retries remain; upstream keep-alive disabled",
+  "dataset": "nfcorpus",
+  "split": "test",
+  "documents": 3633,
+  "queries": 323,
+  "k": 100,
+  "ingestMs": 13349.533875,
+  "latencyP50Ms": 1733.6529999999912,
+  "latencyP95Ms": 2480.7180830000434,
+  "rssPeakBytes": 43483832,
+  "systemRssPeakBytes": 169869312,
+  "failedQueries": 0,
+  "errors": {},
+  "date": "2026-10-25T00:30:00.808Z"
+}
