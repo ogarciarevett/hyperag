@@ -1,0 +1,7 @@
+# Rust indexed lexical retrieval
+
+The Rust service uses the stored `memory_versions.text_search` tsvector and its GIN index to find lexical matches. It ranks matching current active versions with PostgreSQL `ts_rank_cd`, preserving the public `bm25` channel selector for compatibility. This changes lexical scoring from the earlier corpus-wide BM25 calculation; the TypeScript store retains its existing BM25 scorer.
+
+A readable-scope, current-version, deletion, status and valid-time check runs before the candidate budget. An `EXISTS` semijoin is necessary for these identity/authorization checks: version rows do not own scopes or the current-version pointer. Denied or historical rows cannot consume the budget. The candidate CTE materializes at most `candidatesPerChannel` ids and scores before the core loads memory payloads or expands graph relationships. It does not materialize the readable corpus, compute per-query corpus statistics, or unnest document lexemes.
+
+The selective synthetic regression exercises the shipped Rust SQL with the default PostgreSQL planner, without disabling sequential scans. `EXPLAIN (ANALYZE, BUFFERS)` must contain the GIN Bitmap Index Scan. A second fixture preserves the prior ranking order and checks that denied, deleted, old, invalidated and future versions cannot crowd out permitted candidates. The planner may still select a sequential scan for a query matching most of a corpus; an index's existence does not force every selectivity regime to use it.

@@ -23,9 +23,6 @@ const MIGRATIONS: [&str; 3] = [
     include_str!("../migrations/0002_settings.sql"),
     include_str!("../migrations/0003_memory_text_limit.sql"),
 ];
-// Okapi BM25 constants, as the original agent memory store uses them.
-const BM25_K1: f64 = 1.2;
-const BM25_B: f64 = 0.75;
 
 /// The rows a caller may rank: current, active, not deleted, in a readable scope, valid at `asOf`.
 const RANKABLE: &str = "m.deleted_at IS NULL AND v.version = m.current_version AND v.status = 'active'
@@ -36,31 +33,27 @@ const RANKABLE: &str = "m.deleted_at IS NULL AND v.version = m.current_version A
 const VERSION_COLUMNS: &str = "m.id, m.scope, m.kind, v.version, v.text, v.source, v.author, v.valid_from,
   v.valid_to, v.recorded_at, v.status, v.status_reason, v.superseded_by, v.metadata";
 
-/// BM25 over the caller's readable corpus only (see the TypeScript store for the full rationale).
+/// Indexed lexical candidates. Authorization/current-version checks precede the candidate limit;
+/// only bounded ids and scores leave this query for fusion and payload loading. The public bm25
+/// channel name remains compatible; the Rust score is PostgreSQL cover-density rank.
 fn bm25_sql() -> String {
     format!(
-        "with scoped as (
-  select v.memory_id, v.version, v.text_search, extract(epoch from v.recorded_at)::float8 as at
-    from memories m join memory_versions v on v.memory_id = m.id
-   where {RANKABLE}
+        "with query as (
+  select replace(plainto_tsquery('simple', $3)::text, ' & ', ' | ')::tsquery as q
 ),
-stats as (select count(*)::float8 as n, coalesce(avg(length(text_search)), 0)::float8 as avgdl from scoped),
-query as (select replace(plainto_tsquery('simple', $3)::text, ' & ', ' | ')::tsquery as q),
-terms as (select distinct lexeme from unnest(to_tsvector('simple', $3))),
-postings as (
-  select s.memory_id, s.version, s.at, length(s.text_search)::float8 as dl, u.lexeme,
-         coalesce(array_length(u.positions, 1), 1)::float8 as tf
-    from scoped s cross join query cross join lateral unnest(s.text_search) u
-   where s.text_search @@ query.q and u.lexeme in (select lexeme from terms)
-),
-df as (select lexeme, count(*)::float8 as df from postings group by lexeme)
-select p.memory_id as id, p.at,
-       sum(ln(1 + (st.n - df.df + 0.5) / (df.df + 0.5)) * (p.tf * ({BM25_K1} + 1))
-           / (p.tf + {BM25_K1} * (1 - {BM25_B} + {BM25_B} * p.dl / greatest(st.avgdl, 1)))) as score
-  from postings p join df using (lexeme) cross join stats st
- group by p.memory_id, p.version, p.at
- order by score desc, p.at desc, p.memory_id
- limit $4"
+candidates as materialized (
+  select v.memory_id as id, extract(epoch from v.recorded_at)::float8 as at,
+         ts_rank_cd(v.text_search, query.q)::float8 as score
+    from memory_versions v cross join query
+   where v.text_search @@ query.q
+     and exists (
+       select 1 from memories m where m.id = v.memory_id and {RANKABLE}
+     )
+   order by score desc, at desc, id
+   limit $4
+)
+select id, at, score from candidates
+ order by score desc, at desc, id"
     )
 }
 
