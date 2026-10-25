@@ -10,7 +10,7 @@ const root = resolve(process.argv[2] ?? ".");
 const archive = resolve(process.argv[3]);
 const listing = spawnSync("tar", ["-tzf", archive], { encoding: "utf8" });
 assert.equal(listing.status, 0);
-for (const file of ["dist/index.js", "dist/index.d.ts", "crates/hyperag/migrations/0001_init.sql", "crates/hyperag/migrations/0002_settings.sql", "LICENSE", "NOTICE"])
+for (const file of ["dist/index.js", "dist/index.d.ts", "crates/hyperag/migrations/0001_init.sql", "crates/hyperag/migrations/0002_settings.sql", "crates/hyperag/migrations/0003_memory_text_limit.sql", "LICENSE", "NOTICE"])
   assert.ok(listing.stdout.split("\n").includes(`package/${file}`), `missing package file: ${file}`);
 assert.ok(!listing.stdout.includes("package/eval/"));
 
