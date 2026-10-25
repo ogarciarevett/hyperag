@@ -3,7 +3,7 @@
 // No backup creation, private files, memory text or server error bodies in output.
 import { Database } from "bun:sqlite";
 import { createHash } from "node:crypto";
-import { parseArgs } from "node:util";
+import { isDeepStrictEqual, parseArgs } from "node:util";
 
 type Obs = {
   id: number;
@@ -45,7 +45,8 @@ export function readSource(path: string, apply = false) {
     const observations = db.query<Obs, []>("select * from observations where deleted_at is null order by id").all();
     const versions = db.query<Version, []>("select v.* from observation_versions v join observations o on o.id=v.observation_id where o.deleted_at is null order by observation_id, version").all();
     const relations = db.query<Rel, []>(relationsSQL).all();
-    return { counts, ids, observations, versions, relations };
+    const deletedIds = db.query<{ id: number }, []>("select id from observations where deleted_at is not null order by id").all().map(o => o.id);
+    return { counts, ids, observations, versions, relations, deletedIds };
   } finally {
     if (db.inTransaction) db.exec("ROLLBACK");
     db.close();
@@ -53,6 +54,8 @@ export function readSource(path: string, apply = false) {
 }
 
 type Call = (method: string, path: string, body?: unknown) => Promise<Record<string, unknown>>;
+type StoredVersion = { version: number; text: string; source: string; kind: string; validFrom: string | null; metadata: { engram?: Record<string, unknown> } };
+type ImportBody = { text: string; source: string; validFrom: string; metadata: { engram: Record<string, unknown> }; idempotencyKey: string };
 export async function importSource(snapshot: ReturnType<typeof readSource>, call: Call) {
   const obs = snapshot.observations!;
   const history = new Map<number, Version[]>();
@@ -70,26 +73,63 @@ export async function importSource(snapshot: ReturnType<typeof readSource>, call
     for (const permission of ["read", "write"])
       await call("POST", "/v1/grants", { principal: who, scope, permission });
 
-  let updates = 0;
+  let updates = 0, added = 0, changed = 0, unchanged = 0;
+  const expectedVersions = new Map<string, number>();
+  const expectedKinds = new Map<string, string>();
   for (const o of obs) {
     const prior = history.get(o.id) ?? [];
     const states = [...prior, { title: o.title, content: o.content, created_at: o.updated_at }];
     // Snapshot-specific keys make an interrupted import replayable without duplicating history.
     const key = createHash("sha256").update(JSON.stringify([o, prior])).digest("hex");
-    for (let i = 0; i < states.length; i++) {
-      const v = states[i]!;
-      const body = {
-        text: textOf(v.title, v.content), source: `engram session ${o.session_id}`,
-        validFrom: iso(i === 0 ? o.created_at : v.created_at),
-        metadata: { engram: { id: o.id, sync_id: o.sync_id, project: o.project, topic_key: o.topic_key, created_at: o.created_at, updated_at: o.updated_at, version_created_at: v.created_at, version_ordinal: i + 1, source_version: "version" in v ? v.version : null, tool_name: o.tool_name, pinned: o.pinned === 1 } },
-        idempotencyKey: `engram:${key}:${i}`,
-      };
-      const r = i === 0
-        ? await call("POST", "/v1/memories", { ...body, scope: scopeOf(o), id: idOf(o), kind: o.type })
-        : await call("PATCH", `/v1/memories/${encodeURIComponent(storedId(o))}`, { ...body, expectedVersion: i });
-      if (r.id !== storedId(o) || r.version !== i + 1) throw new Error("unexpected import identity or version");
-      if (i > 0) updates++;
+    const bodies: ImportBody[] = states.map((v, i) => ({
+      text: textOf(v.title, v.content), source: `engram session ${o.session_id}`,
+      validFrom: iso(i === 0 ? o.created_at : v.created_at),
+      metadata: { engram: { id: o.id, sync_id: o.sync_id, project: o.project, topic_key: o.topic_key, created_at: o.created_at, updated_at: o.updated_at, version_created_at: v.created_at, version_ordinal: i + 1, source_version: "version" in v ? v.version : null, tool_name: o.tool_name, pinned: o.pinned === 1 } },
+      idempotencyKey: `engram:${key}:${i}`,
+    }));
+    const id = storedId(o), path = `/v1/memories/${encodeURIComponent(id)}`;
+    const existing = await call("GET", `${path}/explain`);
+    const versions = (existing.versions ?? []) as StoredVersion[];
+    const head = versions.at(-1), latest = bodies.at(-1)!;
+    const same = (v: StoredVersion, b: ImportBody) => v.text === b.text && v.source === b.source && v.validFrom === b.validFrom && isDeepStrictEqual(v.metadata.engram, b.metadata.engram);
+    if (!existing.missing && (existing.id !== id || existing.deleted || !head || head.metadata.engram?.id !== o.id || head.metadata.engram?.sync_id !== o.sync_id))
+      throw new Error("unexpected existing import identity");
+    let current = existing.missing ? 0 : existing.currentVersion as number;
+    if (!Number.isInteger(current) || current < 0 || (head && head.version !== current)) throw new Error("unexpected existing import version");
+    expectedKinds.set(id, head?.kind ?? o.type);
+    // Old imports have no digest: compare every stored source state without modifying them.
+    const legacyPrefix = versions.length <= bodies.length && versions.every((v, i) => v.kind === o.type && same(v, bodies[i]!));
+    const { snapshot_key, source_type, ...headSource } = head?.metadata.engram ?? {};
+    const markedHead = head && snapshot_key === key && source_type === o.type && same({ ...head, metadata: { engram: headSource } }, latest);
+    if ((legacyPrefix && versions.length === bodies.length) || markedHead) {
+      unchanged++;
+      expectedVersions.set(id, current);
+      continue;
     }
+    if (!head) added++; else changed++;
+    const put = async (body: ImportBody, keySuffix?: string) => {
+      const r = current === 0
+        ? await call("POST", "/v1/memories", { ...body, scope: scopeOf(o), id: idOf(o), kind: o.type })
+        : await call("PATCH", path, { ...body, ...(keySuffix ? { idempotencyKey: `engram:${key}:catchup:${keySuffix}` } : {}), expectedVersion: current });
+      if (r.id !== id || r.version !== current + 1) throw new Error("unexpected import identity or version");
+      if (current > 0) updates++;
+      current++;
+    };
+    if (legacyPrefix) {
+      // Also resume an interrupted initial import, retaining its original replay keys.
+      for (const body of bodies.slice(versions.length)) await put(body);
+    } else {
+      // Preserve new/revised source history without replaying the old snapshot over the head.
+      for (let i = 0; i < prior.length; i++) {
+        const body = bodies[i]!;
+        if (!versions.some(v => v.text === body.text && v.source === body.source && v.validFrom === body.validFrom
+            && v.metadata.engram?.source_version === body.metadata.engram.source_version
+            && v.metadata.engram?.version_created_at === body.metadata.engram.version_created_at))
+          await put(body, `history:${i}`);
+      }
+      await put({ ...latest, metadata: { engram: { ...latest.metadata.engram, snapshot_key: key, source_type: o.type } } }, "current");
+    }
+    expectedVersions.set(id, current);
   }
   const bySync = new Map(obs.filter(o => o.sync_id).map(o => [o.sync_id!, storedId(o)]));
   let linked = 0, skipped = 0;
@@ -103,12 +143,12 @@ export async function importSource(snapshot: ReturnType<typeof readSource>, call
   for (const o of obs) {
     const e = await call("GET", `/v1/memories/${encodeURIComponent(storedId(o))}/explain`);
     const versions = e.versions as Array<{ text: string; kind: string; metadata: { engram?: { id: number } } }> | undefined;
-    if (versions?.length === (history.get(o.id)?.length ?? 0) + 1
+    if (versions && versions.length === expectedVersions.get(storedId(o))
         && versions.at(-1)?.text === textOf(o.title, o.content)
-        && versions.at(-1)?.kind === o.type && versions.at(-1)?.metadata?.engram?.id === o.id) verified++;
+        && versions.at(-1)?.kind === expectedKinds.get(storedId(o)) && versions.at(-1)?.metadata?.engram?.id === o.id) verified++;
   }
   if (verified !== obs.length) throw new Error("import verification failed");
-  return { memories: verified, updates, relations: linked, skippedRelations: skipped };
+  return { memories: verified, added, changed, unchanged, updates, relations: linked, skippedRelations: skipped, deletedInSource: snapshot.deletedIds?.length ?? 0 };
 }
 
 export async function main(args = process.argv.slice(2)) {
@@ -130,10 +170,11 @@ export async function main(args = process.argv.slice(2)) {
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
     // Do not surface a service response: it can contain private source fields.
+    if (r.status === 404 && method === "GET" && path.endsWith("/explain")) return { missing: true };
     if (!r.ok) throw new Error("import request failed");
     return await r.json() as Record<string, unknown>;
   };
-  console.log(JSON.stringify({ counts: await importSource(snapshot, call) }));
+  console.log(JSON.stringify({ counts: await importSource(snapshot, call), deletedIds: snapshot.deletedIds?.slice(0, 20) }));
 }
 
 if (import.meta.main) {
