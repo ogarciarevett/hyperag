@@ -1,0 +1,44 @@
+{
+  "hooks": {
+    "BeforeAgent": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "'<hyperag>' hook prompt --harness gemini # hyperag-managed:v1",
+            "timeout": 3000
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "'<hyperag>' hook session-end --harness gemini # hyperag-managed:v1",
+            "timeout": 3000
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "'<hyperag>' hook session-start --harness gemini # hyperag-managed:v1",
+            "timeout": 3000
+          }
+        ]
+      }
+    ]
+  },
+  "security": {
+    "environmentVariableRedaction": {
+      "allowed": [
+        "HYPERAG_TOKEN"
+      ]
+    }
+  }
+}

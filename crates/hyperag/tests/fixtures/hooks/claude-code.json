@@ -1,0 +1,37 @@
+{
+  "hooks": {
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "'<hyperag>' hook session-end --harness claude-code # hyperag-managed:v1",
+            "timeout": 3
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "'<hyperag>' hook session-start --harness claude-code # hyperag-managed:v1",
+            "timeout": 3
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "'<hyperag>' hook prompt --harness claude-code # hyperag-managed:v1",
+            "timeout": 3
+          }
+        ]
+      }
+    ]
+  }
+}

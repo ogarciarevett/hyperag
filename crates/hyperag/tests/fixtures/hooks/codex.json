@@ -1,0 +1,37 @@
+{
+  "hooks": {
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "'<hyperag>' hook session-end --harness codex # hyperag-managed:v1",
+            "timeout": 3
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "'<hyperag>' hook session-start --harness codex # hyperag-managed:v1",
+            "timeout": 3
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "'<hyperag>' hook prompt --harness codex # hyperag-managed:v1",
+            "timeout": 3
+          }
+        ]
+      }
+    ]
+  }
+}

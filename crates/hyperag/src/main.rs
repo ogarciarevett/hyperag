@@ -34,7 +34,8 @@ async fn main() -> anyhow::Result<()> {
             eprintln!("hyperag listening on http://{local} (MCP at /mcp)");
             axum::serve(listener, router(app).nest_service("/mcp", mcp)).await?;
         }
-        Command::Hook { event } => std::process::exit(hyperag::hooks::run(&event).await),
+        Command::Hook { event, harness } => std::process::exit(hyperag::hooks::run_for(&event, harness.as_deref()).await),
+        Command::Hooks { action } => hyperag::hook_setup::run(&action)?,
         Command::Token { principal, file } => {
             let mut bytes = [0u8; 32];
             getrandom::fill(&mut bytes).map_err(|_| anyhow::anyhow!("secure OS randomness unavailable"))?;

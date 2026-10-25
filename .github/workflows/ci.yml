@@ -89,6 +89,11 @@ jobs:
           key: rust-${{ hashFiles('Cargo.lock') }}
       - run: cargo build --release -p hyperag
       - run: cargo test --release -p hyperag
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+      - name: isolated harness hook contracts
+        run: HYPERAG_BIN=target/release/hyperag python3 crates/hyperag/tests/hooks_install.py
       - name: crate package includes its runtime assets
         run: |
           cargo package --list --locked --manifest-path crates/hyperag/Cargo.toml > /tmp/crate-files.txt

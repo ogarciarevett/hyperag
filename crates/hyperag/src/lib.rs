@@ -2,6 +2,7 @@ pub mod cli;
 pub mod core;
 pub mod graph;
 pub mod hooks;
+pub mod hook_setup;
 pub mod mcp;
 pub mod models;
 pub mod portable;

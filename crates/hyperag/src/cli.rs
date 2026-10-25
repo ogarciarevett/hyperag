@@ -45,7 +45,16 @@ pub enum Command {
         url: String,
     },
     /// Agent harness hook: session-start, prompt or session-end (hook JSON on stdin).
-    Hook { event: String },
+    Hook {
+        event: String,
+        #[arg(long)]
+        harness: Option<String>,
+    },
+    /// Configure the same hooks across supported harnesses.
+    Hooks {
+        #[command(subcommand)]
+        action: HooksAction,
+    },
     /// Create a token for a principal: prints the token once and adds its hash to the tokens file.
     Token {
         principal: String,
@@ -175,4 +184,22 @@ pub fn parse_assignments(items: &[String]) -> anyhow::Result<(Option<String>, Op
     }
     anyhow::ensure!(e.is_some() || r.is_some(), "nothing to set");
     Ok((e, r))
+}
+
+#[derive(Subcommand)]
+pub enum HooksAction {
+    /// Merge hooks into existing harness profiles; missing profiles are skipped.
+    Install {
+        #[arg(long, default_value = "all")]
+        harness: String,
+        #[arg(long)]
+        dry_run: bool,
+    },
+    /// Show installed hook configuration (does not contact the service).
+    Status,
+    /// Remove only unchanged entries recorded by install.
+    Uninstall {
+        #[arg(long, default_value = "all")]
+        harness: String,
+    },
 }
