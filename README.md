@@ -61,11 +61,6 @@ The result names each memory's version, source and author. The MCP server expose
 
 Two evaluation windows, October 23–25, 2026. These figures use only completed runs and display **N/D** for unrun or unfinished rows. The default template has graph enabled; the other Hyperag rows explicitly label graph on/off. These are observations, with no confidence intervals or broad quality claim.
 
-| Hyperag configuration | LoCoMo F1 (categories 1–4) | DMR accuracy |
-| --- | --- | --- |
-| Default template (graph on) | 0.4913 | 0.8220 |
-| e5+bgev2m3 (graph off) | 0.4635 | N/D |
-
 ![LoCoMo F1 comparison](docs/benchmarks/locomo.svg)
 
 *LoCoMo token F1 over categories 1–4. Every competitor and Hyperag variant is shown; missing results remain unscored.*
