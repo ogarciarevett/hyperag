@@ -19,7 +19,7 @@ def formula(version, checksums):
             raise ValueError("duplicate release asset checksum")
         hashes[name] = parts[0].lower()
     out = ['class Hyperag < Formula', '  desc "Shared memory and retrieval with scoped access and version history"',
-           '  homepage "https://github.com/ogarciarevett/hyperag"', f'  version "{version.removeprefix("v")}"', '  license "Apache-2.0"']
+           '  homepage "https://github.com/ogarciarevett/hyperag"', '  license "Apache-2.0"']
     for os_name, targets in [("macos", TARGETS[:2]), ("linux", TARGETS[2:])]:
         out += [f'  on_{os_name} do', '    if Hardware::CPU.arm?']
         for i, target in enumerate(targets):
