@@ -42,3 +42,15 @@ null; the final event time is recorded separately and is not treated as session 
 The model field is the last observed model; no missing model or timestamps are invented.
 
 Validation: `bun test scripts/session-transcript.test.ts` uses synthetic fixtures only.
+
+Forked or concatenated files are partitioned by explicit source session identity before
+aggregation. Records without an identity before the first explicit session remain
+unassigned and are counted as skipped fragments; no session ID is invented. A session
+may occur in multiple files or change cwd: the original first observed cwd remains
+primary, and all observed cwd values are retained in sorted, redacted `cwds` metadata.
+
+If a project label is redacted, its normalized hash defines a stable project scope.
+The label remains redacted in text and metadata instead of aborting the import.
+`redactedProjectLabels` counts these per-session label redactions. Links to original
+observation IDs that would reintroduce that label are omitted and counted as
+`skipped.unsafeProjectLink`; prompts and their session link are still imported.

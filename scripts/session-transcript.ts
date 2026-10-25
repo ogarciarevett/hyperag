@@ -29,8 +29,8 @@ export function redact(text: string) {
 }
 
 type Prompt = { text: string; timestamp: string | null; mirrorKey: string; order: number };
-export function parseTranscript(source: Source, text: string) {
-  const session = { id: null as string | null, cwd: null as string | null, startedAt: null as string | null, endedAt: null as string | null, firstEventAt: null as string | null, lastEventAt: null as string | null, model: null as string | null };
+function transcriptParser(source: Source) {
+  const session = { id: null as string | null, cwd: null as string | null, cwds: [] as string[], startedAt: null as string | null, endedAt: null as string | null, firstEventAt: null as string | null, lastEventAt: null as string | null, model: null as string | null };
   let order = 0;
   const prompts: Prompt[] = [], fallback: Prompt[] = [], skipped: Record<string, number> = {};
   const skip = (why: string) => { skipped[why] = (skipped[why] ?? 0) + 1; };
@@ -43,11 +43,11 @@ export function parseTranscript(source: Source, text: string) {
     if (/^\s*(?:# AGENTS\.md instructions|<environment_context>|<permissions instructions>|<local-command|<system-reminder>)/.test(content)) { skip("generatedContext"); return; }
     target.push({ text: redact(content), timestamp: stamp(timestamp), mirrorKey: hash(content), order: order++ });
   };
-  for (const line of text.split("\n")) {
-    if (!line.trim()) continue;
-    if (line.length > 256_000) { skip("largeRecord"); continue; }
-    let r: any;
-    try { r = JSON.parse(line); if (!r || typeof r !== "object") throw new Error(); } catch { skip("invalidJson"); continue; }
+  const push = (line: string, parsed?: unknown) => {
+    if (!line.trim()) return;
+    if (line.length > 256_000) { skip("largeRecord"); return; }
+    let r: any = parsed;
+    try { if (r === undefined) r = JSON.parse(line); if (!r || typeof r !== "object") throw new Error(); } catch { skip("invalidJson"); return; }
     const p = r.payload ?? {}, timestamp = stamp(r.timestamp);
     if (timestamp) {
       if (!session.firstEventAt || Date.parse(timestamp) < Date.parse(session.firstEventAt)) session.firstEventAt = timestamp;
@@ -60,7 +60,9 @@ export function parseTranscript(source: Source, text: string) {
     const id = source === "codex" ? (r.type === "session_meta" ? string(p.id) : null) : string(r.sessionId);
     if (id && session.id && session.id !== id) throw new Error("mixed source session ids");
     session.id ??= id;
-    session.cwd ??= string(source === "codex" ? p.cwd : r.cwd);
+    const cwd = string(source === "codex" ? p.cwd : r.cwd);
+    session.cwd ??= cwd;
+    if (cwd && !session.cwds.includes(cwd)) session.cwds.push(cwd);
     if (source === "codex") {
       if (r.type === "turn_context") session.model = string(p.model) ?? session.model;
       if (r.type === "session_end") session.endedAt = timestamp;
@@ -73,15 +75,42 @@ export function parseTranscript(source: Source, text: string) {
       if (r.type === "user" && !r.isMeta) add(prompts, r.message?.content, r.timestamp);
       else skip("nonUserRecord");
     }
+  };
+  const finish = () => {
+    // Consume only corresponding event mirrors; unmatched tail events remain real user prompts.
+    const mirrors = new Map<string, number>();
+    for (const p of prompts) mirrors.set(p.mirrorKey, (mirrors.get(p.mirrorKey) ?? 0) + 1);
+    const unmatched = fallback.filter(p => {
+      const count = mirrors.get(p.mirrorKey) ?? 0;
+      if (!count) return true;
+      mirrors.set(p.mirrorKey, count - 1); skip("mirroredUserEvent"); return false;
+    });
+    const selected = [...prompts, ...unmatched].sort((a,b) => a.order - b.order);
+    session.cwds.sort();
+    return { session, prompts: selected.map(({ text, timestamp }) => ({ text, timestamp })), skipped };
+  };
+  return { push, finish };
+}
+
+export function parseTranscript(source: Source, text: string) {
+  const parser = transcriptParser(source);
+  for (const line of text.split("\n")) parser.push(line);
+  return parser.finish();
+}
+
+/** Route forked or concatenated records by explicit source identity, never by an invented id. */
+export function parseTranscriptSessions(source: Source, text: string) {
+  const parsers = new Map<string | null, ReturnType<typeof transcriptParser>>();
+  let current: string | null = null;
+  for (const line of text.split("\n")) {
+    if (!line.trim()) continue;
+    let record: any;
+    if (line.length <= 256_000) try { record = JSON.parse(line); } catch {}
+    const id = source === "codex" ? (record?.type === "session_meta" ? record.payload?.id : null) : record?.sessionId;
+    if (typeof id === "string") current = id;
+    let parser = parsers.get(current);
+    if (!parser) { parser = transcriptParser(source); parsers.set(current, parser); }
+    parser.push(line, record);
   }
-  // Consume only corresponding event mirrors; unmatched tail events remain real user prompts.
-  const mirrors = new Map<string, number>();
-  for (const p of prompts) mirrors.set(p.mirrorKey, (mirrors.get(p.mirrorKey) ?? 0) + 1);
-  const unmatched = fallback.filter(p => {
-    const count = mirrors.get(p.mirrorKey) ?? 0;
-    if (!count) return true;
-    mirrors.set(p.mirrorKey, count - 1); skip("mirroredUserEvent"); return false;
-  });
-  const selected = [...prompts, ...unmatched].sort((a,b) => a.order - b.order);
-  return { session, prompts: selected.map(({ text, timestamp }) => ({ text, timestamp })), skipped };
+  return [...parsers.values()].map(p => p.finish());
 }
