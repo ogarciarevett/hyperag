@@ -9,7 +9,7 @@ A BEIR doc is one retain() with its id as document_id; docs with a speaker in on
 are one session and one retain(). A recalled fact maps back to the docs of its document.
 
   uv venv --python 3.12 eval/public/.venv-hindsight
-  uv pip install --python eval/public/.venv-hindsight/bin/python hindsight-api==1.1.0 hindsight-client==1.1.0
+  uv pip install -c eval/public/python-ca-constraints.txt --python eval/public/.venv-hindsight/bin/python hindsight-api==1.1.0 hindsight-client==1.1.0
   HINDSIGHT_API_LLM_PROVIDER=openai HINDSIGHT_API_LLM_BASE_URL=$EVAL_LLM_BASE_URL HINDSIGHT_API_LLM_MODEL=$EVAL_LLM_MODEL \\
     HINDSIGHT_API_LLM_API_KEY=$EVAL_LLM_API_KEY HINDSIGHT_API_DATABASE_URL=pg0://competitors \\
     eval/public/.venv-hindsight/bin/hindsight-api --host 127.0.0.1 --port 58888

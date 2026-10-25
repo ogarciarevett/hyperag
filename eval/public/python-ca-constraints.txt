@@ -1,0 +1,4 @@
+# Floors for optional Python benchmark environments; do not install unused packages.
+certifi>=2026.10.19
+pip>=26.2.2
+uv>=0.13.4

@@ -1,0 +1,66 @@
+{
+  "system": "hyperag",
+  "version": "0.1.0",
+  "profile": "egemma2+bgev2m3+graph",
+  "config": {
+    "embedding": {
+      "model": "onnx-community/embeddinggemma-2-ONNX#q8",
+      "revision": "daa72c51243991dfcaf9f9137d2c573d8f7790c0",
+      "dimensions": 768,
+      "normalized": true,
+      "preprocessing": "sentence_embedding; max_length=512; prompts query=\"task: search result | query: \" document=\"title: none | text: \""
+    },
+    "reranker": "onnx-community/bge-reranker-v2-m3-ONNX@6f5ff65#q8",
+    "rrfK": 60,
+    "graph": "conversations: NEXT_TURN, SAME_ENTITY (exact match), 2 hops; BEIR: graph enabled, no edges or relationship contribution",
+    "asOf": "none (asOf filters validity, not relative-date anchoring; validFrom and validTo are null)"
+  },
+  "transportRetry": "Common proxy: ECONNRESET only, 3 total upstream attempts, 250/500ms backoff, identical payload; HTTP errors unchanged; native client retries remain; upstream keep-alive disabled",
+  "bench": "locomo",
+  "units": 10,
+  "asOfUse": "none (asOf filters validity, not relative-date anchoring; validFrom and validTo are null)",
+  "questions": 1986,
+  "expectedQuestions": 1986,
+  "failedSearches": 0,
+  "k": 10,
+  "workers": 2,
+  "llm": {
+    "model": "llama-3.3-70b-instruct",
+    "calls": 1986,
+    "prompt": 1316020,
+    "completion": 23617
+  },
+  "accuracy": "score_locomo.py",
+  "wallSeconds": 4780.231788416,
+  "ingestP50Ms": 276783.91541599995,
+  "searchP50Ms": 273049.98570800014,
+  "searchP95Ms": 572689.632125,
+  "rssPeakBytes": 3757676208,
+  "systemRssPeakBytes": 186227098,
+  "date": "2026-10-25T00:11:05.854Z",
+  "locomo": {
+    "f1_cat1_4": 0.4913,
+    "per_category": {
+      "1": {
+        "n": 282,
+        "f1": 0.3627
+      },
+      "2": {
+        "n": 321,
+        "f1": 0.3457
+      },
+      "3": {
+        "n": 96,
+        "f1": 0.1606
+      },
+      "4": {
+        "n": 841,
+        "f1": 0.6277
+      },
+      "5": {
+        "n": 446,
+        "f1": 0.8498
+      }
+    }
+  }
+}

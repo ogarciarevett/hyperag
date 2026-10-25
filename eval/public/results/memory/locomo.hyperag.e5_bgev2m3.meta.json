@@ -1,0 +1,66 @@
+{
+  "system": "hyperag",
+  "version": "0.1.0",
+  "profile": "e5+bgev2m3",
+  "config": {
+    "embedding": {
+      "model": "Xenova/multilingual-e5-small#q8",
+      "revision": "761b726dd34fb83930e26aab4e9ac3899aa1fa78",
+      "dimensions": 384,
+      "normalized": true,
+      "preprocessing": "mean pooling; prefixes query=\"query: \" document=\"passage: \""
+    },
+    "reranker": "onnx-community/bge-reranker-v2-m3-ONNX@6f5ff65#q8",
+    "rrfK": 60,
+    "graph": null,
+    "asOf": "none (asOf filters validity, not relative-date anchoring; validFrom and validTo are null)"
+  },
+  "transportRetry": "Common proxy: ECONNRESET only, 3 total upstream attempts, 250/500ms backoff, identical payload; HTTP errors unchanged; native client retries remain; upstream keep-alive disabled",
+  "bench": "locomo",
+  "units": 10,
+  "asOfUse": "none (asOf filters validity, not relative-date anchoring; validFrom and validTo are null)",
+  "questions": 1986,
+  "expectedQuestions": 1986,
+  "failedSearches": 0,
+  "k": 10,
+  "workers": 2,
+  "llm": {
+    "model": "llama-3.3-70b-instruct",
+    "calls": 1986,
+    "prompt": 1419275,
+    "completion": 23687
+  },
+  "accuracy": "score_locomo.py",
+  "wallSeconds": 5054.481376125001,
+  "ingestP50Ms": 338103.79316599946,
+  "searchP50Ms": 319903.19116699975,
+  "searchP95Ms": 1039682.4164160001,
+  "rssPeakBytes": 3640366072,
+  "systemRssPeakBytes": 182871654,
+  "date": "2026-10-24T21:53:07.849Z",
+  "locomo": {
+    "f1_cat1_4": 0.4635,
+    "per_category": {
+      "1": {
+        "n": 282,
+        "f1": 0.3269
+      },
+      "2": {
+        "n": 321,
+        "f1": 0.3419
+      },
+      "3": {
+        "n": 96,
+        "f1": 0.1793
+      },
+      "4": {
+        "n": 841,
+        "f1": 0.5882
+      },
+      "5": {
+        "n": 446,
+        "f1": 0.8655
+      }
+    }
+  }
+}

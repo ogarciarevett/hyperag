@@ -7,7 +7,7 @@ documents for OpenAI-compatible servers), the embedder the shared local bge-smal
 A BEIR doc is one text episode; docs with a speaker in one ingest() call are one session and one
 message episode. A fact maps back to the docs of the episodes it came from.
 
-  uv venv --python 3.12 eval/public/.venv-graphiti && uv pip install --python eval/public/.venv-graphiti/bin/python graphiti-core==0.31.2 \
+  uv venv --python 3.12 eval/public/.venv-graphiti && uv pip install -c eval/public/python-ca-constraints.txt --python eval/public/.venv-graphiti/bin/python graphiti-core==0.31.2 \
     httpx==0.28.1  # graphiti imports httpx; openai 3.x moved to httpx2
   docker run -d --name fake-test-only-neo4j -p 57687:7687 -e NEO4J_AUTH=neo4j/fake-test-only -e NEO4J_server_memory_heap_max__size=2G neo4j:5.26.28-community
 """

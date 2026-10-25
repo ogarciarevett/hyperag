@@ -59,7 +59,7 @@ The result names each memory's version, source and author. The MCP server expose
 
 ## Benchmarks
 
-One evaluation window, October 23–24, 2026. These figures use only completed runs and display **N/D** for unrun or unfinished rows. The default template has graph enabled; the other Hyperag rows explicitly label graph on/off. These are observations, with no confidence intervals or broad quality claim.
+Two evaluation windows, October 23–25, 2026. These figures use only completed runs and display **N/D** for unrun or unfinished rows. The default template has graph enabled; the other Hyperag rows explicitly label graph on/off. These are observations, with no confidence intervals or broad quality claim.
 
 ![LoCoMo F1 comparison](docs/benchmarks/locomo.svg)
 
@@ -73,11 +73,15 @@ One evaluation window, October 23–24, 2026. These figures use only completed r
 
 ![BEIR SciFact comparison](docs/benchmarks/scifact.svg)
 
+![BEIR NFCorpus comparison](docs/benchmarks/nfcorpus.svg)
+
+![BEIR ArguAna comparison](docs/benchmarks/arguana.svg)
+
 How measured: all memory systems use the same answer/judge harness. LoCoMo completes 1,986 questions, with F1 reported over 1,540 category 1–4 questions. DMR and oracle-haystack LongMemEval use 500 questions; S100 uses the fixed 100-question reporting subset. Oracle means a top-10 search over the oracle haystack, not upstream oracle-session retrieval. SciFact uses all 300 official test queries and nDCG@10. Failed native searches remain in scoring; graph-off rows are not the default template.
 
-[Raw scores and completion evidence](eval/public/results/window-2026-10-24.json) · [BEIR raw scores](eval/public/results/beir-scores.json) · [Measurement details](eval/public/notes/window-2026-10-24.md) · [All 47 unfinished or blocked rows](eval/public/notes/next-window.md).
+[Window 1 results](eval/public/results/window-2026-10-24.json) · [Window 2 scores and completion evidence](eval/public/results/window-2026-10-25.json) · [BEIR raw scores](eval/public/results/beir-scores.json) · [Window 1 details](eval/public/notes/window-2026-10-24.md) · [Window 2 details](eval/public/notes/window-2026-10-25.md) · [Final row statuses](eval/public/notes/next-window.md).
 
-No full 500-question LME-S run completed. Outstanding comparisons include several competitors on DMR/oracle/S100, the default template, INT8 profiles, endpoint-blocked native tool calls and unfinished BEIR datasets. Partial attempts are not zeros. The full LME-S includes development questions and is not a held-out temporal score; see the [temporal protocol](docs/temporal.md).
+No full 500-question LME-S run completed. Outstanding comparisons include several competitors on DMR/oracle/S100, INT8 profiles, endpoint-blocked native tool calls and unfinished BEIR datasets. Partial attempts are not zeros. The full LME-S includes development questions and is not a held-out temporal score; see the [temporal protocol](docs/temporal.md).
 
 Regenerate the figures from result metadata:
 
@@ -94,6 +98,15 @@ Graph experiments use two deterministic conversation rules: link each turn to it
 **TypeScript** (`src/`) is the reference library and HTTP implementation, retained for parity checks and library consumers. The benchmark runners and adapters in `eval/` use TypeScript and Python so every system shares question loading, retrieval budgets and scoring. The TypeScript library is being prepared for npm distribution; running the Rust binary does not require it.
 
 Postgres 18 with pgvector stores versions, grants, BM25 statistics and separate vector indexes per embedding space. Neo4j 5.26 Community supplies typed graph expansion. The default model slots are pinned EmbeddingGemma 2 q8 and bge-reranker-v2-m3 q8; `hyperag models recommend` suggests alternatives for the resources free on your machine. Hyperag returns evidence; your application supplies the answer model.
+
+## Developer tooling
+
+The TypeScript SDK/tooling requires Node 24.22.1 and TypeScript 7.0.2.
+Optional Python benchmark environments require uv >=0.13.4 and use the
+CA constraints in `eval/public/python-ca-constraints.txt`. Run
+`sh scripts/bootstrap-python-ca.sh python3` with Python >=3.10 to bootstrap
+hash-verified pip 26.2.2, certifi >=2026.10.19 and uv >=0.13.4 before package downloads.
+This does not rerun or change recorded benchmark results.
 
 ## Docs
 

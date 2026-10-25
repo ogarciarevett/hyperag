@@ -1,0 +1,409 @@
+{
+  "window": "2026-10-24/25",
+  "queueEndedUtc": "2026-10-25T00:57:48Z",
+  "noNewStartUtc": "2026-10-25T01:33:43Z",
+  "timeFitRule": "expected runtime + 1.0 minute dispatch safety margin must fit before the no-new-start cutoff; displayed estimates/remaining time rounded to 0.1 minute",
+  "supersededControlEvents": "The prior dispatcher stop latch at 21:59Z generated misleading USD90 skip messages. These were operator preemption events, not final row statuses or budget exhaustion.",
+  "rows": [
+    {
+      "bench": "dmr",
+      "system": "letta",
+      "profile": "default",
+      "status": "unrun",
+      "reason": "Runtime estimate 35.0 min + 1.0 min dispatch safety margin = 36.0 min required; about 35.9 min remained before the no-new-start cutoff. Full retry was not admitted.",
+      "expectedMinutes": 35,
+      "safetyMarginMinutes": 1.0,
+      "remainingMinutesRounded": 35.9
+    },
+    {
+      "bench": "lme-oracle",
+      "system": "letta",
+      "profile": "default",
+      "status": "unrun",
+      "reason": "Not selected for the second-window subset; no new score."
+    },
+    {
+      "bench": "dmr",
+      "system": "mem0",
+      "profile": "default",
+      "status": "unrun",
+      "reason": "Runtime estimate 35.0 min + 1.0 min dispatch safety margin = 36.0 min required; about 35.9 min remained before the no-new-start cutoff. Full retry was not admitted.",
+      "expectedMinutes": 35,
+      "safetyMarginMinutes": 1.0,
+      "remainingMinutesRounded": 35.9
+    },
+    {
+      "bench": "dmr",
+      "system": "cognee",
+      "profile": "default",
+      "status": "unrun",
+      "reason": "Runtime estimate 35.0 min + 1.0 min dispatch safety margin = 36.0 min required; about 35.9 min remained before the no-new-start cutoff. Full retry was not admitted.",
+      "expectedMinutes": 35,
+      "safetyMarginMinutes": 1.0,
+      "remainingMinutesRounded": 35.9
+    },
+    {
+      "bench": "dmr",
+      "system": "hindsight",
+      "profile": "default",
+      "status": "unrun",
+      "reason": "Runtime estimate 35.0 min + 1.0 min dispatch safety margin = 36.0 min required; about 35.9 min remained before the no-new-start cutoff. Full retry was not admitted.",
+      "expectedMinutes": 35,
+      "safetyMarginMinutes": 1.0,
+      "remainingMinutesRounded": 35.9
+    },
+    {
+      "bench": "dmr",
+      "system": "graphiti",
+      "profile": "default",
+      "status": "unrun",
+      "reason": "Runtime estimate 35.0 min + 1.0 min dispatch safety margin = 36.0 min required; about 35.9 min remained before the no-new-start cutoff. Full retry was not admitted.",
+      "expectedMinutes": 35,
+      "safetyMarginMinutes": 1.0,
+      "remainingMinutesRounded": 35.9
+    },
+    {
+      "bench": "lme-oracle",
+      "system": "mem0",
+      "profile": "default",
+      "status": "unrun",
+      "reason": "Not selected for the second-window subset; no new score."
+    },
+    {
+      "bench": "lme-oracle",
+      "system": "cognee",
+      "profile": "default",
+      "status": "unrun",
+      "reason": "Not selected for the second-window subset; no new score."
+    },
+    {
+      "bench": "lme-oracle",
+      "system": "hindsight",
+      "profile": "default",
+      "status": "unrun",
+      "reason": "Not selected for the second-window subset; no new score."
+    },
+    {
+      "bench": "lme-oracle",
+      "system": "graphiti",
+      "profile": "default",
+      "status": "unrun",
+      "reason": "Not selected for the second-window subset; no new score."
+    },
+    {
+      "bench": "locomo",
+      "system": "hyperag",
+      "profile": "e5+bgev2m3",
+      "status": "complete",
+      "reason": "Full 1986-question/query run completed; zero search/query failures."
+    },
+    {
+      "bench": "dmr",
+      "system": "hyperag",
+      "profile": "e5+bgev2m3",
+      "status": "unfinished",
+      "reason": "Lower-priority attempt preempted after 114 answers; no score. Runtime estimate 55.0 min + 1.0 min dispatch safety margin = 56.0 min required; about 35.9 min remained before the no-new-start cutoff. Full retry was not admitted.",
+      "expectedMinutes": 55,
+      "safetyMarginMinutes": 1.0,
+      "remainingMinutesRounded": 35.9
+    },
+    {
+      "bench": "lme-oracle",
+      "system": "hyperag",
+      "profile": "e5+bgev2m3",
+      "status": "unrun",
+      "reason": "Runtime estimate 75.0 min + 1.0 min dispatch safety margin = 76.0 min required; about 35.9 min remained before the no-new-start cutoff. Full retry was not admitted.",
+      "expectedMinutes": 75,
+      "safetyMarginMinutes": 1.0,
+      "remainingMinutesRounded": 35.9
+    },
+    {
+      "bench": "locomo",
+      "system": "hyperag",
+      "profile": "egemma2+nvrerank",
+      "status": "unrun",
+      "reason": "Runtime estimate 50.0 min + 1.0 min dispatch safety margin = 51.0 min required; about 35.9 min remained before the no-new-start cutoff. Full retry was not admitted.",
+      "expectedMinutes": 50,
+      "safetyMarginMinutes": 1.0,
+      "remainingMinutesRounded": 35.9
+    },
+    {
+      "bench": "dmr",
+      "system": "hyperag",
+      "profile": "egemma2+nvrerank",
+      "status": "unrun",
+      "reason": "Runtime estimate 35.0 min + 1.0 min dispatch safety margin = 36.0 min required; about 35.9 min remained before the no-new-start cutoff. Full retry was not admitted.",
+      "expectedMinutes": 35,
+      "safetyMarginMinutes": 1.0,
+      "remainingMinutesRounded": 35.9
+    },
+    {
+      "bench": "lme-oracle",
+      "system": "hyperag",
+      "profile": "egemma2+nvrerank",
+      "status": "unrun",
+      "reason": "Runtime estimate 75.0 min + 1.0 min dispatch safety margin = 76.0 min required; about 35.9 min remained before the no-new-start cutoff. Full retry was not admitted.",
+      "expectedMinutes": 75,
+      "safetyMarginMinutes": 1.0,
+      "remainingMinutesRounded": 35.9
+    },
+    {
+      "bench": "lme-s100",
+      "system": "mem0",
+      "profile": "default",
+      "status": "unrun",
+      "reason": "Not selected for the second-window subset; no new score."
+    },
+    {
+      "bench": "lme-s100",
+      "system": "cognee",
+      "profile": "default",
+      "status": "unrun",
+      "reason": "Not selected for the second-window subset; no new score."
+    },
+    {
+      "bench": "lme-s100",
+      "system": "graphiti",
+      "profile": "default",
+      "status": "unrun",
+      "reason": "Not selected for the second-window subset; no new score."
+    },
+    {
+      "bench": "lme-s100",
+      "system": "hindsight",
+      "profile": "default",
+      "status": "unrun",
+      "reason": "Not selected for the second-window subset; no new score."
+    },
+    {
+      "bench": "lme-s100",
+      "system": "hyperag",
+      "profile": "egemma2+nvrerank",
+      "status": "unrun",
+      "reason": "Runtime estimate 120.0 min + 1.0 min dispatch safety margin = 121.0 min required; about 35.9 min remained before the no-new-start cutoff. Full retry was not admitted.",
+      "expectedMinutes": 120,
+      "safetyMarginMinutes": 1.0,
+      "remainingMinutesRounded": 35.9
+    },
+    {
+      "bench": "lme-s",
+      "system": "hyperag",
+      "profile": "e5+rerank",
+      "status": "unrun",
+      "reason": "Not selected for the second-window subset; no new score."
+    },
+    {
+      "bench": "lme-s",
+      "system": "hyperag",
+      "profile": "e5+bgev2m3",
+      "status": "unrun",
+      "reason": "Not selected for the second-window subset; no new score."
+    },
+    {
+      "bench": "lme-s",
+      "system": "hyperag",
+      "profile": "egemma2+rerank",
+      "status": "unrun",
+      "reason": "Not selected for the second-window subset; no new score."
+    },
+    {
+      "bench": "lme-s",
+      "system": "letta",
+      "profile": "default",
+      "status": "unrun",
+      "reason": "Not selected for the second-window subset; no new score."
+    },
+    {
+      "bench": "locomo",
+      "system": "hyperag",
+      "profile": "nemotron-int8",
+      "status": "blocked",
+      "reason": "No INT8 embedding checkpoint was served; no second-window attempt or score."
+    },
+    {
+      "bench": "dmr",
+      "system": "hyperag",
+      "profile": "nemotron-int8",
+      "status": "blocked",
+      "reason": "No INT8 embedding checkpoint was served; no second-window attempt or score."
+    },
+    {
+      "bench": "lme-oracle",
+      "system": "hyperag",
+      "profile": "nemotron-int8",
+      "status": "blocked",
+      "reason": "No INT8 embedding checkpoint was served; no second-window attempt or score."
+    },
+    {
+      "bench": "lme-s100",
+      "system": "hyperag",
+      "profile": "nemotron-int8",
+      "status": "blocked",
+      "reason": "No INT8 embedding checkpoint was served; no second-window attempt or score."
+    },
+    {
+      "bench": "lme-s100",
+      "system": "hyperag",
+      "profile": "nemotron+nvrerank",
+      "status": "failed",
+      "reason": "The first-window attempt remains unscored. Runtime estimate 120.0 min + 1.0 min dispatch safety margin = 121.0 min required; about 35.9 min remained before the no-new-start cutoff. Full retry was not admitted.",
+      "expectedMinutes": 120,
+      "safetyMarginMinutes": 1.0,
+      "remainingMinutesRounded": 35.9
+    },
+    {
+      "bench": "beir:nfcorpus",
+      "system": "hyperag",
+      "profile": "nemotron",
+      "status": "complete",
+      "reason": "Full 323-question/query run completed; zero search/query failures."
+    },
+    {
+      "bench": "beir:nfcorpus",
+      "system": "hyperag",
+      "profile": "nemotron+nvrerank",
+      "status": "complete",
+      "reason": "Full 323-question/query run completed; zero search/query failures."
+    },
+    {
+      "bench": "beir:arguana",
+      "system": "hyperag",
+      "profile": "nemotron",
+      "status": "complete",
+      "reason": "Full 1406-question/query run completed; zero search/query failures."
+    },
+    {
+      "bench": "beir:arguana",
+      "system": "hyperag",
+      "profile": "nemotron+nvrerank",
+      "status": "failed",
+      "reason": "The first-window attempt remains unscored. Runtime estimate 60.6 min + 1.0 min dispatch safety margin = 61.6 min required; about 35.9 min remained before the no-new-start cutoff. Full retry was not admitted.",
+      "expectedMinutes": 60.6,
+      "safetyMarginMinutes": 1.0,
+      "remainingMinutesRounded": 35.9
+    },
+    {
+      "bench": "beir:scidocs",
+      "system": "hyperag",
+      "profile": "nemotron",
+      "status": "unrun",
+      "reason": "Runtime estimate 49.8 min + 1.0 min dispatch safety margin = 50.8 min required; about 35.9 min remained before the no-new-start cutoff. Full retry was not admitted.",
+      "expectedMinutes": 49.8,
+      "safetyMarginMinutes": 1.0,
+      "remainingMinutesRounded": 35.9
+    },
+    {
+      "bench": "beir:scidocs",
+      "system": "hyperag",
+      "profile": "nemotron+nvrerank",
+      "status": "unrun",
+      "reason": "Runtime estimate 79.6 min + 1.0 min dispatch safety margin = 80.6 min required; about 35.9 min remained before the no-new-start cutoff. Full retry was not admitted.",
+      "expectedMinutes": 79.6,
+      "safetyMarginMinutes": 1.0,
+      "remainingMinutesRounded": 35.9
+    },
+    {
+      "bench": "beir:fiqa",
+      "system": "hyperag",
+      "profile": "nemotron",
+      "status": "unrun",
+      "reason": "Runtime estimate 90.3 min + 1.0 min dispatch safety margin = 91.3 min required; about 35.9 min remained before the no-new-start cutoff. Full retry was not admitted.",
+      "expectedMinutes": 90.3,
+      "safetyMarginMinutes": 1.0,
+      "remainingMinutesRounded": 35.9
+    },
+    {
+      "bench": "beir:fiqa",
+      "system": "hyperag",
+      "profile": "nemotron+nvrerank",
+      "status": "unrun",
+      "reason": "Runtime estimate 109.7 min + 1.0 min dispatch safety margin = 110.7 min required; about 35.9 min remained before the no-new-start cutoff. Full retry was not admitted.",
+      "expectedMinutes": 109.7,
+      "safetyMarginMinutes": 1.0,
+      "remainingMinutesRounded": 35.9
+    },
+    {
+      "bench": "beir:trec-covid",
+      "system": "hyperag",
+      "profile": "nemotron",
+      "status": "unrun",
+      "reason": "Runtime estimate 242.3 min + 1.0 min dispatch safety margin = 243.3 min required; about 35.9 min remained before the no-new-start cutoff. Full retry was not admitted.",
+      "expectedMinutes": 242.3,
+      "safetyMarginMinutes": 1.0,
+      "remainingMinutesRounded": 35.9
+    },
+    {
+      "bench": "beir:trec-covid",
+      "system": "hyperag",
+      "profile": "nemotron+nvrerank",
+      "status": "unrun",
+      "reason": "Runtime estimate 243.8 min + 1.0 min dispatch safety margin = 244.8 min required; about 35.9 min remained before the no-new-start cutoff. Full retry was not admitted.",
+      "expectedMinutes": 243.8,
+      "safetyMarginMinutes": 1.0,
+      "remainingMinutesRounded": 35.9
+    },
+    {
+      "bench": "lme-s",
+      "system": "engram",
+      "profile": "default",
+      "status": "unrun",
+      "reason": "Not selected for the second-window subset; no new score."
+    },
+    {
+      "bench": "lme-s",
+      "system": "memvid",
+      "profile": "default",
+      "status": "unrun",
+      "reason": "Not selected for the second-window subset; no new score."
+    },
+    {
+      "bench": "lme-oracle",
+      "system": "hyperag",
+      "profile": "egemma2+rerank",
+      "status": "unfinished",
+      "reason": "First-window evidence: 384/500 answers; local compute was paused; window ended; no score. Not selected for the second-window subset; no new score."
+    },
+    {
+      "bench": "locomo",
+      "system": "langmem",
+      "profile": "default",
+      "status": "blocked",
+      "reason": "Native automatic tool selection requires an enabled parser. Readiness was not established in window 2; no second-window attempt or score."
+    },
+    {
+      "bench": "lme-oracle",
+      "system": "langmem",
+      "profile": "default",
+      "status": "blocked",
+      "reason": "Native automatic tool selection requires an enabled parser. Readiness was not established in window 2; no second-window attempt or score."
+    },
+    {
+      "bench": "dmr",
+      "system": "langmem",
+      "profile": "default",
+      "status": "blocked",
+      "reason": "Native automatic tool selection requires an enabled parser. Readiness was not established in window 2; no second-window attempt or score."
+    },
+    {
+      "bench": "lme-s100",
+      "system": "langmem",
+      "profile": "default",
+      "status": "blocked",
+      "reason": "Native automatic tool selection requires an enabled parser. Readiness was not established in window 2; no second-window attempt or score."
+    },
+    {
+      "bench": "locomo",
+      "system": "hyperag",
+      "profile": "egemma2+bgev2m3+graph",
+      "status": "complete",
+      "reason": "Full 1986-question/query run completed; zero search/query failures."
+    },
+    {
+      "bench": "dmr",
+      "system": "hyperag",
+      "profile": "egemma2+bgev2m3+graph",
+      "status": "complete",
+      "reason": "Full 500-question/query run completed; zero search/query failures."
+    }
+  ]
+}

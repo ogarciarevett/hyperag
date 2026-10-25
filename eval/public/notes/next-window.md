@@ -1,67 +1,61 @@
-# Next-window retries
+# Final row ledger after two GPU windows
 
-- **LangMem default, LoCoMo:** blocked during ingestion in the 2026-10-24 GPU window, with zero
-  answer rows and no score. The shared endpoint returned HTTP 400:
-  `"auto" tool choice requires --enable-auto-tool-choice and --tool-call-parser to be set`.
-  Before retrying, the endpoint owner must enable `--enable-auto-tool-choice` and a compatible
-  `--tool-call-parser`, then verify native automatic tool calls with the installed LangMem and
-  Trustcall pipeline. Keep extraction, updates, and the default model-selected tool behavior.
-  Run a small readiness check before the full public benchmark; the readiness check is not a score.
-  Do not restart or reconfigure the serving endpoint during the current window. Preserve the
-  failed-attempt evidence in `../results/memory/blocked-rows.json`.
+Window 2 ended at 00:57:48Z on October 25. This ledger covers all 49 previously unresolved or second-window planned rows. Completed replacements supersede failed attempts; partial answers remain unscored. Historical window-1 results are unchanged.
 
-The same endpoint requirement defers the queued LangMem DMR, oracle-haystack, and LME-S100 rows before any attempt. They retain no score and are recorded as unattempted blocked rows.
+The admission rule was **runtime estimate + 1.0 minute dispatch safety margin < time remaining before 01:33:43Z**. For the borderline skips, **35.0 + 1.0 = 36.0 minutes required**, versus about **35.9 minutes remaining**. Runtime estimates already included their stated contingency; the extra minute was an additional dispatch reserve. Displayed values are rounded to 0.1 minute; admission used full precision.
 
-## Final window ledger (2026-10-24)
+The earlier 21:59Z stop-latch messages were superseded scheduling events, not final budget skips. The clock remained October 24 19:41:43Z + USD 63.60 prior spend at USD 4.50/hour. See the [machine-readable ledger](../results/window-2026-10-25-ledger.json) and [window report](window-2026-10-25.md).
 
-The evaluation window ended at about 13:37Z. Unfinished runs remain unscored. Every row below has **no score**. Full retries retain the native pipeline; partial answers are evidence only. Completed replacements for earlier failed attempts are listed separately in the window report.
+| Benchmark | System | Profile | Final status | Reason |
+| --- | --- | --- | --- | --- |
+| dmr | letta | `default` | unrun | Runtime estimate 35.0 min + 1.0 min dispatch safety margin = 36.0 min required; about 35.9 min remained before the no-new-start cutoff. Full retry was not admitted. |
+| lme-oracle | letta | `default` | unrun | Not selected for the second-window subset; no new score. |
+| dmr | mem0 | `default` | unrun | Runtime estimate 35.0 min + 1.0 min dispatch safety margin = 36.0 min required; about 35.9 min remained before the no-new-start cutoff. Full retry was not admitted. |
+| dmr | cognee | `default` | unrun | Runtime estimate 35.0 min + 1.0 min dispatch safety margin = 36.0 min required; about 35.9 min remained before the no-new-start cutoff. Full retry was not admitted. |
+| dmr | hindsight | `default` | unrun | Runtime estimate 35.0 min + 1.0 min dispatch safety margin = 36.0 min required; about 35.9 min remained before the no-new-start cutoff. Full retry was not admitted. |
+| dmr | graphiti | `default` | unrun | Runtime estimate 35.0 min + 1.0 min dispatch safety margin = 36.0 min required; about 35.9 min remained before the no-new-start cutoff. Full retry was not admitted. |
+| lme-oracle | mem0 | `default` | unrun | Not selected for the second-window subset; no new score. |
+| lme-oracle | cognee | `default` | unrun | Not selected for the second-window subset; no new score. |
+| lme-oracle | hindsight | `default` | unrun | Not selected for the second-window subset; no new score. |
+| lme-oracle | graphiti | `default` | unrun | Not selected for the second-window subset; no new score. |
+| locomo | hyperag | `e5+bgev2m3` | complete | Full 1986-question/query run completed; zero search/query failures. |
+| dmr | hyperag | `e5+bgev2m3` | unfinished | Lower-priority attempt preempted after 114 answers; no score. Runtime estimate 55.0 min + 1.0 min dispatch safety margin = 56.0 min required; about 35.9 min remained before the no-new-start cutoff. Full retry was not admitted. |
+| lme-oracle | hyperag | `e5+bgev2m3` | unrun | Runtime estimate 75.0 min + 1.0 min dispatch safety margin = 76.0 min required; about 35.9 min remained before the no-new-start cutoff. Full retry was not admitted. |
+| locomo | hyperag | `egemma2+nvrerank` | unrun | Runtime estimate 50.0 min + 1.0 min dispatch safety margin = 51.0 min required; about 35.9 min remained before the no-new-start cutoff. Full retry was not admitted. |
+| dmr | hyperag | `egemma2+nvrerank` | unrun | Runtime estimate 35.0 min + 1.0 min dispatch safety margin = 36.0 min required; about 35.9 min remained before the no-new-start cutoff. Full retry was not admitted. |
+| lme-oracle | hyperag | `egemma2+nvrerank` | unrun | Runtime estimate 75.0 min + 1.0 min dispatch safety margin = 76.0 min required; about 35.9 min remained before the no-new-start cutoff. Full retry was not admitted. |
+| lme-s100 | mem0 | `default` | unrun | Not selected for the second-window subset; no new score. |
+| lme-s100 | cognee | `default` | unrun | Not selected for the second-window subset; no new score. |
+| lme-s100 | graphiti | `default` | unrun | Not selected for the second-window subset; no new score. |
+| lme-s100 | hindsight | `default` | unrun | Not selected for the second-window subset; no new score. |
+| lme-s100 | hyperag | `egemma2+nvrerank` | unrun | Runtime estimate 120.0 min + 1.0 min dispatch safety margin = 121.0 min required; about 35.9 min remained before the no-new-start cutoff. Full retry was not admitted. |
+| lme-s | hyperag | `e5+rerank` | unrun | Not selected for the second-window subset; no new score. |
+| lme-s | hyperag | `e5+bgev2m3` | unrun | Not selected for the second-window subset; no new score. |
+| lme-s | hyperag | `egemma2+rerank` | unrun | Not selected for the second-window subset; no new score. |
+| lme-s | letta | `default` | unrun | Not selected for the second-window subset; no new score. |
+| locomo | hyperag | `nemotron-int8` | blocked | No INT8 embedding checkpoint was served; no second-window attempt or score. |
+| dmr | hyperag | `nemotron-int8` | blocked | No INT8 embedding checkpoint was served; no second-window attempt or score. |
+| lme-oracle | hyperag | `nemotron-int8` | blocked | No INT8 embedding checkpoint was served; no second-window attempt or score. |
+| lme-s100 | hyperag | `nemotron-int8` | blocked | No INT8 embedding checkpoint was served; no second-window attempt or score. |
+| lme-s100 | hyperag | `nemotron+nvrerank` | failed | The first-window attempt remains unscored. Runtime estimate 120.0 min + 1.0 min dispatch safety margin = 121.0 min required; about 35.9 min remained before the no-new-start cutoff. Full retry was not admitted. |
+| beir:nfcorpus | hyperag | `nemotron` | complete | Full 323-question/query run completed; zero search/query failures. |
+| beir:nfcorpus | hyperag | `nemotron+nvrerank` | complete | Full 323-question/query run completed; zero search/query failures. |
+| beir:arguana | hyperag | `nemotron` | complete | Full 1406-question/query run completed; zero search/query failures. |
+| beir:arguana | hyperag | `nemotron+nvrerank` | failed | The first-window attempt remains unscored. Runtime estimate 60.6 min + 1.0 min dispatch safety margin = 61.6 min required; about 35.9 min remained before the no-new-start cutoff. Full retry was not admitted. |
+| beir:scidocs | hyperag | `nemotron` | unrun | Runtime estimate 49.8 min + 1.0 min dispatch safety margin = 50.8 min required; about 35.9 min remained before the no-new-start cutoff. Full retry was not admitted. |
+| beir:scidocs | hyperag | `nemotron+nvrerank` | unrun | Runtime estimate 79.6 min + 1.0 min dispatch safety margin = 80.6 min required; about 35.9 min remained before the no-new-start cutoff. Full retry was not admitted. |
+| beir:fiqa | hyperag | `nemotron` | unrun | Runtime estimate 90.3 min + 1.0 min dispatch safety margin = 91.3 min required; about 35.9 min remained before the no-new-start cutoff. Full retry was not admitted. |
+| beir:fiqa | hyperag | `nemotron+nvrerank` | unrun | Runtime estimate 109.7 min + 1.0 min dispatch safety margin = 110.7 min required; about 35.9 min remained before the no-new-start cutoff. Full retry was not admitted. |
+| beir:trec-covid | hyperag | `nemotron` | unrun | Runtime estimate 242.3 min + 1.0 min dispatch safety margin = 243.3 min required; about 35.9 min remained before the no-new-start cutoff. Full retry was not admitted. |
+| beir:trec-covid | hyperag | `nemotron+nvrerank` | unrun | Runtime estimate 243.8 min + 1.0 min dispatch safety margin = 244.8 min required; about 35.9 min remained before the no-new-start cutoff. Full retry was not admitted. |
+| lme-s | engram | `default` | unrun | Not selected for the second-window subset; no new score. |
+| lme-s | memvid | `default` | unrun | Not selected for the second-window subset; no new score. |
+| lme-oracle | hyperag | `egemma2+rerank` | unfinished | First-window evidence: 384/500 answers; local compute was paused; window ended; no score. Not selected for the second-window subset; no new score. |
+| locomo | langmem | `default` | blocked | Native automatic tool selection requires an enabled parser. Readiness was not established in window 2; no second-window attempt or score. |
+| lme-oracle | langmem | `default` | blocked | Native automatic tool selection requires an enabled parser. Readiness was not established in window 2; no second-window attempt or score. |
+| dmr | langmem | `default` | blocked | Native automatic tool selection requires an enabled parser. Readiness was not established in window 2; no second-window attempt or score. |
+| lme-s100 | langmem | `default` | blocked | Native automatic tool selection requires an enabled parser. Readiness was not established in window 2; no second-window attempt or score. |
+| locomo | hyperag | `egemma2+bgev2m3+graph` | complete | Full 1986-question/query run completed; zero search/query failures. |
+| dmr | hyperag | `egemma2+bgev2m3+graph` | complete | Full 500-question/query run completed; zero search/query failures. |
 
-| Queue row | Final status | Reason |
-| --- | --- | --- |
-| `dmr letta default 2` | unrun | Local compute unavailable before the window ended. |
-| `lme-oracle letta default 2` | unrun | Local compute unavailable before the window ended. |
-| `dmr mem0 default 4 budget90` | unrun | Local compute unavailable before the window ended. |
-| `dmr cognee default 4 budget90` | unrun | Local compute unavailable before the window ended. |
-| `dmr hindsight default 4 budget90` | unrun | Local compute unavailable before the window ended. |
-| `dmr graphiti default 4 budget90` | unrun | Local compute unavailable before the window ended. |
-| `lme-oracle mem0 default 4 budget90` | unrun | Local compute unavailable before the window ended. |
-| `lme-oracle cognee default 4 budget90` | unrun | Local compute unavailable before the window ended. |
-| `lme-oracle hindsight default 4 budget90` | unrun | Local compute unavailable before the window ended. |
-| `lme-oracle graphiti default 4 budget90` | unrun | Local compute unavailable before the window ended. |
-| `locomo hyperag e5+bgev2m3 2 budget90` | unrun | Local compute unavailable before the window ended. |
-| `dmr hyperag e5+bgev2m3 2 budget90` | unrun | Local compute unavailable before the window ended. |
-| `lme-oracle hyperag e5+bgev2m3 2 budget90` | unrun | Local compute unavailable before the window ended. |
-| `locomo hyperag egemma2+nvrerank 2 budget90` | unrun | Local compute unavailable before the window ended. |
-| `dmr hyperag egemma2+nvrerank 2 budget90` | unrun | Local compute unavailable before the window ended. |
-| `lme-oracle hyperag egemma2+nvrerank 2 budget90` | unrun | Local compute unavailable before the window ended. |
-| `lme-s100 mem0 default 4 budget90` | unrun | Local compute unavailable before the window ended. |
-| `lme-s100 cognee default 4 budget90` | unrun | Local compute unavailable before the window ended. |
-| `lme-s100 graphiti default 4 budget90` | unrun | Local compute unavailable before the window ended. |
-| `lme-s100 hindsight default 4 budget90` | unrun | Local compute unavailable before the window ended. |
-| `lme-s100 hyperag egemma2+nvrerank 2 budget90` | unrun | Local compute unavailable before the window ended. |
-| `lme-s hyperag e5+rerank 2 budget90` | unrun | Local compute unavailable before the window ended. |
-| `lme-s hyperag e5+bgev2m3 2 budget90` | unrun | Local compute unavailable before the window ended. |
-| `lme-s hyperag egemma2+rerank 2 budget90` | unrun | Local compute unavailable before the window ended. |
-| `lme-s letta default 2 budget90` | unrun | Local compute unavailable before the window ended. |
-| `locomo hyperag nemotron-int8 2 budget90` | blocked | Community INT8 embedding model was not served; INT8_EMBED_MODEL unset. |
-| `dmr hyperag nemotron-int8 2 budget90` | blocked | Community INT8 embedding model was not served; INT8_EMBED_MODEL unset. |
-| `lme-oracle hyperag nemotron-int8 2 budget90` | blocked | Community INT8 embedding model was not served; INT8_EMBED_MODEL unset. |
-| `lme-s100 hyperag nemotron-int8 2 budget90` | blocked | Community INT8 embedding model was not served; INT8_EMBED_MODEL unset. |
-| `lme-s100 hyperag nemotron+nvrerank 2` | failed | 53 answers; extra adapter wall-clock deadline expired across machine pause; fixed, full retry prevented by vault rate limit then VM stop. |
-| `beir:nfcorpus hyperag nemotron 1 budget90` | failed | Embedding transport 502 as GPU VM became unreachable; no run/meta; full retry required. |
-| `beir:nfcorpus hyperag nemotron+nvrerank 1 budget90` | failed | Embedding transport 502 as GPU VM became unreachable; no run/meta; full retry required. |
-| `beir:arguana hyperag nemotron 1 budget90` | failed | Embedding transport 502 as GPU VM became unreachable; no run/meta; full retry required. |
-| `beir:arguana hyperag nemotron+nvrerank 1 budget90` | failed | Embedding transport 502 as GPU VM became unreachable; no run/meta; full retry required. |
-| `beir:scidocs hyperag nemotron 1 budget90` | unrun | VM stopped on idle timer before dispatch. |
-| `beir:scidocs hyperag nemotron+nvrerank 1 budget90` | unrun | VM stopped on idle timer before dispatch. |
-| `beir:fiqa hyperag nemotron 1 budget90` | unrun | VM stopped on idle timer before dispatch. |
-| `beir:fiqa hyperag nemotron+nvrerank 1 budget90` | unrun | VM stopped on idle timer before dispatch. |
-| `beir:trec-covid hyperag nemotron 1 budget90` | unrun | VM stopped on idle timer before dispatch. |
-| `beir:trec-covid hyperag nemotron+nvrerank 1 budget90` | unrun | VM stopped on idle timer before dispatch. |
-| `lme-s engram default 4 budget90` | unrun | VM stopped on idle timer before dispatch. |
-| `lme-s memvid default 4 budget90` | unrun | VM stopped on idle timer before dispatch. |
-| `lme-oracle hyperag egemma2+rerank 2` | unfinished | 384/500 answers; local compute was paused; window ended; no score. |
-| `locomo langmem default` | blocked | Native automatic tool selection rejected HTTP 400; needs --enable-auto-tool-choice and --tool-call-parser. |
-| `lme-oracle langmem default` | blocked | Native automatic tool selection rejected HTTP 400; needs --enable-auto-tool-choice and --tool-call-parser. |
-| `dmr langmem default` | blocked | Native automatic tool selection rejected HTTP 400; needs --enable-auto-tool-choice and --tool-call-parser. |
-| `lme-s100 langmem default` | blocked | Native automatic tool selection rejected HTTP 400; needs --enable-auto-tool-choice and --tool-call-parser. |
+LangMem retains the native automatic-tool-selection requirement; the serving endpoint was not reconfigured by the evaluation worker. INT8 remains blocked by the absent served checkpoint. All full LME-S rows remain unrun. Earlier failed and partial evidence stays under `../results/memory/attempts/` and `../results/beir/attempts/`.
