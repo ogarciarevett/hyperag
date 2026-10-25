@@ -2,7 +2,7 @@
 import { readFile } from "node:fs/promises";
 import { Database } from "bun:sqlite";
 import { parseArgs, isDeepStrictEqual } from "node:util";
-import { hash, parseTranscript, redact, type Source } from "./session-transcript";
+import { hash, parseTranscriptSessions, redact, type Source } from "./session-transcript";
 import { storedId } from "./engram-import";
 
 type Call = (method: string, path: string, body?: unknown) => Promise<Record<string, any>>;
@@ -16,30 +16,32 @@ export async function importTranscripts(inputs: Input[], snapshot: string, call:
     for (const s of db.query<{ id: string; project: string }, []>("select id,project from sessions").iterate()) ownership.set(s.id, { project: s.project, memories: [] });
     for (const o of db.query<any, []>("select * from observations where deleted_at is null").iterate()) ownership.get(o.session_id)?.memories.push(storedId(o));
   } finally { if (db.inTransaction) db.exec("ROLLBACK"); db.close(); }
-  const counters: Record<string, { files: number; sessions: number; prompts: number; created: number; updated: number; unchanged: number; skipped: Record<string, number> }> = {};
-  const sessions = new Map<string, { source: Source; parsed: ReturnType<typeof parseTranscript>; files: string[] }>();
+  const counters: Record<string, { files: number; sessions: number; prompts: number; created: number; updated: number; unchanged: number; redactedProjectLabels: number; skipped: Record<string, number> }> = {};
+  const sessions = new Map<string, { source: Source; parsed: ReturnType<typeof parseTranscriptSessions>[number]; files: string[] }>();
   for (const input of inputs) {
-    const c = counters[input.source] ??= { files: 0, sessions: 0, prompts: 0, created: 0, updated: 0, unchanged: 0, skipped: {} };
+    const c = counters[input.source] ??= { files: 0, sessions: 0, prompts: 0, created: 0, updated: 0, unchanged: 0, redactedProjectLabels: 0, skipped: {} };
     c.files++;
-    const p = parseTranscript(input.source, await readFile(input.path, "utf8"));
-    for (const [why,n] of Object.entries(p.skipped)) c.skipped[why] = (c.skipped[why] ?? 0) + n;
-    if (!p.session.id) { c.skipped.missingSession = (c.skipped.missingSession ?? 0) + 1; continue; }
-    const key = `${input.source}:${p.session.id}`, old = sessions.get(key);
-    if (!old) sessions.set(key, { source: input.source, parsed: p, files: [hash(input.path)] });
-    else {
-      old.files.push(hash(input.path)); old.parsed.prompts.push(...p.prompts);
-      const a = old.parsed.session, b = p.session;
-      if (a.cwd && b.cwd && a.cwd !== b.cwd) throw new Error("conflicting source session cwd");
-      a.cwd ??= b.cwd; a.model = b.model ?? a.model;
-      for (const k of ["startedAt", "firstEventAt", "lastEventAt", "endedAt"] as const) if (b[k] && (!a[k] || ((k === "startedAt" || k === "firstEventAt") ? Date.parse(b[k]!) < Date.parse(a[k]!) : Date.parse(b[k]!) > Date.parse(a[k]!)))) a[k] = b[k];
+    for (const p of parseTranscriptSessions(input.source, await readFile(input.path, "utf8"))) {
+      for (const [why,n] of Object.entries(p.skipped)) c.skipped[why] = (c.skipped[why] ?? 0) + n;
+      if (!p.session.id) { c.skipped.missingSessionFragment = (c.skipped.missingSessionFragment ?? 0) + 1; continue; }
+      const key = `${input.source}:${p.session.id}`, old = sessions.get(key);
+      if (!old) sessions.set(key, { source: input.source, parsed: p, files: [hash(input.path)] });
+      else {
+        old.files.push(hash(input.path)); old.parsed.prompts.push(...p.prompts);
+        const a = old.parsed.session, b = p.session;
+        a.cwds = [...new Set([...a.cwds, ...b.cwds])].sort();
+        a.cwd ??= b.cwd; a.model = b.model ?? a.model;
+        for (const k of ["startedAt", "firstEventAt", "lastEventAt", "endedAt"] as const) if (b[k] && (!a[k] || ((k === "startedAt" || k === "firstEventAt") ? Date.parse(b[k]!) < Date.parse(a[k]!) : Date.parse(b[k]!) > Date.parse(a[k]!)))) a[k] = b[k];
+      }
     }
   }
   const granted = new Set<string>();
   for (const [key, { source, parsed: p, files }] of sessions) {
     const s = p.session, c = counters[source]!, owner = ownership.get(s.id!);
     if (!owner?.project && !s.cwd) { c.skipped.missingProjectOrCwd = (c.skipped.missingProjectOrCwd ?? 0) + 1; continue; }
-    if (owner?.project && redact(owner.project) !== owner.project) throw new Error("unsafe project mapping");
-    const scope = owner?.project ? `project:${owner.project.toLowerCase()}` : `project:cwd-${hash(s.cwd!)}`;
+    const unsafeProject = !!owner?.project && redact(owner.project) !== owner.project;
+    if (unsafeProject) c.redactedProjectLabels++;
+    const scope = owner?.project ? `project:${unsafeProject ? "label-" + hash(owner.project.toLowerCase()) : owner.project.toLowerCase()}` : `project:cwd-${hash(s.cwd!)}`;
     if (!granted.has(scope)) {
       for (const permission of ["read", "write"]) await call("POST", "/v1/grants", { principal: "personal-import", scope, permission });
       granted.add(scope);
@@ -57,10 +59,11 @@ export async function importTranscripts(inputs: Input[], snapshot: string, call:
       if (old.missing) c.created++; else c.updated++;
       return id;
     };
-    const session = { ...s, id: redact(s.id!), cwd: s.cwd ? redact(s.cwd) : null, model: s.model ? redact(s.model) : null, project: owner?.project ? redact(owner.project) : null };
+    const session = { ...s, id: redact(s.id!), cwds: s.cwds.map(redact), cwd: s.cwd ? redact(s.cwd) : null, model: s.model ? redact(s.model) : null, project: owner?.project ? redact(owner.project) : null };
     const sessionId = await save(key, `Session ${source}\n${JSON.stringify(session)}`, "session", { transcript: { source, ...session, sourceFiles: [...new Set(files)].sort() } });
     c.sessions++;
-    for (const id of owner?.memories ?? []) await call("POST", "/v1/relations", { from: sessionId, to: id, type: "RELATED" });
+    if (unsafeProject) c.skipped.unsafeProjectLink = (c.skipped.unsafeProjectLink ?? 0) + (owner?.memories.length ?? 0);
+    for (const id of unsafeProject ? [] : owner?.memories ?? []) await call("POST", "/v1/relations", { from: sessionId, to: id, type: "RELATED" });
     const seen = new Set<string>();
     for (const prompt of p.prompts) {
       const identity = `${key}:prompt:${hash(JSON.stringify(prompt))}`;
