@@ -10,3 +10,4 @@
 - [Status](status.md): implemented, tested, pending, limits
 - [FAQ](faq.md)
 - Benchmarks: [eval/RESULTS.md](../eval/RESULTS.md) and `eval/public/`
+- [Public-benchmark technical note](paper.md): method, window-labelled observations, N/D coverage, limits and offline reproduction
