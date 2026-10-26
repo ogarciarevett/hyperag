@@ -4,7 +4,7 @@ use chrono::{TimeZone, Utc};
 use tantivy::{
     Index, IndexReader, TantivyDocument, Term,
     merge_policy::NoMergePolicy,
-    query::{BooleanQuery, EnableScoring, Query, TermQuery},
+    query::{EnableScoring, Query, TermQuery},
     schema::{IndexRecordOption, Value},
 };
 
@@ -49,23 +49,25 @@ fn reference(searcher: &Searcher, terms: &[String], limit: usize) -> anyhow::Res
     let mut terms = terms.to_vec();
     terms.sort();
     terms.dedup();
-    let query = BooleanQuery::union(
-        terms
-            .iter()
-            .map(|text| {
-                Box::new(TermQuery::new(
-                    Term::from_field_text(field, text),
-                    IndexRecordOption::WithFreqs,
-                )) as Box<dyn Query>
-            })
-            .collect(),
-    );
-    let weight = query.weight(EnableScoring::enabled_from_searcher(searcher))?;
+    let weights = terms
+        .iter()
+        .map(|text| {
+            TermQuery::new(
+                Term::from_field_text(field, text),
+                IndexRecordOption::WithFreqs,
+            )
+            .weight(EnableScoring::enabled_from_searcher(searcher))
+        })
+        .collect::<tantivy::Result<Vec<_>>>()?;
     let schema = searcher.schema();
     let mut hits = Vec::new();
     for (ordinal, segment) in searcher.segment_readers().iter().enumerate() {
-        let mut scores = Vec::new();
-        weight.for_each(segment, &mut |doc, score| scores.push((doc, score)))?;
+        let mut scores = std::collections::BTreeMap::new();
+        for weight in &weights {
+            weight.for_each(segment, &mut |doc, score| {
+                *scores.entry(doc).or_insert(0.0f32) += score
+            })?;
+        }
         for (doc, score) in scores {
             let stored: TantivyDocument =
                 searcher.doc(tantivy::DocAddress::new(ordinal as u32, doc))?;
@@ -138,7 +140,7 @@ fn fixture() -> Vec<Fixture> {
 }
 
 #[test]
-fn masked_native_top_k_equals_an_exhaustive_authorized_index() -> anyhow::Result<()> {
+fn masked_top_k_equals_an_exhaustive_authorized_index() -> anyhow::Result<()> {
     let rows = fixture();
     let shared = build(&rows)?;
     for scopes in [
@@ -226,7 +228,7 @@ fn scoped_average_cannot_prune_the_authorized_winner() -> anyhow::Result<()> {
     assert_eq!(expected[0].id, "bound-128");
     assert_eq!(
         actual, expected,
-        "scoped statistics must preserve safe native block bounds"
+        "exhaustive scoring must retain the authorized winner"
     );
     Ok(())
 }

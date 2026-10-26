@@ -1,9 +1,13 @@
-//! Private native scoring; callers must supply an exact-fenced immutable searcher.
-use std::collections::HashMap;
+//! Exhaustive masked scoring; callers must supply an exact-fenced immutable searcher.
+use std::{
+    cmp::Ordering,
+    collections::{BinaryHeap, HashMap},
+};
 use tantivy::{
     DocSet, Searcher, TERMINATED, TantivyDocument, Term,
-    query::{Bm25StatisticsProvider, BooleanQuery, EnableScoring, Query, TermQuery},
-    schema::{Field, IndexRecordOption, Schema, Value},
+    postings::Postings,
+    query::Bm25Weight,
+    schema::{IndexRecordOption, Schema, Value},
 };
 
 #[derive(Clone, Debug, PartialEq)]
@@ -14,21 +18,20 @@ pub(super) struct Ranked {
     pub score: f32,
 }
 
-struct Statistics {
-    n: u64,
-    tokens: u64,
-    df: HashMap<Term, u64>,
+impl Eq for Ranked {}
+impl Ord for Ranked {
+    fn cmp(&self, other: &Self) -> Ordering {
+        other
+            .score
+            .total_cmp(&self.score)
+            .then(other.at.cmp(&self.at))
+            .then(self.id.cmp(&other.id))
+            .then(self.version.cmp(&other.version))
+    }
 }
-
-impl Bm25StatisticsProvider for Statistics {
-    fn total_num_tokens(&self, _: Field) -> tantivy::Result<u64> {
-        Ok(self.tokens)
-    }
-    fn total_num_docs(&self) -> tantivy::Result<u64> {
-        Ok(self.n)
-    }
-    fn doc_freq(&self, term: &Term) -> tantivy::Result<u64> {
-        Ok(self.df[term])
+impl PartialOrd for Ranked {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
     }
 }
 
@@ -49,11 +52,7 @@ pub(super) fn top(
         return Ok(Vec::new());
     }
     let schema = searcher.schema();
-    let mut stats = Statistics {
-        n: 0,
-        tokens: 0,
-        df: HashMap::new(),
-    };
+    let (mut n, mut total_tokens) = (0u64, 0u64);
     let mut masks = Vec::new();
     for (ordinal, segment) in searcher.segment_readers().iter().enumerate() {
         let mut mask = vec![None; segment.max_doc() as usize];
@@ -80,9 +79,8 @@ pub(super) fn top(
                 .get_first(schema.get_field("num_tokens")?)
                 .and_then(|value| value.as_u64())
                 .ok_or_else(|| anyhow::anyhow!("missing token count metadata"))?;
-            stats.n += 1;
-            stats.tokens = stats
-                .tokens
+            n += 1;
+            total_tokens = total_tokens
                 .checked_add(tokens)
                 .ok_or_else(|| anyhow::anyhow!("token count overflow"))?;
             mask[doc as usize] = Some(Ranked {
@@ -98,7 +96,7 @@ pub(super) fn top(
         }
         masks.push(mask);
     }
-    if stats.n == 0 || stats.tokens == 0 {
+    if n == 0 || total_tokens == 0 {
         return Ok(Vec::new());
     }
     let field = schema.get_field("terms")?;
@@ -108,7 +106,7 @@ pub(super) fn top(
         .collect();
     terms.sort();
     terms.dedup();
-    let mut present = vec![Vec::new(); masks.len()];
+    let mut frequencies = HashMap::new();
     for term in &terms {
         let mut df = 0;
         for (ordinal, segment) in searcher.segment_readers().iter().enumerate() {
@@ -116,55 +114,56 @@ pub(super) fn top(
                 .inverted_index(field)?
                 .read_postings(term, IndexRecordOption::Basic)?
             {
-                present[ordinal].push(term.clone());
                 while postings.doc() != TERMINATED {
                     df += u64::from(masks[ordinal][postings.doc() as usize].is_some());
                     postings.advance();
                 }
             }
         }
-        stats.df.insert(term.clone(), df);
+        frequencies.insert(term.clone(), df);
     }
-    let mut hits: Vec<Ranked> = Vec::new();
-    let mut threshold = f32::NEG_INFINITY;
+    let average = total_tokens as f32 / n as f32;
+    let weights: Vec<_> = terms
+        .iter()
+        .map(|term| Bm25Weight::for_one_term(frequencies[term], n, average))
+        .collect();
+    let mut heap = BinaryHeap::new();
     for (ordinal, segment) in searcher.segment_readers().iter().enumerate() {
-        let queries: Vec<Box<dyn Query>> = present[ordinal]
-            .iter()
-            .filter(|term| stats.df[*term] > 0)
-            .map(|term| {
-                Box::new(TermQuery::new(term.clone(), IndexRecordOption::WithFreqs))
-                    as Box<dyn Query>
-            })
-            .collect();
-        let query: Box<dyn Query> = match queries.len() {
-            0 => continue,
-            1 => queries.into_iter().next().unwrap(),
-            _ => Box::new(BooleanQuery::union(queries)),
-        };
-        let weight = query.weight(EnableScoring::enabled_from_statistics_provider(
-            &stats, searcher,
-        ))?;
-        weight.for_each_pruning(threshold, segment, &mut |doc, score| {
-            if let Some(metadata) = &masks[ordinal][doc as usize] {
-                let mut hit = metadata.clone();
-                hit.score = score;
-                hits.push(hit);
-                hits.sort_by(|a, b| {
-                    b.score
-                        .total_cmp(&a.score)
-                        .then(b.at.cmp(&a.at))
-                        .then(a.id.cmp(&b.id))
-                });
-                hits.truncate(limit);
-                if hits.len() == limit {
-                    // Native pruning uses strict >; equal scores still need time/ID ordering.
-                    threshold = hits.last().unwrap().score.next_down();
+        let norms = segment.get_fieldnorms_reader(field)?;
+        let inverted = segment.inverted_index(field)?;
+        let mut scores = vec![None; segment.max_doc() as usize];
+        // The reference adds native term scores in lexeme order using f32.
+        for (term, weight) in terms.iter().zip(&weights) {
+            if let Some(mut postings) =
+                inverted.read_postings(term, IndexRecordOption::WithFreqs)?
+            {
+                while postings.doc() != TERMINATED {
+                    let doc = postings.doc() as usize;
+                    if masks[ordinal][doc].is_some() {
+                        *scores[doc].get_or_insert(0.0f32) +=
+                            weight.score(norms.fieldnorm_id(doc as u32), postings.term_freq());
+                    }
+                    postings.advance();
                 }
             }
-            threshold
-        })?;
+        }
+        for (doc, score) in scores.into_iter().enumerate() {
+            if let Some(score) = score {
+                let mut hit = masks[ordinal][doc]
+                    .take()
+                    .expect("only authorized documents were scored");
+                anyhow::ensure!(score.is_finite(), "nonfinite lexical score");
+                hit.score = score;
+                if heap.len() < limit {
+                    heap.push(hit);
+                } else if &hit < heap.peek().unwrap() {
+                    heap.pop();
+                    heap.push(hit);
+                }
+            }
+        }
     }
-    Ok(hits)
+    Ok(heap.into_sorted_vec())
 }
 
 #[cfg(test)]
