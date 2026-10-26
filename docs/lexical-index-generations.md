@@ -1,6 +1,6 @@
 # Private durable lexical generations
 
-This Rust foundation writes a fresh private Tantivy generation from a source snapshot it owns. It has no service caller, worker, active-generation pointer or query scorer. Incremental consumer integration remains a follow-up; the prior generation stays intact during a rebuild.
+This Rust foundation writes a fresh private Tantivy generation from an unconsumed full-rebuild source snapshot it owns. Replay-only and previously consumed readers are refused before creating index files. It has no service caller, worker, active-generation pointer or query scorer. Incremental consumer integration remains a follow-up; the prior generation stays intact during a rebuild.
 
 Create a new directory for each generation; existing paths are refused. On Unix the directory is mode 0700. The index stores IDs, scope, version and recorded/valid times, plus canonical PostgreSQL `simple` lexemes/frequencies as pretokenized postings. Full source text and arbitrary metadata are omitted. Postings still contain private source data. Writer settings are one thread, 32 MiB, manual reader reload and disabled automatic merges; callers must obey the shared resource gate.
 

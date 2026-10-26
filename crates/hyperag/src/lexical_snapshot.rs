@@ -31,9 +31,13 @@ pub(super) struct SourceSnapshot {
     tx: Transaction<'static, Postgres>,
     fence: Checkpoint,
     drained: bool,
+    fresh_rebuild: bool,
 }
 
 impl SourceSnapshot {
+    pub fn is_fresh_rebuild(&self) -> bool {
+        self.fresh_rebuild
+    }
     /// The intended fence, which is not proof that the source stream has completed.
     pub fn target_checkpoint(&self) -> &Checkpoint {
         &self.fence
@@ -108,11 +112,13 @@ impl SourceSnapshot {
             tx,
             fence,
             drained: false,
+            fresh_rebuild: after.is_none(),
         })
     }
 
     /// All pages share the fence's MVCC snapshot; no advisory writer lock is taken.
     pub async fn next_batch(&mut self) -> anyhow::Result<Option<Batch>> {
+        self.fresh_rebuild = false;
         if self.drained {
             return Ok(None);
         }

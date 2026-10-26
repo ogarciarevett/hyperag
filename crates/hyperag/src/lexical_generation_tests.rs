@@ -79,6 +79,17 @@ async fn exercise(pool: &PgPool) -> anyhow::Result<()> {
         select id,1,'ALPHA alpha rare!','fixture','fixture','hash' from memories; commit").execute(pool).await?;
     let source = SourceSnapshot::open(pool, None).await?;
     let target = source.target_checkpoint().clone();
+    let replay = SourceSnapshot::open(pool, Some(&target)).await?;
+    anyhow::ensure!(
+        Generation::create(&root.path().join("replay"), replay).is_err(),
+        "a fresh index must reject a replay that omits the 130 unchanged documents"
+    );
+    let mut consumed = SourceSnapshot::open(pool, None).await?;
+    assert!(consumed.next_batch().await?.is_some());
+    anyhow::ensure!(
+        Generation::create(&root.path().join("consumed"), consumed).is_err(),
+        "a fresh index must reject a previously consumed source page"
+    );
     let mut partial = Generation::create(&pending_path, source)?;
     assert!(partial.advance().await?);
     assert!(partial.publish().is_err());

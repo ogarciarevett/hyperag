@@ -102,6 +102,10 @@ fn document(source: SourceDocument, schema: &Schema) -> anyhow::Result<TantivyDo
 
 impl Generation {
     pub fn create(path: &Path, source: SourceSnapshot) -> anyhow::Result<Self> {
+        anyhow::ensure!(
+            source.is_fresh_rebuild(),
+            "a new generation requires an unconsumed full rebuild snapshot"
+        );
         let mut directory = fs::DirBuilder::new();
         #[cfg(unix)]
         {
