@@ -21,7 +21,7 @@ async fn schedule(correction: bool) {
     let options = PgConnectOptions::from_str(&url).unwrap();
     let admin = PgPoolOptions::new().max_connections(1).connect_with(options.clone()).await.unwrap();
     let name = format!("lexical_lock_{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos());
-    admin.execute(sqlx::AssertSqlSafe(format!("create database {name}"))).await.unwrap();
+    sqlx::raw_sql(sqlx::AssertSqlSafe(format!("create database {name}"))).execute(&admin).await.unwrap();
     let pool = PgPoolOptions::new().max_connections(6).connect_with(options.database(&name)).await.unwrap();
     let store = Store::new(pool.clone());
     store.migrate().await.unwrap();
@@ -50,7 +50,7 @@ async fn schedule(correction: bool) {
     drop(barrier);
     let results = tokio::time::timeout(Duration::from_secs(10), async { (a.await.unwrap(), b.await.unwrap()) }).await.unwrap();
     pool.close().await;
-    admin.execute(sqlx::AssertSqlSafe(format!("drop database {name} with (force)"))).await.unwrap();
+    sqlx::raw_sql(sqlx::AssertSqlSafe(format!("drop database {name} with (force)"))).execute(&admin).await.unwrap();
     admin.close().await;
     assert!(results.0.is_ok(), "update: {:?}", results.0);
     assert!(results.1.is_ok(), "competing write: {:?}", results.1);
