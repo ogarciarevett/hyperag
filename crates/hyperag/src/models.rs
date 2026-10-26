@@ -617,6 +617,20 @@ fn floats(v: &Value) -> Vec<f32> {
     v.as_array().into_iter().flatten().filter_map(Value::as_f64).map(|x| x as f32).collect()
 }
 
+/// Only the re-ranker uses this override; embedding sessions retain their existing provider.
+fn reranker_execution_providers(requested: Option<&str>) -> Result<Vec<ort::ep::ExecutionProviderDispatch>> {
+    match requested.unwrap_or("cpu") {
+        "cpu" => Ok(vec![]),
+        "coreml" => {
+            #[cfg(all(feature = "coreml", target_os = "macos"))]
+            { Ok(vec![ort::ep::CoreML::default().build().error_on_failure()]) }
+            #[cfg(not(all(feature = "coreml", target_os = "macos")))]
+            { Err(Error::InvalidInput("CoreML re-ranking requires macOS and a --features coreml build".into())) }
+        }
+        _ => Err(Error::InvalidInput("HYPERAG_RERANK_PROVIDER must be cpu or coreml".into())),
+    }
+}
+
 impl Reranker {
     pub async fn from_spec(spec: &str) -> Result<Option<Reranker>> {
         let spec = spec.trim();
@@ -624,6 +638,7 @@ impl Reranker {
             return Ok(None);
         }
         let rest = spec.strip_prefix("hf:").ok_or_else(|| bad(spec, "a re-ranker is hf:<model> or none"))?;
+        let providers = reranker_execution_providers(std::env::var("HYPERAG_RERANK_PROVIDER").ok().as_deref())?;
         if rest.contains('?') {
             let (repo, ps) = params(rest);
             let revision = param(&ps, "revision").unwrap_or("main");
@@ -632,7 +647,7 @@ impl Reranker {
             if files.external.is_some() {
                 return Err(bad(spec, "this re-ranker export keeps its weights in a separate file; pick a dtype with a single file (q8)"));
             }
-            let model = TextRerank::try_new_from_user_defined(UserDefinedRerankingModel::new(files.onnx, files.tokenizer), RerankInitOptionsUserDefined::default().with_intra_threads(threads()))
+            let model = TextRerank::try_new_from_user_defined(UserDefinedRerankingModel::new(files.onnx, files.tokenizer), RerankInitOptionsUserDefined::default().with_intra_threads(threads()).with_execution_providers(providers))
                 .map_err(|e| Error::Dependency(format!("re-ranker load failed: {e}")))?;
             return Ok(Some(Reranker {
                 model: Arc::new(Mutex::new(model)),
@@ -645,7 +660,7 @@ impl Reranker {
             .find(|m| m.model_code.eq_ignore_ascii_case(rest))
             .ok_or_else(|| bad(spec, "not a local fastembed re-ranker"))?;
         let model: RerankerModel = info.model.clone();
-        let loaded = TextRerank::try_new(RerankInitOptions::new(model).with_cache_dir(cache_dir()).with_show_download_progress(false).with_intra_threads(threads()))
+        let loaded = TextRerank::try_new(RerankInitOptions::new(model).with_cache_dir(cache_dir()).with_show_download_progress(false).with_intra_threads(threads()).with_execution_providers(providers))
             .map_err(|e| Error::Dependency(format!("re-ranker load failed: {e}")))?;
         let revision = snapshot_of(&info.model_code).unwrap_or_else(|| "unknown".into());
         Ok(Some(Reranker {
@@ -742,4 +757,45 @@ mod reranker_parity {
         println!("SCORES {}", serde_json::to_string(&scores).unwrap());
         println!("TIMING single {per_pair:.1} ms/pair, batch of 24 {:.1} ms", t2.elapsed().as_secs_f64() * 1000.0);
     }
+}
+
+#[cfg(test)]
+mod rerank_provider_tests {
+    use super::*;
+
+    #[test]
+    fn cpu_default_and_explicit_cpu_keep_existing_provider_list() {
+        assert!(reranker_execution_providers(None).unwrap().is_empty());
+        assert!(reranker_execution_providers(Some("cpu")).unwrap().is_empty());
+    }
+
+    #[test]
+    fn unknown_provider_is_rejected_before_loading_any_model() {
+        assert!(matches!(reranker_execution_providers(Some("coremll")), Err(Error::InvalidInput(_))));
+    }
+
+    #[cfg(not(all(feature = "coreml", target_os = "macos")))]
+    #[test]
+    fn coreml_request_without_apple_build_support_is_explicit_error() {
+        assert!(matches!(reranker_execution_providers(Some("coreml")), Err(Error::InvalidInput(_))));
+    }
+
+    #[cfg(all(feature = "coreml", target_os = "macos"))]
+    #[test]
+    fn coreml_request_selects_only_coreml_and_registration_must_succeed() {
+        let providers = reranker_execution_providers(Some("coreml")).unwrap();
+        assert_eq!(providers.len(), 1);
+        assert!(providers[0].downcast_ref::<ort::ep::CoreML>().is_some());
+        assert!(format!("{:?}", providers[0]).contains("error_on_failure: true"));
+    }
+    #[cfg(all(feature = "coreml", target_os = "macos"))]
+    #[test]
+    #[ignore = "native Apple CoreML registration probe; run explicitly under the local resource gate"]
+    fn native_coreml_provider_is_available_and_registers() {
+        use ort::ep::ExecutionProvider;
+        assert!(ort::ep::CoreML::default().is_available().unwrap());
+        let _builder = ort::session::Session::builder().unwrap()
+            .with_execution_providers(reranker_execution_providers(Some("coreml")).unwrap()).unwrap();
+    }
+
 }
