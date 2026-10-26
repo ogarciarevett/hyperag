@@ -18,11 +18,12 @@ macro_rules! sql {
     ($($t:tt)*) => { sqlx::AssertSqlSafe(format!($($t)*)) };
 }
 
-const MIGRATIONS: [&str; 4] = [
+const MIGRATIONS: [&str; 5] = [
     include_str!("../migrations/0001_init.sql"),
     include_str!("../migrations/0002_settings.sql"),
     include_str!("../migrations/0003_memory_text_limit.sql"),
     include_str!("../migrations/0004_lexical_cache.sql"),
+    include_str!("../migrations/0005_lexical_postings.sql"),
 ];
 
 // Legacy corpus BM25 remains available for runtime comparison and rollback.
@@ -67,10 +68,11 @@ select p.memory_id as id, p.at,
 }
 
 // Readiness and both branches share one MVCC snapshot; unready caches never affect results.
+// OFFSET 0 keeps metadata probes driven by scoped postings instead of a whole-document scan.
 const INDEXED_BM25_SQL: &str = r#"with ready as materialized (
-  select coalesce((select value='true' from settings where key='lexical_cache_ready'),false) as ok
+  select coalesce((select value='true' from settings where key='lexical_cache_ready'),false)
+     and coalesce((select value='true' from settings where key='lexical_postings_ready'),false) as ok
 ),
-query as (select replace(plainto_tsquery('simple', $3)::text, ' & ', ' | ')::tsquery as q),
 terms as materialized (select distinct lexeme from unnest(to_tsvector('simple', $3))),
 stats as (
   select coalesce(sum(n),0)::float8 as n,
@@ -86,12 +88,17 @@ df as (
    group by s.lexeme
 ),
 postings as (
-  select v.memory_id,v.version,extract(epoch from v.recorded_at)::float8 as at,
-         d.doc_len::float8 as dl,t.lexeme,(d.tf->>t.lexeme)::float8 as tf
-    from memory_versions v join memories m on m.id=v.memory_id
-    join lexical_documents d on d.memory_id=v.memory_id and d.version=v.version
-    cross join query join terms t on d.tf ? t.lexeme
-   where (select ok from ready) and {RANKABLE} and v.text_search @@ query.q
+  select d.memory_id,d.version,extract(epoch from d.recorded_at)::float8 as at,
+         d.doc_len::float8 as dl,p.lexeme,p.tf::float8 as tf
+    from terms t join lexical_postings p using(lexeme)
+    cross join lateral (
+      select memory_id,version,recorded_at,doc_len from lexical_documents d
+       where d.posting_id=p.posting_id and d.scope=p.scope and d.scope=any($1::text[])
+         and d.version=d.current_version and d.status='active'
+         and ($2::timestamptz is null or (d.valid_from <= $2 and d.valid_to > $2))
+       offset 0
+    ) d
+   where (select ok from ready) and p.scope=any($1::text[])
 ),
 indexed_result as (
   select p.memory_id as id,p.at,

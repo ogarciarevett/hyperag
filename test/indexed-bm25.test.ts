@@ -77,6 +77,12 @@ test("metadata/postings backfill is idempotent, bounded and matches every curren
  await pool.query("select lexical_postings_backfill(64)");
  expect((await pool.query("select value from settings where key='lexical_postings_ready'")).rows[0].value).toBe("true");
  await postingsOracle();
+ const before=(await pool.query("select memory_id,posting_id from lexical_documents order by memory_id")).rows;
+ await pool.query("begin; select pg_advisory_xact_lock(1213811052,1)");
+ for(const name of ["0004_lexical_cache.sql","0005_lexical_postings.sql"])await pool.query(readFileSync(new URL(`../crates/hyperag/migrations/${name}`,import.meta.url),"utf8"));
+ await pool.query("commit; select lexical_refresh_document('both')");
+ expect((await pool.query("select memory_id,posting_id from lexical_documents order by memory_id")).rows).toEqual(before);
+ await postingsOracle();
  for(const n of [null,0,257])await expect(pool.query("select lexical_postings_backfill($1)",[n])).rejects.toThrow();
 });
 
@@ -98,5 +104,6 @@ test("write-maintained statistics preserve equality after mutation and reset fal
 async function postingsOracle(){
  const actual=(await pool.query("select d.memory_id,d.version,d.current_version,d.status,d.scope,d.recorded_at,p.lexeme,p.tf from lexical_documents d join lexical_postings p using(posting_id) order by d.memory_id,p.lexeme")).rows;
  const expected=(await pool.query("select m.id as memory_id,v.version,m.current_version,v.status,m.scope,v.recorded_at,u.lexeme,coalesce(array_length(u.positions,1),1) as tf from memories m join memory_versions v on v.memory_id=m.id and v.version=m.current_version cross join lateral unnest(v.text_search)u where m.deleted_at is null and v.status='active' order by m.id,u.lexeme")).rows;
+ expect(actual.length).toBeGreaterThan(3000);
  expect(actual).toEqual(expected);
 }

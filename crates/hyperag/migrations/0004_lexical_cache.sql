@@ -141,7 +141,7 @@ BEGIN
   IF batch_size IS NULL OR batch_size<1 OR batch_size>256 THEN RAISE EXCEPTION 'lexical backfill batch must be from 1 to 256'; END IF;
   PERFORM pg_advisory_xact_lock(1213811052,1);
   IF (SELECT value FROM settings WHERE key='lexical_cache_ready')='reset' THEN
-    TRUNCATE lexical_documents,lexical_corpus_stats,lexical_term_stats;
+    TRUNCATE lexical_documents,lexical_corpus_stats,lexical_term_stats CASCADE;
     UPDATE settings SET value='false' WHERE key='lexical_cache_ready';
   END IF;
   SELECT array_agg(id ORDER BY id) INTO ids FROM (
