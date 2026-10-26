@@ -191,6 +191,7 @@ struct QueryBody {
 struct RetrieveBounds {
     limit: Option<usize>,
     candidates_per_channel: Option<usize>,
+    rerank_candidates: Option<usize>,
     as_of: Option<String>,
     anchor: Option<String>,
     channels: Option<crate::core::Channels>,
@@ -205,6 +206,7 @@ fn bounded(b: RetrieveBounds) -> Result<RetrieveOptions, ApiError> {
     Ok(RetrieveOptions {
         limit: check(b.limit, "limit", 50)?,
         candidates_per_channel: check(b.candidates_per_channel, "candidatesPerChannel", 150)?,
+        rerank_candidates: check(b.rerank_candidates, "rerankCandidates", 150)?,
         max_tokens: check(b.max_tokens, "maxTokens", 32_000)?,
         as_of: b.as_of,
         anchor: b.anchor,

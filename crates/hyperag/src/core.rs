@@ -30,6 +30,8 @@ pub struct Channels {
 pub struct RetrieveOptions {
     pub limit: Option<usize>,
     pub candidates_per_channel: Option<usize>,
+    /// Cross-encode this many fused candidates; overrides the environment default.
+    pub rerank_candidates: Option<usize>,
     /// Only facts valid at this instant (valid time).
     pub as_of: Option<String>,
     /// The date the question is asked, for the temporal channel only: "last week" in the question
@@ -58,11 +60,15 @@ pub struct RetrievedItem {
 
 
 /// Cross-encode a bounded prefix after fusion; channel recall and the loaded pool stay unchanged.
-fn rerank_input(items: &[RetrievedItem], configured: Option<&str>) -> Result<Vec<String>> {
-    let count = match configured {
-        None => items.len(),
-        Some(value) => value.parse::<usize>().ok().filter(|n| (1..=150).contains(n))
-            .ok_or_else(|| Error::InvalidInput("HYPERAG_RERANK_CANDIDATES must be an integer from 1 to 150".into()))?,
+fn rerank_input(items: &[RetrievedItem], requested: Option<usize>, configured: Option<&str>) -> Result<Vec<String>> {
+    let count = match requested {
+        Some(n) if (1..=150).contains(&n) => n,
+        Some(_) => return Err(Error::InvalidInput("rerankCandidates must be an integer from 1 to 150".into())),
+        None => match configured {
+            None => items.len(),
+            Some(value) => value.parse::<usize>().ok().filter(|n| (1..=150).contains(n))
+                .ok_or_else(|| Error::InvalidInput("HYPERAG_RERANK_CANDIDATES must be an integer from 1 to 150".into()))?,
+        },
     };
     Ok(items.iter().take(count).map(|i| i.memory.text.clone()).collect())
 }
@@ -566,7 +572,7 @@ impl Hyperag {
         let mut reranked = false;
         if let (true, Some(r)) = (rerank && !items.is_empty(), &models.reranker) {
             let cap = std::env::var("HYPERAG_RERANK_CANDIDATES").ok();
-            let docs = rerank_input(&items, cap.as_deref())?;
+            let docs = rerank_input(&items, options.rerank_candidates, cap.as_deref())?;
             match r.rerank(query, &docs).await {
                 Ok(scores) => {
                     apply_rerank_scores(&mut items, &scores);
@@ -765,7 +771,7 @@ mod tests {
         let (a, b) = (channel("a"), channel("b"));
         let mut items = fuse(&[&a, &b], 60.0).into_iter().take(24).map(|h| rerank_item(h.id)).collect::<Vec<_>>();
         // The agreement at rank9 would be lost by reducing either channel to8 candidates.
-        let docs = rerank_input(&items, Some("8")).unwrap();
+        let docs = rerank_input(&items, Some(8), Some("10")).unwrap();
         assert_eq!(docs.len(), 8);
         assert_eq!(docs[0], "needle");
         let tail = items[8..].iter().map(|i| i.memory.id.clone()).collect::<Vec<_>>();
@@ -780,10 +786,10 @@ mod tests {
     #[test]
     fn rerank_cap_defaults_to_all_and_rejects_invalid_configuration() {
         let items = (1..=24).map(|n| rerank_item(format!("doc-{n}"))).collect::<Vec<_>>();
-        assert_eq!(rerank_input(&items, None).unwrap().len(), 24);
-        assert_eq!(rerank_input(&items, Some("150")).unwrap().len(), 24);
-        assert_eq!(rerank_input(&items, Some("10")).unwrap().len(), 10);
-        for invalid in ["0", "151", "invalid", "-8"] { assert!(rerank_input(&items, Some(invalid)).is_err()); }
+        assert_eq!(rerank_input(&items, None, None).unwrap().len(), 24);
+        assert_eq!(rerank_input(&items, None, Some("150")).unwrap().len(), 24);
+        assert_eq!(rerank_input(&items, None, Some("10")).unwrap().len(), 10);
+        for invalid in ["0", "151", "invalid", "-8"] { assert!(rerank_input(&items, None, Some(invalid)).is_err()); }
     }
 
     #[test]
@@ -794,5 +800,14 @@ mod tests {
         assert_eq!(items[0].memory.id, "doc-24");
         assert!(items.iter().all(|i| i.rerank_score.is_some()));
         assert!(items.windows(2).all(|p| p[0].rerank_score >= p[1].rerank_score));
+    }
+
+    #[test]
+    fn rerank_request_overrides_environment_and_has_the_same_bounds() {
+        let items = (1..=24).map(|n| rerank_item(format!("doc-{n}"))).collect::<Vec<_>>();
+        assert_eq!(rerank_input(&items, Some(8), Some("10")).unwrap().len(), 8);
+        assert_eq!(rerank_input(&items, Some(10), Some("invalid")).unwrap().len(), 10);
+        assert_eq!(rerank_input(&items, Some(150), Some("1")).unwrap().len(), 24);
+        for n in [0,151] { assert!(rerank_input(&items, Some(n), Some("8")).is_err()); }
     }
 }
