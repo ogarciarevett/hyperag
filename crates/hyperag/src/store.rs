@@ -268,6 +268,7 @@ pub struct VectorRow {
 #[derive(Clone)]
 pub struct Store {
     pub pool: PgPool,
+    pub(super) lexical_reader: crate::lexical_consumer::ReaderHandle,
 }
 
 fn vector_table(space: &str) -> Result<String> {
@@ -381,7 +382,12 @@ pub struct CreateInput<'a> {
 
 impl Store {
     pub fn new(pool: PgPool) -> Self {
-        Store { pool }
+        Store { pool, lexical_reader: Default::default() }
+    }
+
+    pub(super) fn with_lexical_reader(mut self, reader: crate::lexical_consumer::ReaderHandle) -> Self {
+        self.lexical_reader = reader;
+        self
     }
 
     /// Acquire before any source row/table lock; shared with triggers and bounded backfill.
@@ -794,6 +800,9 @@ mod lexical_scorer_tests {
         assert_eq!(LexicalScorer::parse(Some("bm25")).unwrap(), LexicalScorer::Bm25);
         assert_eq!(LexicalScorer::parse(Some("fast")).unwrap(), LexicalScorer::Fast);
         assert_eq!(LexicalScorer::parse(Some("indexed-bm25")).unwrap(), LexicalScorer::IndexedBm25);
+        assert!(LexicalScorer::parse(Some("tantivy")).is_ok());
+        assert!(LexicalScorer::parse(Some("Tantivy")).is_err());
+        assert!(LexicalScorer::parse(Some(" tantivy")).is_err());
         assert!(LexicalScorer::parse(Some("unknown")).is_err());
     }
 }
