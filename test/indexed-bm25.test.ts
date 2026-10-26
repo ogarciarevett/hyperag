@@ -122,7 +122,7 @@ test("100k broad query reads only indexed term/scope postings",async()=>{
   insert into memories(id,scope,kind,created_by,current_version)
    select 'large-'||n,case when n%7=0 then 'hidden' else 'allowed' end,'fact','fixture',1 from generate_series(1,100000)n;
   insert into memory_versions(memory_id,version,text,source,author,content_hash)
-   select id,1,'ordinary quartz common term'||substring(id from 7),'fixture','fixture',id from memories where id like 'large-%';
+   select id,1,'ordinary quartz common token','fixture','fixture',id from memories where id like 'large-%';
   insert into lexical_documents(memory_id,version,scope,valid_from,valid_to,doc_len,tf,current_version,status,recorded_at)
    select m.id,v.version,m.scope,'-infinity','infinity',length(v.text_search),
     (select jsonb_object_agg(u.lexeme,coalesce(array_length(u.positions,1),1)) from unnest(v.text_search)u),
