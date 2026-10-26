@@ -160,4 +160,4 @@ impl Read {
 
 #[cfg(test)]
 #[path = "lexical_read_tests.rs"]
-mod tests;
+pub(crate) mod tests;

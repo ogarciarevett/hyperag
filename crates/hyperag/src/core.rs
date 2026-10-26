@@ -796,6 +796,10 @@ impl Hyperag {
 }
 
 #[cfg(test)]
+#[path = "core_switch_tests.rs"]
+mod switch_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
 

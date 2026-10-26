@@ -10,7 +10,7 @@ use std::str::FromStr;
 #[tokio::test]
 async fn authorized_snapshot_keeps_fences_payloads_and_whole_fallback() -> anyhow::Result<()> {
     isolated(
-        "authorized_snapshot_keeps_fences_payloads_and_whole_fallback",
+        "lexical_read::tests::authorized_snapshot_keeps_fences_payloads_and_whole_fallback",
         exercise,
     )
     .await
@@ -19,7 +19,7 @@ async fn authorized_snapshot_keeps_fences_payloads_and_whole_fallback() -> anyho
 #[tokio::test]
 async fn current_reader_equals_sql_ids_order_and_score_bits() -> anyhow::Result<()> {
     isolated(
-        "current_reader_equals_sql_ids_order_and_score_bits",
+        "lexical_read::tests::current_reader_equals_sql_ids_order_and_score_bits",
         sql_parity,
     )
     .await
@@ -28,25 +28,20 @@ async fn current_reader_equals_sql_ids_order_and_score_bits() -> anyhow::Result<
 #[tokio::test]
 async fn concurrent_opt_in_vector_requests_fit_the_service_pool() -> anyhow::Result<()> {
     isolated(
-        "concurrent_opt_in_vector_requests_fit_the_service_pool",
+        "lexical_read::tests::concurrent_opt_in_vector_requests_fit_the_service_pool",
         concurrent_vectors,
     )
     .await
 }
 
-async fn isolated(
+pub(crate) async fn isolated(
     test: &str,
     exercise: impl AsyncFn(Store) -> anyhow::Result<()>,
 ) -> anyhow::Result<()> {
     // Run the opt-in environment in its own process, without racing other tests' defaults.
     if std::env::var("HYPERAG_LEXICAL_READ_CHILD").as_deref() != Ok("1") {
         let status = std::process::Command::new(std::env::current_exe()?)
-            .args([
-                "--exact",
-                &format!("lexical_read::tests::{test}"),
-                "--nocapture",
-                "--test-threads=1",
-            ])
+            .args(["--exact", test, "--nocapture", "--test-threads=1"])
             .env("HYPERAG_LEXICAL_READ_CHILD", "1")
             .env("HYPERAG_LEXICAL_SCORER", "tantivy")
             .status()?;
