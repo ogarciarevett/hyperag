@@ -1,5 +1,5 @@
 use super::*;
-use crate::store::Store;
+use crate::{lexical_generation::Generation, store::Store};
 use sqlx::postgres::{PgConnectOptions, PgPoolOptions};
 use std::str::FromStr;
 
@@ -224,13 +224,7 @@ async fn exercise(pool: &PgPool) -> anyhow::Result<()> {
             ids += batch.ids.len();
         }
         assert_eq!(ids, if after.is_some() { 20000 } else { 20129 });
-        // Same-backend transaction counters include index-only scans and final-row fetches.
-        let visits: Vec<(String, i64)> = sqlx::query_as(
-            "select t.relname,t.seq_tup_read+coalesce((select sum(pg_stat_get_xact_tuples_returned(i.indexrelid))
-               from pg_index i where i.indrelid=t.relid),0)::bigint
-             from pg_stat_xact_user_tables t
-             where t.relname in ('memories','memory_versions','lexical_index_changes') order by t.relname"
-        ).fetch_all(&mut *snapshot.tx).await?;
+        let visits = source_visits(&mut snapshot).await?;
         let total: i64 = visits.iter().map(|(_, count)| count).sum();
         println!(
             "source-paging-cost mode={} ids={ids} visits={visits:?} ms={}",
@@ -242,5 +236,78 @@ async fn exercise(pool: &PgPool) -> anyhow::Result<()> {
             "source work must stay within 8 visits per ID: {total}"
         );
     }
+    fallback_cost(pool).await?;
+    Ok(())
+}
+
+// Same-backend transaction counters include index-only scans and final-row fetches.
+async fn source_visits(snapshot: &mut SourceSnapshot) -> anyhow::Result<Vec<(String, i64)>> {
+    Ok(sqlx::query_as(
+        "select t.relname,t.seq_tup_read+coalesce((select sum(pg_stat_get_xact_tuples_returned(i.indexrelid))
+           from pg_index i where i.indrelid=t.relid),0)::bigint
+         from pg_stat_xact_user_tables t
+         where t.relname in ('memories','memory_versions','lexical_index_changes') order by t.relname"
+    ).fetch_all(&mut *snapshot.tx).await?)
+}
+
+async fn fallback_cost(pool: &PgPool) -> anyhow::Result<()> {
+    let scratch = tempfile::tempdir()?;
+    let base_path = scratch.path().join("base");
+    let mut base = Generation::create(&base_path, SourceSnapshot::open(pool, None).await?)?;
+    let checkpoint = base.source_for_test().target_checkpoint().clone();
+    while base.advance().await? {}
+    let pinned = base.publish()?;
+    drop(base);
+    write(
+        pool,
+        "delete from memories where id='bulk-000001';
+        update memory_versions set text='replacementlexeme' where memory_id='bulk-000002'",
+    )
+    .await;
+    let started = std::time::Instant::now();
+    let mut replay = Generation::replay(
+        &scratch.path().join("replay"),
+        &base_path,
+        SourceSnapshot::open(pool, Some(&checkpoint)).await?,
+    )?;
+    assert!(replay.advance().await?);
+    let before = source_visits(replay.source_for_test()).await?;
+    let fallback_started = std::time::Instant::now();
+    assert!(replay.advance().await?, "rewind remains pending");
+    assert!(replay.publish().is_err());
+    while replay.advance().await? {}
+    let searcher = replay.publish()?;
+    let fallback_ms = fallback_started.elapsed().as_millis();
+    let total_ms = started.elapsed().as_millis();
+    let after = source_visits(replay.source_for_test()).await?;
+    let visits: Vec<_> = after
+        .into_iter()
+        .zip(before)
+        .map(|((name, after), (before_name, before))| {
+            assert_eq!(name, before_name);
+            (name, after - before)
+        })
+        .collect();
+    let source_ids = 20128;
+    let total: i64 = visits.iter().map(|(_, count)| count).sum();
+    println!(
+        "replay-fallback-cost bulk_docs=20000 source_ids={source_ids} live_docs={} fallback_ms={fallback_ms} copy_delta_fallback_ms={total_ms} source_visits={visits:?} total_visits={total}",
+        searcher.num_docs()
+    );
+    anyhow::ensure!(
+        total > 0 && total <= source_ids * 8,
+        "fallback source work per ID: {total}"
+    );
+    assert_eq!(searcher.num_docs(), pinned.num_docs() - 1);
+    let term = tantivy::Term::from_field_text(searcher.schema().get_field("terms")?, "synthetic");
+    assert_eq!(searcher.doc_freq(&term)?, 19998);
+    assert_eq!(
+        searcher
+            .segment_readers()
+            .iter()
+            .map(|segment| u64::from(segment.max_doc()))
+            .sum::<u64>(),
+        searcher.num_docs()
+    );
     Ok(())
 }

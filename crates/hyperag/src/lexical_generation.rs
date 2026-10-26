@@ -6,7 +6,7 @@ use sha2::{Digest, Sha256};
 use std::{fs, path::Path};
 use tantivy::{
     Index, IndexReader, IndexWriter, ReloadPolicy, Searcher, TantivyDocument, Term,
-    directory::{Directory, INDEX_WRITER_LOCK},
+    directory::{Directory, INDEX_WRITER_LOCK, META_LOCK},
     merge_policy::NoMergePolicy,
     schema::{FAST, IndexRecordOption, STORED, STRING, Schema, TextFieldIndexing, TextOptions},
     tokenizer::{PreTokenizedString, Token},
@@ -101,19 +101,49 @@ fn document(source: SourceDocument, schema: &Schema) -> anyhow::Result<TantivyDo
 }
 
 impl Generation {
+    #[cfg(test)]
+    pub fn source_for_test(&mut self) -> &mut SourceSnapshot {
+        &mut self.source
+    }
+
+    pub fn replay(path: &Path, base: &Path, source: SourceSnapshot) -> anyhow::Result<Self> {
+        let expected = source.fresh_replay_base().ok_or_else(|| {
+            anyhow::anyhow!("replay requires an unconsumed source stream and its base checkpoint")
+        })?;
+        let index = Index::open_in_dir(base)?;
+        let _writer = index.directory().acquire_lock(&INDEX_WRITER_LOCK)?;
+        let _files = index.directory().acquire_lock(&META_LOCK)?;
+        let manifest = complete_manifest(&index)?
+            .ok_or_else(|| anyhow::anyhow!("incomplete or incompatible replay base"))?;
+        anyhow::ensure!(
+            manifest.checkpoint == *expected,
+            "replay base checkpoint mismatch"
+        );
+        private_directory(path)?;
+        // shortcut: copy base files once; use reflinks if measured copy cost warrants it.
+        for entry in fs::read_dir(base)? {
+            let entry = entry?;
+            let name = entry.file_name();
+            if name == INDEX_WRITER_LOCK.filepath.as_os_str()
+                || name == META_LOCK.filepath.as_os_str()
+            {
+                continue;
+            }
+            anyhow::ensure!(entry.file_type()?.is_file(), "nonregular replay base entry");
+            fs::copy(entry.path(), path.join(name))?;
+        }
+        Self::initialize(Index::open_in_dir(path)?, source)
+    }
     pub fn create(path: &Path, source: SourceSnapshot) -> anyhow::Result<Self> {
         anyhow::ensure!(
             source.is_fresh_rebuild(),
             "a new generation requires an unconsumed full rebuild snapshot"
         );
-        let mut directory = fs::DirBuilder::new();
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::DirBuilderExt;
-            directory.mode(0o700);
-        }
-        directory.create(path)?; // Existing generations are never overwritten.
-        let index = Index::create_in_dir(path, schema())?;
+        private_directory(path)?;
+        Self::initialize(Index::create_in_dir(path, schema())?, source)
+    }
+
+    fn initialize(index: Index, source: SourceSnapshot) -> anyhow::Result<Self> {
         let writer = index.writer_with_num_threads(1, 32 * 1024 * 1024)?;
         writer.set_merge_policy(Box::new(NoMergePolicy));
         let reader = index
@@ -140,6 +170,19 @@ impl Generation {
         );
         self.interrupted = true;
         let Some(batch) = self.source.next_batch().await? else {
+            if self
+                .index
+                .searchable_segment_metas()?
+                .iter()
+                .any(|segment| segment.has_deletes())
+            {
+                // Native merges approximate token totals; rebuild at the same MVCC fence.
+                self.writer.delete_all_documents()?;
+                self.source.rewind_for_rebuild().await?;
+                self.commit_state(false)?;
+                self.interrupted = false;
+                return Ok(true);
+            }
             self.interrupted = false;
             return Ok(false);
         };
@@ -195,18 +238,10 @@ pub(super) fn recover(path: &Path, source: &Checkpoint) -> anyhow::Result<Option
     let index = Index::open_in_dir(path)?;
     // Fence inspection and reader reload must not race another local writer's commit.
     let _owner = index.directory().acquire_lock(&INDEX_WRITER_LOCK)?;
-    let meta = index.load_metas()?;
-    let Some(payload) = meta.payload else {
+    let Some(manifest) = complete_manifest(&index)? else {
         return Ok(None);
     };
-    let manifest: Manifest = serde_json::from_str(&payload)?;
-    let expected = schema();
-    if !manifest.complete
-        || manifest.format != 1
-        || manifest.checkpoint != *source
-        || manifest.schema_hash != fingerprint(&expected)
-        || meta.schema != expected
-    {
+    if manifest.checkpoint != *source {
         return Ok(None);
     }
     let reader: IndexReader = index
@@ -215,6 +250,34 @@ pub(super) fn recover(path: &Path, source: &Checkpoint) -> anyhow::Result<Option
         .try_into()?;
     reader.reload()?;
     Ok(Some(reader.searcher()))
+}
+
+fn private_directory(path: &Path) -> anyhow::Result<()> {
+    let mut directory = fs::DirBuilder::new();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::DirBuilderExt;
+        directory.mode(0o700);
+    }
+    directory.create(path)?; // Existing generations are never overwritten.
+    Ok(())
+}
+
+fn complete_manifest(index: &Index) -> anyhow::Result<Option<Manifest>> {
+    let meta = index.load_metas()?;
+    let Some(payload) = meta.payload else {
+        return Ok(None);
+    };
+    let manifest: Manifest = serde_json::from_str(&payload)?;
+    let expected = schema();
+    if !manifest.complete
+        || manifest.format != 1
+        || manifest.schema_hash != fingerprint(&expected)
+        || meta.schema != expected
+    {
+        return Ok(None);
+    }
+    Ok(Some(manifest))
 }
 
 #[cfg(test)]

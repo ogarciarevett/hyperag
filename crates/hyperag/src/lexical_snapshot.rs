@@ -32,9 +32,13 @@ pub(super) struct SourceSnapshot {
     fence: Checkpoint,
     drained: bool,
     fresh_rebuild: bool,
+    replay_base: Option<Checkpoint>,
 }
 
 impl SourceSnapshot {
+    pub fn fresh_replay_base(&self) -> Option<&Checkpoint> {
+        self.replay_base.as_ref()
+    }
     pub fn is_fresh_rebuild(&self) -> bool {
         self.fresh_rebuild
     }
@@ -113,12 +117,14 @@ impl SourceSnapshot {
             fence,
             drained: false,
             fresh_rebuild: after.is_none(),
+            replay_base: after.cloned(),
         })
     }
 
     /// All pages share the fence's MVCC snapshot; no advisory writer lock is taken.
     pub async fn next_batch(&mut self) -> anyhow::Result<Option<Batch>> {
         self.fresh_rebuild = false;
+        self.replay_base = None;
         if self.drained {
             return Ok(None);
         }
@@ -142,6 +148,16 @@ impl SourceSnapshot {
              order by m.id collate "C"
         "#).bind(&ids).fetch_all(&mut *self.tx).await?;
         Ok(Some(Batch { ids, documents }))
+    }
+
+    /// Discard replay statistics without opening a newer source snapshot.
+    pub async fn rewind_for_rebuild(&mut self) -> anyhow::Result<()> {
+        anyhow::ensure!(self.drained, "only an exhausted snapshot can rewind");
+        sqlx::query(
+            "declare lexical_source_ids no scroll cursor for select id collate \"C\" from memories order by id collate \"C\"",
+        ).execute(&mut *self.tx).await?;
+        self.drained = false;
+        Ok(())
     }
 
     /// This proves source exhaustion only; index commit/reload and query fencing remain mandatory.
