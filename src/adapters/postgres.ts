@@ -12,6 +12,7 @@ const MIGRATIONS = [
   new URL("../../crates/hyperag/migrations/0001_init.sql", import.meta.url),
   new URL("../../crates/hyperag/migrations/0002_settings.sql", import.meta.url),
   new URL("../../crates/hyperag/migrations/0003_memory_text_limit.sql", import.meta.url),
+  new URL("../../crates/hyperag/migrations/0006_lexical_index_outbox.sql", import.meta.url),
 ];
 
 type VersionRow = {
