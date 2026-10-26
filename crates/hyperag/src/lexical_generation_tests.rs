@@ -193,5 +193,58 @@ async fn exercise(pool: &PgPool) -> anyhow::Result<()> {
     assert!(failed.publish().is_err());
     drop(failed);
     assert!(recover(&failed_path, &target)?.is_none());
+    sqlx::raw_sql(
+        "begin; select pg_advisory_xact_lock(1213811052,1);
+        insert into memory_versions(memory_id,version,text,source,author,content_hash)
+        values('id-005',2,'incrementallexeme','fixture','fixture','changed');
+        update memories set current_version=2 where id='id-005';
+        delete from memories where id='id-006';
+        update memory_versions set status='invalidated' where memory_id='id-007'; commit",
+    )
+    .execute(pool)
+    .await?;
+    let replay_source = SourceSnapshot::open(pool, Some(&target)).await?;
+    let replay_target = replay_source.target_checkpoint().clone();
+    let replay_path = root.path().join("replayed");
+    let base_metadata = std::fs::read(&meta_path)?;
+    let mut replay = Generation::replay(&replay_path, &complete_path, replay_source)?;
+    assert!(
+        recover(&replay_path, &target).is_err(),
+        "the copied index has a single owner"
+    );
+    assert!(replay.advance().await?);
+    assert!(
+        replay.publish().is_err(),
+        "a replay page is not source exhaustion"
+    );
+    assert!(!replay.advance().await?);
+    let replayed = replay.publish()?;
+    assert_eq!(replayed.num_docs(), 128);
+    assert_eq!(
+        replayed.search(
+            &tantivy::query::TermQuery::new(alpha.clone(), IndexRecordOption::Basic),
+            &tantivy::collector::Count
+        )?,
+        127
+    );
+    assert_eq!(recovered.num_docs(), 130);
+    drop(replay);
+    assert!(recover(&replay_path, &target)?.is_none());
+    assert_eq!(
+        recover(&replay_path, &replay_target)?.unwrap().num_docs(),
+        128
+    );
+    assert_eq!(std::fs::read(&meta_path)?, base_metadata);
+    let full = SourceSnapshot::open(pool, None).await?;
+    assert!(Generation::replay(&root.path().join("bad-full"), &complete_path, full).is_err());
+    let mut consumed = SourceSnapshot::open(pool, Some(&target)).await?;
+    assert!(consumed.next_batch().await?.is_some());
+    assert!(
+        Generation::replay(&root.path().join("bad-consumed"), &complete_path, consumed).is_err()
+    );
+    let source = SourceSnapshot::open(pool, Some(&target)).await?;
+    assert!(Generation::replay(&root.path().join("bad-base"), &old_path, source).is_err());
+    let source = SourceSnapshot::open(pool, Some(&target)).await?;
+    assert!(Generation::replay(&root.path().join("bad-pending"), &pending_path, source).is_err());
     Ok(())
 }
