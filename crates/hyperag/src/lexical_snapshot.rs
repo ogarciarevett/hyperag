@@ -2,7 +2,7 @@
 use chrono::{DateTime, Utc};
 use sqlx::{PgPool, Postgres, Transaction, types::Json};
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub(super) struct Checkpoint {
     pub database_id: String,
     pub epoch: i64,
@@ -34,6 +34,11 @@ pub(super) struct SourceSnapshot {
 }
 
 impl SourceSnapshot {
+    /// The intended fence, which is not proof that the source stream has completed.
+    pub fn target_checkpoint(&self) -> &Checkpoint {
+        &self.fence
+    }
+
     /// `None` starts a rebuild. Invalid replay lineage requires fallback and a fresh rebuild.
     pub async fn open(pool: &PgPool, after: Option<&Checkpoint>) -> anyhow::Result<Self> {
         let mut tx = pool.begin().await?;

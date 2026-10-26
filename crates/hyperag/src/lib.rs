@@ -3,6 +3,8 @@ pub mod core;
 pub mod graph;
 #[allow(dead_code)] // Private foundation; the index worker is introduced separately.
 mod lexical_snapshot;
+#[allow(dead_code)] // Private durable generation; no service worker is enabled.
+mod lexical_generation;
 pub mod hooks;
 pub mod hook_setup;
 pub mod mcp;
