@@ -32,6 +32,8 @@ arithmetic; the earlier native scorer's ~97 ms p95 is not proof of its latency.
 Vector SQL reuses the snapshot connection, avoiding a second pool acquisition when
 all eight service connections are held by requests. Scoring and vector savepoints
 keep whole-list SQL fallback and lexical payload reads usable after SQL failures.
+Retrieval takes the model read lock before opening its pooled snapshot, matching
+the model switch's lock order and leaving connections available to its final pass.
 
 The store defaults to an empty reader and SQL fallback. Service/index writer
 lifecycle and attachment are a separate slice; this change starts no worker.

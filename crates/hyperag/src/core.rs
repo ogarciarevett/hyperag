@@ -526,13 +526,14 @@ impl Hyperag {
         };
         let ch = options.channels.clone().unwrap_or_default();
         let on = |c: Option<bool>| c.unwrap_or(true);
+        // Match the model switch's model-before-pool lock order.
+        let models = self.models.read().await;
         let mut lexical = if on(ch.bm25) && crate::store::LexicalScorer::selected()? == crate::store::LexicalScorer::Tantivy {
             Some(timed(&mut timings, Stage::Lexical, crate::lexical_read::Read::open(&self.store.pool, principal, query, as_of)).await?)
         } else { None };
         let readable = match &lexical { Some(read) => read.scopes.clone(), None => self.store.scopes(principal, "read").await? };
         let (mut limitations, mut paths) = (vec![], vec![]);
         let mut lists: Vec<(&'static str, Vec<Hit>)> = vec![];
-        let models = self.models.read().await;
 
         if on(ch.bm25) {
             let hits = match lexical.as_mut() {
