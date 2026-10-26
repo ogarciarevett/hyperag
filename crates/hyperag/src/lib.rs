@@ -5,6 +5,8 @@ pub mod graph;
 mod lexical_snapshot;
 #[allow(dead_code)] // Private durable generation; no service worker is enabled.
 mod lexical_generation;
+#[allow(dead_code)] // Private explicit consumer; no background service is enabled.
+mod lexical_consumer;
 pub mod hooks;
 pub mod hook_setup;
 pub mod mcp;
