@@ -5,6 +5,10 @@ import { freshDatabase } from "./helpers";
 
 const db = await freshDatabase();
 const pool = new Pool({ connectionString: db.url, max: 4 });
+let tearingDown = false;
+pool.on("error", (error: Error & {code?: string}) => {
+  if (!(tearingDown && error.code === "57P01")) throw error;
+});
 async function add(q: Pool | PoolClient, id: string, scope: string, text: string, version = 1) {
   await q.query("insert into memories(id,scope,kind,created_by,current_version) values($1,$2,'fact','fixture',$3)", [id,scope,version]);
   await q.query("insert into memory_versions(memory_id,version,text,source,author,content_hash) values($1,$2,$3,'fixture','fixture',$1)", [id,version,text]);
@@ -18,7 +22,7 @@ beforeAll(async () => {
   const migration = new URL("../crates/hyperag/migrations/0004_lexical_cache.sql", import.meta.url);
   if (existsSync(migration)) await pool.query(readFileSync(migration, "utf8"));
 });
-afterAll(async () => { await pool.end(); await db.drop(); });
+afterAll(async () => { tearingDown = true; await pool.end(); await db.drop(); });
 
 // Oracle uses legacy tsvector semantics: dl counts unique lexemes; tf counts stored positions.
 const source = `select m.id as memory_id,v.version,m.scope,
@@ -43,6 +47,8 @@ test("gated-size backfill is idempotent and readiness waits for complete current
   for (let tries=0;tries<10;tries++) { const n=Number((await pool.query("select lexical_cache_backfill(2) as n")).rows[0].n); total+=n; if (!n) break; }
   expect(total).toBe(6);
   expect((await pool.query("select value from settings where key='lexical_cache_ready'")).rows[0].value).toBe("true");
+  await coherent();
+  await pool.query(readFileSync(new URL("../crates/hyperag/migrations/0004_lexical_cache.sql", import.meta.url), "utf8"));
   await coherent();
   await pool.query("select lexical_refresh_document('a'); select lexical_refresh_document('a')");
   expect(Number((await pool.query("select lexical_cache_backfill(2) as n")).rows[0].n)).toBe(0);
@@ -69,4 +75,18 @@ test("concurrent writers do not lose frequency or length deltas", async () => {
     finally { client.release(); }
   }));
   await coherent();
+});
+
+test("truncate marks derived statistics unready and explicit backfill resets them", async () => {
+  await pool.query("truncate memory_versions");
+  expect((await pool.query("select value from settings where key='lexical_cache_ready'")).rows[0].value).toBe("reset");
+  expect(Number((await pool.query("select lexical_cache_backfill(2) as n")).rows[0].n)).toBe(0);
+  expect((await pool.query("select value from settings where key='lexical_cache_ready'")).rows[0].value).toBe("true");
+  await coherent();
+  await add(pool,"after-truncate","allowed","quartz"); await coherent();
+  await pool.query("truncate memories cascade");
+  expect((await pool.query("select value from settings where key='lexical_cache_ready'")).rows[0].value).toBe("reset");
+  expect(Number((await pool.query("select lexical_cache_backfill(2) as n")).rows[0].n)).toBe(0);
+  await coherent();
+  for (const n of [0,257,null]) await expect(pool.query("select lexical_cache_backfill($1)",[n])).rejects.toThrow();
 });

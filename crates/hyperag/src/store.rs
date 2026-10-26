@@ -18,10 +18,11 @@ macro_rules! sql {
     ($($t:tt)*) => { sqlx::AssertSqlSafe(format!($($t)*)) };
 }
 
-const MIGRATIONS: [&str; 3] = [
+const MIGRATIONS: [&str; 4] = [
     include_str!("../migrations/0001_init.sql"),
     include_str!("../migrations/0002_settings.sql"),
     include_str!("../migrations/0003_memory_text_limit.sql"),
+    include_str!("../migrations/0004_lexical_cache.sql"),
 ];
 
 // Legacy corpus BM25 remains available for runtime comparison and rollback.
