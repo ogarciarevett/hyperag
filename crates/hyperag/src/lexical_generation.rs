@@ -31,13 +31,14 @@ struct Manifest {
     complete: bool,
 }
 
-fn schema() -> Schema {
+pub(super) fn schema() -> Schema {
     let mut schema = Schema::builder();
     schema.add_text_field("id", STRING | FAST | STORED);
     schema.add_text_field("scope", STRING | FAST | STORED);
     for name in ["version", "recorded_at", "valid_from", "valid_to"] {
         schema.add_i64_field(name, FAST | STORED);
     }
+    schema.add_u64_field("num_tokens", FAST | STORED);
     schema.add_text_field(
         "terms",
         TextOptions::default().set_indexing_options(
@@ -59,7 +60,7 @@ fn fingerprint(schema: &Schema) -> String {
     ))
 }
 
-fn document(source: SourceDocument, schema: &Schema) -> anyhow::Result<TantivyDocument> {
+pub(super) fn document(source: SourceDocument, schema: &Schema) -> anyhow::Result<TantivyDocument> {
     let mut doc = TantivyDocument::default();
     doc.add_text(schema.get_field("id")?, source.id);
     doc.add_text(schema.get_field("scope")?, source.scope);
@@ -90,6 +91,7 @@ fn document(source: SourceDocument, schema: &Schema) -> anyhow::Result<TantivyDo
             });
         }
     }
+    doc.add_u64(schema.get_field("num_tokens")?, tokens.len() as u64);
     doc.add_pre_tokenized_text(
         schema.get_field("terms")?,
         PreTokenizedString {
