@@ -57,8 +57,10 @@ test("ready selective search executes GIN and no document-lexeme expansion",asyn
  const nodes:any[]=[];const walk=(n:any)=>{nodes.push(n);for(const p of n.Plans??[])walk(p);};
  const plan=(await pool.query(`explain(analyze,buffers,format json) ${indexed}`,[["allowed"],null,"ultrararefixturetoken",24])).rows[0]["QUERY PLAN"][0];walk(plan.Plan);
  expect(nodes.some(n=>n["Node Type"]==='Bitmap Index Scan'&&n["Index Name"]==='memory_versions_text_search_idx'&&n["Actual Loops"]>0)).toBe(true);
+ expect(nodes.filter(n=>n["Node Type"]==='Seq Scan'&&n["Relation Name"]==='memory_versions').every(n=>n["Actual Loops"]===0)).toBe(true);
  const broad=(await pool.query(`explain(analyze,buffers,format json) ${indexed}`,[["allowed"],null,"ordinary quartz",24])).rows[0]["QUERY PLAN"][0];nodes.length=0;walk(broad.Plan);
- expect(nodes.filter(n=>n["Node Type"]==='Function Scan'&&n["Function Name"]==='unnest').every(n=>n["Actual Loops"]<=1)).toBe(true);
+ expect(nodes.filter(n=>n["Node Type"]==='Function Scan').every(n=>n["Actual Loops"]<=1)).toBe(true);
+ expect(nodes.some(n=>n["Node Type"]==='Function Scan'&&n["Actual Loops"]===1)).toBe(true);
  console.info('indexed-bm25-fixture',JSON.stringify({selectiveMs:plan["Execution Time"],broadMs:broad["Execution Time"]}));
 });
 test("write-maintained statistics preserve equality after mutation and reset fallback",async()=>{
@@ -66,5 +68,11 @@ test("write-maintained statistics preserve equality after mutation and reset fal
  await compare(["allowed"],null,"ordinary quartz");await compare(["allowed","hidden"],"2035-01-01","quartz nebula");
  await pool.query("update memory_versions set status='invalidated' where memory_id='both'; update memories set deleted_at=now() where id='future'");
  await compare(["allowed"],null,"quartz nebula");
+ // Prove reset/missing-marker fallback with positive source hits and deliberately empty caches.
+ await pool.query("begin; select pg_advisory_xact_lock(1213811052,1); update settings set value='reset' where key='lexical_cache_ready'; truncate lexical_documents,lexical_corpus_stats,lexical_term_stats; commit");
+ expect((await compare(["allowed","hidden"],null,"quartz nebula")).length).toBeGreaterThan(0);
+ await pool.query("delete from settings where key='lexical_cache_ready'");
+ await compare(["allowed","hidden"],null,"quartz nebula");
+ await pool.query("insert into settings(key,value) values('lexical_cache_ready','reset')");
  await pool.query("begin; select pg_advisory_xact_lock(1213811052,1); truncate memory_versions; commit");await compare(["allowed"],null,"quartz");
 });
