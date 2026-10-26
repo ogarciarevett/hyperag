@@ -219,6 +219,18 @@ async fn concurrent_vectors(store: Store) -> anyhow::Result<()> {
             })
             .await??;
         }
+        let mut read = Read::open(&store.pool, "reader", "alpha", None).await?;
+        anyhow::ensure!(
+            read.vector(&space, &[1.0, 0.0], 24).await.is_err(),
+            "dimension mismatch must fail vector SQL"
+        );
+        anyhow::ensure!(
+            read.search(&consumer.reader(), 24).await?.len() == 1
+                && read.used_tantivy
+                && read.load(&["vector".into()]).await?.len() == 1,
+            "failed vector SQL poisoned the request snapshot"
+        );
+        read.close().await?;
         Ok(())
     }
     .await;

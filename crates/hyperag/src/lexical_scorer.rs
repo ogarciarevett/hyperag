@@ -10,6 +10,106 @@ use tantivy::{
     schema::{IndexRecordOption, Schema, Value},
 };
 
+#[derive(serde::Serialize)]
+pub(super) struct SqlCorpus {
+    n: i64,
+    total_len: i64,
+    postings: Vec<SqlPosting>,
+}
+
+#[derive(serde::Serialize)]
+struct SqlPosting {
+    memory_id: String,
+    version: i64,
+    recorded_at: chrono::DateTime<chrono::Utc>,
+    dl: i32,
+    lexeme: String,
+    tf: u32,
+}
+
+/// Supply exact scoped statistics/postings; PostgreSQL owns float arithmetic and tie collation.
+pub(super) fn sql_corpus(
+    searcher: &Searcher,
+    scopes: &[String],
+    as_of: Option<i64>,
+    terms: &[String],
+) -> anyhow::Result<SqlCorpus> {
+    let schema = searcher.schema();
+    let field = schema.get_field("terms")?;
+    let length = schema.get_field("num_lexemes")?;
+    let mut corpus = SqlCorpus {
+        n: 0,
+        total_len: 0,
+        postings: Vec::new(),
+    };
+    for (ordinal, segment) in searcher.segment_readers().iter().enumerate() {
+        let mut mask = vec![None; segment.max_doc() as usize];
+        for doc in 0..segment.max_doc() {
+            if segment.is_deleted(doc) {
+                continue;
+            }
+            let stored: TantivyDocument =
+                searcher.doc(tantivy::DocAddress::new(ordinal as u32, doc))?;
+            let text = |name| {
+                stored
+                    .get_first(schema.get_field(name)?)
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| anyhow::anyhow!("missing text metadata: {name}"))
+            };
+            let from = integer(&stored, &schema, "valid_from")?;
+            let to = integer(&stored, &schema, "valid_to")?;
+            let scope = text("scope")?;
+            if !scopes.iter().any(|allowed| allowed == scope)
+                || as_of.is_some_and(|at| {
+                    (from != i64::MIN && from > at) || (to != i64::MAX && to <= at)
+                })
+            {
+                continue;
+            }
+            let dl = i32::try_from(
+                stored
+                    .get_first(length)
+                    .and_then(|v| v.as_u64())
+                    .ok_or_else(|| anyhow::anyhow!("missing exact lexeme count"))?,
+            )?;
+            corpus.n += 1;
+            corpus.total_len = corpus
+                .total_len
+                .checked_add(i64::from(dl))
+                .ok_or_else(|| anyhow::anyhow!("lexeme count overflow"))?;
+            mask[doc as usize] = Some((
+                text("id")?.to_owned(),
+                integer(&stored, &schema, "version")?,
+                chrono::DateTime::from_timestamp_micros(integer(&stored, &schema, "recorded_at")?)
+                    .ok_or_else(|| anyhow::anyhow!("invalid recorded time"))?,
+                dl,
+            ));
+        }
+        let inverted = segment.inverted_index(field)?;
+        for lexeme in terms {
+            let term = Term::from_field_text(field, lexeme);
+            if let Some(mut postings) =
+                inverted.read_postings(&term, IndexRecordOption::WithFreqs)?
+            {
+                while postings.doc() != TERMINATED {
+                    if let Some((id, version, at, dl)) = &mask[postings.doc() as usize] {
+                        corpus.postings.push(SqlPosting {
+                            memory_id: id.clone(),
+                            version: *version,
+                            recorded_at: *at,
+                            dl: *dl,
+                            lexeme: lexeme.clone(),
+                            tf: postings.term_freq(),
+                        });
+                    }
+                    postings.advance();
+                }
+            }
+        }
+    }
+    Ok(corpus)
+}
+
 #[derive(Clone, Debug)]
 pub(super) struct Ranked {
     pub id: String,

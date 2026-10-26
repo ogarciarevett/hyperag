@@ -9,7 +9,7 @@ use serde::Serialize;
 use serde_json::{Map, Value};
 use sha2::{Digest, Sha256};
 use sqlx::postgres::{PgPool, PgRow};
-use sqlx::{Postgres, Row, Transaction};
+use sqlx::{PgConnection, Postgres, Row, Transaction};
 
 use crate::types::{EmbeddingSpace, Error, Hit, Memory, Result, WriteResult, not_found};
 
@@ -31,6 +31,12 @@ const MIGRATIONS: [&str; 6] = [
 const BM25_K1: f64 = 1.2;
 const BM25_B: f64 = 0.75;
 
+pub(super) fn bm25_sum() -> String {
+    format!(r#"sum(ln(1 + (st.n - df.df + 0.5) / (df.df + 0.5)) * (p.tf * ({BM25_K1} + 1))
+        / (p.tf + {BM25_K1} * (1 - {BM25_B} + {BM25_B} * p.dl / greatest(st.avgdl, 1)))
+        order by p.lexeme collate "C")"#)
+}
+
 /// The rows a caller may rank: current, active, not deleted, in a readable scope, valid at `asOf`.
 pub(super) const RANKABLE: &str = "m.deleted_at IS NULL AND v.version = m.current_version AND v.status = 'active'
   AND m.scope = ANY($1::text[])
@@ -42,6 +48,7 @@ pub(super) const VERSION_COLUMNS: &str = "m.id, m.scope, m.kind, v.version, v.te
 
 /// BM25 over the caller's readable corpus only (see the TypeScript store for the full rationale).
 pub(super) fn bm25_sql() -> String {
+    let score = bm25_sum();
     format!(
         "with scoped as (
   select v.memory_id, v.version, v.text_search, extract(epoch from v.recorded_at)::float8 as at
@@ -58,9 +65,7 @@ postings as (
    where s.text_search @@ query.q and u.lexeme in (select lexeme from terms)
 ),
 df as (select lexeme, count(*)::float8 as df from postings group by lexeme)
-select p.memory_id as id, p.at,
-       sum(ln(1 + (st.n - df.df + 0.5) / (df.df + 0.5)) * (p.tf * ({BM25_K1} + 1))
-           / (p.tf + {BM25_K1} * (1 - {BM25_B} + {BM25_B} * p.dl / greatest(st.avgdl, 1)))) as score
+select p.memory_id as id, p.at, {score} as score
   from postings p join df using (lexeme) cross join stats st
  group by p.memory_id, p.version, p.at
  order by score desc, p.at desc, p.memory_id
@@ -627,11 +632,18 @@ impl Store {
     }
 
     pub async fn vector(&self, space: &str, scopes: &[String], query: &[f32], limit: i64, as_of: Option<DateTime<Utc>>) -> Result<Vec<Hit>> {
+        if scopes.is_empty() { return Ok(vec![]); }
+        let mut c = self.pool.begin().await?;
+        let hits = Self::vector_in(&mut c, space, scopes, query, limit, as_of).await?;
+        c.commit().await?;
+        Ok(hits)
+    }
+
+    pub(super) async fn vector_in(c: &mut PgConnection, space: &str, scopes: &[String], query: &[f32], limit: i64, as_of: Option<DateTime<Utc>>) -> Result<Vec<Hit>> {
         if scopes.is_empty() {
             return Ok(vec![]);
         }
         let table = vector_table(space)?;
-        let mut c = self.pool.begin().await?;
         // The iterative scan keeps reading the HNSW graph until enough rows pass the scope filter. The
         // default ef_search (40) found 92% of the exact top 24 on the cross-team corpus; 100 found all.
         sqlx::query("set local hnsw.iterative_scan = strict_order").execute(&mut *c).await?;
@@ -648,7 +660,6 @@ impl Store {
         .bind(scopes).bind(as_of).bind(Vector::from(query.to_vec())).bind(limit)
         .fetch_all(&mut *c)
         .await?;
-        c.commit().await?;
         Ok(rows.iter().map(|r| Hit { id: r.get("id"), score: 1.0 - r.get::<f64, _>("distance"), at: r.get("at") }).collect())
     }
 

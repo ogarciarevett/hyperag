@@ -39,6 +39,7 @@ pub(super) fn schema() -> Schema {
         schema.add_i64_field(name, FAST | STORED);
     }
     schema.add_u64_field("num_tokens", FAST | STORED);
+    schema.add_u64_field("num_lexemes", FAST | STORED);
     schema.add_text_field(
         "terms",
         TextOptions::default().set_indexing_options(
@@ -78,6 +79,10 @@ pub(super) fn document(source: SourceDocument, schema: &Schema) -> anyhow::Resul
     ] {
         doc.add_i64(schema.get_field(name)?, value);
     }
+    doc.add_u64(
+        schema.get_field("num_lexemes")?,
+        source.terms.0.len() as u64,
+    );
     let mut tokens = Vec::new();
     for (lexeme, tf) in source.terms.0 {
         anyhow::ensure!(tf > 0, "invalid PostgreSQL term frequency");

@@ -545,7 +545,12 @@ impl Hyperag {
         if on(ch.vector) {
             match (&models.embedder, &models.space) {
                 (Some(e), Some(space)) => match timed(&mut timings, Stage::Embedding, e.embed_query(query)).await {
-                    Ok(q) => match timed(&mut timings, Stage::Vector, self.store.vector(space, &readable, &q, candidates, as_of)).await {
+                    Ok(q) => match timed(&mut timings, Stage::Vector, async {
+                        match lexical.as_mut() {
+                            Some(read) => read.vector(space, &q, candidates).await,
+                            None => self.store.vector(space, &readable, &q, candidates, as_of).await,
+                        }
+                    }).await {
                         Ok(hits) => {
                             lists.push(("vector", hits));
                             paths.push("vector".to_owned());
