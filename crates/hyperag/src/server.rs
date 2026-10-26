@@ -424,9 +424,9 @@ mod profiling_tests {
     #[test]
     fn http_passes_profile_through_bounded_options_and_defaults_off() {
         let plain: QueryBody = serde_json::from_str(r#"{"query":"synthetic fixture"}"#).unwrap();
-        assert!(!bounded(plain.options).unwrap().profile.unwrap_or(false));
+        assert!(!bounded(plain.options).ok().unwrap().profile.unwrap_or(false));
         let profiled: QueryBody = serde_json::from_str(r#"{"query":"synthetic fixture","profile":true,"limit":5}"#).unwrap();
-        let options = bounded(profiled.options).unwrap();
+        let options = bounded(profiled.options).ok().unwrap();
         assert_eq!(options.profile, Some(true));
         assert_eq!(options.limit, Some(5));
         assert!(serde_json::from_str::<QueryBody>(r#"{"query":"fixture","profile":"yes"}"#).is_err());
