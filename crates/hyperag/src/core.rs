@@ -30,6 +30,8 @@ pub struct Channels {
 pub struct RetrieveOptions {
     pub limit: Option<usize>,
     pub candidates_per_channel: Option<usize>,
+    /// Cross-encode this many fused candidates; overrides the environment default.
+    pub rerank_candidates: Option<usize>,
     /// Only facts valid at this instant (valid time).
     pub as_of: Option<String>,
     /// The date the question is asked, for the temporal channel only: "last week" in the question
@@ -54,6 +56,28 @@ pub struct RetrievedItem {
     /// With the temporal channel: when the memory was said and the dates it means.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub dates: Option<String>,
+}
+
+
+/// Cross-encode a bounded prefix after fusion; channel recall and the loaded pool stay unchanged.
+fn rerank_input(items: &[RetrievedItem], requested: Option<usize>, configured: Option<&str>) -> Result<Vec<String>> {
+    let count = match requested {
+        Some(n) if (1..=150).contains(&n) => n,
+        Some(_) => return Err(Error::InvalidInput("rerankCandidates must be an integer from 1 to 150".into())),
+        None => match configured {
+            None => items.len(),
+            Some(value) => value.parse::<usize>().ok().filter(|n| (1..=150).contains(n))
+                .ok_or_else(|| Error::InvalidInput("HYPERAG_RERANK_CANDIDATES must be an integer from 1 to 150".into()))?,
+        },
+    };
+    Ok(items.iter().take(count).map(|i| i.memory.text.clone()).collect())
+}
+
+fn apply_rerank_scores(items: &mut [RetrievedItem], scores: &[f32]) {
+    let count = items.len().min(scores.len());
+    for (item, score) in items[..count].iter_mut().zip(scores) { item.rerank_score = Some(*score); }
+    // Unscored rows must retain fused order, including when all scored logits are negative.
+    items[..count].sort_by(|a, b| b.rerank_score.unwrap_or(0.0).total_cmp(&a.rerank_score.unwrap_or(0.0)));
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -547,13 +571,11 @@ impl Hyperag {
 
         let mut reranked = false;
         if let (true, Some(r)) = (rerank && !items.is_empty(), &models.reranker) {
-            let docs: Vec<String> = items.iter().map(|i| i.memory.text.clone()).collect();
+            let cap = std::env::var("HYPERAG_RERANK_CANDIDATES").ok();
+            let docs = rerank_input(&items, options.rerank_candidates, cap.as_deref())?;
             match r.rerank(query, &docs).await {
                 Ok(scores) => {
-                    for (item, s) in items.iter_mut().zip(scores) {
-                        item.rerank_score = Some(s);
-                    }
-                    items.sort_by(|a, b| b.rerank_score.unwrap_or(0.0).total_cmp(&a.rerank_score.unwrap_or(0.0)));
+                    apply_rerank_scores(&mut items, &scores);
                     reranked = true;
                     paths.push(format!("rerank:{}", r.name));
                 }
@@ -731,5 +753,61 @@ mod tests {
         assert_eq!(c.citations.len(), 1);
         assert_eq!(c.citations[0].memory_id, "2");
         assert_eq!(c.dropped, 1);
+    }
+
+    fn rerank_item(id: String) -> RetrievedItem {
+        RetrievedItem {
+            memory: Memory { id: id.clone(), scope: "fixture".into(), kind: "fact".into(), version: 1, text: id,
+                source: "synthetic".into(), author: "fixture".into(), valid_from: None, valid_to: None,
+                recorded_at: "2026-01-01".into(), status: "active".into(), status_reason: None,
+                superseded_by: None, metadata: Default::default() },
+            score: 0.0, channels: Default::default(), via: None, rerank_score: None, dates: None,
+        }
+    }
+
+    #[test]
+    fn rerank_cap_preserves_channel_recall_and_only_sorts_the_scored_prefix() {
+        let channel = |prefix: &str| (1..=24).map(|n| hit(&if n == 9 { "needle".into() } else { format!("{prefix}-{n}") }, 0.0)).collect::<Vec<_>>();
+        let (a, b) = (channel("a"), channel("b"));
+        let mut items = fuse(&[&a, &b], 60.0).into_iter().take(24).map(|h| rerank_item(h.id)).collect::<Vec<_>>();
+        // The agreement at rank9 would be lost by reducing either channel to8 candidates.
+        let docs = rerank_input(&items, Some(8), Some("10")).unwrap();
+        assert_eq!(docs.len(), 8);
+        assert_eq!(docs[0], "needle");
+        let tail = items[8..].iter().map(|i| i.memory.id.clone()).collect::<Vec<_>>();
+        let scores = [-8.0, -7.0, -6.0, -5.0, -4.0, -3.0, -2.0, -1.0];
+        apply_rerank_scores(&mut items, &scores);
+        assert_eq!(items[0].memory.id, docs[7]);
+        assert!(items[..8].iter().all(|i| i.rerank_score.is_some()));
+        assert!(items[8..].iter().all(|i| i.rerank_score.is_none()));
+        assert_eq!(items[8..].iter().map(|i| i.memory.id.clone()).collect::<Vec<_>>(), tail);
+    }
+
+    #[test]
+    fn rerank_cap_defaults_to_all_and_rejects_invalid_configuration() {
+        let items = (1..=24).map(|n| rerank_item(format!("doc-{n}"))).collect::<Vec<_>>();
+        assert_eq!(rerank_input(&items, None, None).unwrap().len(), 24);
+        assert_eq!(rerank_input(&items, None, Some("150")).unwrap().len(), 24);
+        assert_eq!(rerank_input(&items, None, Some("10")).unwrap().len(), 10);
+        for invalid in ["0", "151", "invalid", "-8"] { assert!(rerank_input(&items, None, Some(invalid)).is_err()); }
+    }
+
+    #[test]
+    fn rerank_default_preserves_full_pool_sorting() {
+        let mut items = (1..=24).map(|n| rerank_item(format!("doc-{n}"))).collect::<Vec<_>>();
+        let scores = (1..=24).map(|n| n as f32).collect::<Vec<_>>();
+        apply_rerank_scores(&mut items, &scores);
+        assert_eq!(items[0].memory.id, "doc-24");
+        assert!(items.iter().all(|i| i.rerank_score.is_some()));
+        assert!(items.windows(2).all(|p| p[0].rerank_score >= p[1].rerank_score));
+    }
+
+    #[test]
+    fn rerank_request_overrides_environment_and_has_the_same_bounds() {
+        let items = (1..=24).map(|n| rerank_item(format!("doc-{n}"))).collect::<Vec<_>>();
+        assert_eq!(rerank_input(&items, Some(8), Some("10")).unwrap().len(), 8);
+        assert_eq!(rerank_input(&items, Some(10), Some("invalid")).unwrap().len(), 10);
+        assert_eq!(rerank_input(&items, Some(150), Some("1")).unwrap().len(), 24);
+        for n in [0,151] { assert!(rerank_input(&items, Some(n), Some("8")).is_err()); }
     }
 }
