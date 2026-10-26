@@ -54,6 +54,10 @@ fn generation_name() -> anyhow::Result<String> {
     Ok(format!("gen-{}", hex::encode(nonce)))
 }
 
+fn check_private(_path: &Path, _directory: bool, _owner: u32) -> anyhow::Result<()> {
+    Ok(())
+}
+
 fn current(root: &Path) -> anyhow::Result<Option<Active>> {
     if !fs::symlink_metadata(root.join("CURRENT"))?
         .file_type()
@@ -78,6 +82,13 @@ fn current(root: &Path) -> anyhow::Result<Option<Active>> {
 
 impl Consumer {
     pub fn open(root: &Path) -> anyhow::Result<Self> {
+        Self::open_with(root, |parent| fs::File::open(parent)?.sync_all())
+    }
+
+    fn open_with(
+        root: &Path,
+        _sync_parent: impl FnOnce(&Path) -> std::io::Result<()>,
+    ) -> anyhow::Result<Self> {
         let mut directory = fs::DirBuilder::new();
         #[cfg(unix)]
         {

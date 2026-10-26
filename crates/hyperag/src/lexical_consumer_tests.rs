@@ -107,6 +107,27 @@ async fn exercise(pool: &PgPool) -> anyhow::Result<()> {
             0o600
         );
     }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        drop(consumer);
+        let generation: String = serde_json::from_slice(&original_pointer)?;
+        for (path, unsafe_mode, private_mode) in [
+            (root.join("CURRENT"), 0o644, 0o600),
+            (root.join(generation), 0o755, 0o700),
+            (root.join(".consumer.lock"), 0o666, 0o600),
+        ] {
+            std::fs::set_permissions(&path, std::fs::Permissions::from_mode(unsafe_mode))?;
+            let rejected = Consumer::open(&root).is_err();
+            std::fs::set_permissions(&path, std::fs::Permissions::from_mode(private_mode))?;
+            anyhow::ensure!(
+                rejected,
+                "unsafe recovered path accepted: {}",
+                path.display()
+            );
+        }
+        consumer = Consumer::open(&root)?;
+    }
     assert_eq!(consumer.update(pool).await?, first);
     assert_eq!(
         std::fs::read(root.join("CURRENT"))?,
@@ -260,5 +281,77 @@ async fn exercise(pool: &PgPool) -> anyhow::Result<()> {
         std::os::unix::fs::symlink(&root, &alias)?;
         assert!(Consumer::open(&alias).is_err());
     }
+    Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn rejects_preexisting_public_root_before_creating_lock() -> anyhow::Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+    let scratch = tempfile::tempdir()?;
+    let root = scratch.path().join("public");
+    std::fs::create_dir(&root)?;
+    for mode in [0o777, 0o770, 0o755] {
+        std::fs::set_permissions(&root, std::fs::Permissions::from_mode(mode))?;
+        anyhow::ensure!(
+            Consumer::open(&root).is_err(),
+            "unsafe root mode {mode:o} accepted"
+        );
+        anyhow::ensure!(
+            !root.join(".consumer.lock").exists(),
+            "unsafe root was locked"
+        );
+    }
+    Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn private_path_policy_rejects_a_different_owner() -> anyhow::Result<()> {
+    use std::os::unix::fs::{MetadataExt, PermissionsExt};
+    let scratch = tempfile::tempdir()?;
+    let directory = scratch.path().join("generation");
+    std::fs::create_dir(&directory)?;
+    std::fs::set_permissions(&directory, std::fs::Permissions::from_mode(0o700))?;
+    let pointer = scratch.path().join("CURRENT");
+    std::fs::write(&pointer, b"null")?;
+    std::fs::set_permissions(&pointer, std::fs::Permissions::from_mode(0o600))?;
+    for (path, is_directory) in [(&directory, true), (&pointer, false)] {
+        let owner = std::fs::symlink_metadata(path)?.uid();
+        anyhow::ensure!(check_private(path, is_directory, owner).is_ok());
+        anyhow::ensure!(
+            check_private(path, is_directory, owner.wrapping_add(1)).is_err(),
+            "foreign owner accepted"
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn new_root_syncs_parent_and_propagates_sync_failure() -> anyhow::Result<()> {
+    let scratch = tempfile::tempdir()?;
+    let root = scratch.path().join("new");
+    let calls = std::cell::Cell::new(0);
+    let opened = Consumer::open_with(&root, |parent| {
+        assert_eq!(parent, scratch.path());
+        calls.set(calls.get() + 1);
+        Err(std::io::Error::new(
+            std::io::ErrorKind::PermissionDenied,
+            "injected parent sync failure",
+        ))
+    });
+    anyhow::ensure!(opened.is_err(), "parent sync failure was ignored");
+    assert_eq!(calls.get(), 1);
+    anyhow::ensure!(!root.exists(), "failed new root must be removed for retry");
+    let consumer = Consumer::open_with(&root, |parent| {
+        assert_eq!(parent, scratch.path());
+        calls.set(calls.get() + 1);
+        Ok(())
+    })?;
+    drop(consumer);
+    assert_eq!(calls.get(), 2);
+    drop(Consumer::open_with(&root, |_| {
+        panic!("existing root must not require parent sync")
+    })?);
     Ok(())
 }
