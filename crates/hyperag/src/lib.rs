@@ -1,6 +1,8 @@
 pub mod cli;
 pub mod core;
 pub mod graph;
+#[allow(dead_code)] // Private foundation; the index worker is introduced separately.
+mod lexical_snapshot;
 pub mod hooks;
 pub mod hook_setup;
 pub mod mcp;
