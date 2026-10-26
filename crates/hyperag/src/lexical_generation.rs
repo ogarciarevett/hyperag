@@ -130,7 +130,10 @@ impl Generation {
                 continue;
             }
             anyhow::ensure!(entry.file_type()?.is_file(), "nonregular replay base entry");
-            fs::copy(entry.path(), path.join(name))?;
+            let copied = path.join(name);
+            fs::copy(entry.path(), &copied)?;
+            // A durable CURRENT must not reference unsynced copied segment contents.
+            fs::File::open(copied)?.sync_all()?;
         }
         Self::initialize(Index::open_in_dir(path)?, source)
     }
@@ -235,13 +238,20 @@ impl Generation {
 }
 
 pub(super) fn recover(path: &Path, source: &Checkpoint) -> anyhow::Result<Option<Searcher>> {
+    Ok(recover_complete(path, Some(source))?.map(|(_, searcher)| searcher))
+}
+
+pub(super) fn recover_complete(
+    path: &Path,
+    source: Option<&Checkpoint>,
+) -> anyhow::Result<Option<(Checkpoint, Searcher)>> {
     let index = Index::open_in_dir(path)?;
     // Fence inspection and reader reload must not race another local writer's commit.
     let _owner = index.directory().acquire_lock(&INDEX_WRITER_LOCK)?;
     let Some(manifest) = complete_manifest(&index)? else {
         return Ok(None);
     };
-    if manifest.checkpoint != *source {
+    if source.is_some_and(|source| manifest.checkpoint != *source) {
         return Ok(None);
     }
     let reader: IndexReader = index
@@ -249,7 +259,7 @@ pub(super) fn recover(path: &Path, source: &Checkpoint) -> anyhow::Result<Option
         .reload_policy(ReloadPolicy::Manual)
         .try_into()?;
     reader.reload()?;
-    Ok(Some(reader.searcher()))
+    Ok(Some((manifest.checkpoint, reader.searcher())))
 }
 
 fn private_directory(path: &Path) -> anyhow::Result<()> {
