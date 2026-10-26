@@ -811,3 +811,72 @@ mod tests {
         for n in [0,151] { assert!(rerank_input(&items, Some(n), Some("8")).is_err()); }
     }
 }
+
+#[cfg(test)]
+mod profiling_tests {
+    use super::*;
+    #[test]
+    fn retrieval_profile_is_opt_in_and_durations_have_no_memory_payload() {
+        let defaults: RetrieveOptions = serde_json::from_str(r#"{}"#).unwrap();
+        assert!(!defaults.profile.unwrap_or(false));
+        let opts: RetrieveOptions = serde_json::from_str(r#"{"profile":true}"#).unwrap();
+        assert_eq!(opts.profile, Some(true));
+        let mut response = Retrieval { items: vec![], insufficient_evidence: true, paths_used: vec![], limitations: vec![], embedding_space: None, timings_ms: None };
+        assert!(serde_json::to_value(&response).unwrap().get("timingsMs").is_none());
+        response.timings_ms = Some(StageTimings::default());
+        let value = serde_json::to_value(response).unwrap();
+        let object = value["timingsMs"].as_object().unwrap();
+        assert_eq!(object.len(), 9);
+        assert!(object.values().all(serde_json::Value::is_number));
+    }
+
+    #[tokio::test]
+    async fn profiling_records_each_await_and_preserves_errors() {
+        let started = std::time::Instant::now();
+        let mut timings = Some(StageTimings::default());
+        let value = timed(&mut timings, Stage::Lexical, async {
+            tokio::time::sleep(std::time::Duration::from_millis(3)).await;
+            Ok::<_, Error>(17)
+        }).await.unwrap();
+        assert_eq!(value, 17);
+        let error = timed(&mut timings, Stage::Vector, async {
+            tokio::time::sleep(std::time::Duration::from_millis(3)).await;
+            Err::<(), _>(Error::InvalidInput("synthetic fixture".into()))
+        }).await;
+        assert!(matches!(error, Err(Error::InvalidInput(_))));
+        let t = timings.as_mut().unwrap();
+        t.finish(started);
+        assert!(t.lexical >= 1.0 && t.vector >= 1.0);
+        assert_eq!(t.embedding, 0.0);
+        assert_eq!(t.rerank, 0.0);
+        assert_eq!(t.graph, 0.0);
+        assert!(t.other >= 0.0);
+        assert!((t.total - t.lexical - t.vector - t.other).abs() < 0.000001);
+    }
+
+    #[tokio::test]
+    async fn disabled_profiling_awaits_the_operation_once_without_timings() {
+        let mut timings = None;
+        let calls = std::sync::atomic::AtomicUsize::new(0);
+        let value = timed(&mut timings, Stage::Embedding, async {
+            calls.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            Ok::<_, Error>("fixture")
+        }).await.unwrap();
+        assert_eq!(value, "fixture");
+        assert_eq!(calls.load(std::sync::atomic::Ordering::Relaxed), 1);
+        assert!(timings.is_none());
+    }
+    #[test]
+    fn synchronous_fusion_records_once_and_leaves_other_stages_zero() {
+        let mut timings = Some(StageTimings::default());
+        let calls = std::cell::Cell::new(0);
+        let result = measured(&mut timings, Stage::Fusion, || { calls.set(calls.get()+1); 42 });
+        assert_eq!((result,calls.get()),(42,1));
+        let t=timings.unwrap();
+        assert!(t.fusion>=0.0);
+        assert_eq!(t.payload_load,0.0);
+        assert_eq!(t.graph,0.0);
+        assert_eq!(t.rerank,0.0);
+    }
+
+}
