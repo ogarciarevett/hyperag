@@ -196,6 +196,7 @@ struct RetrieveBounds {
     anchor: Option<String>,
     channels: Option<crate::core::Channels>,
     max_tokens: Option<usize>,
+    profile: Option<bool>,
 }
 
 fn bounded(b: RetrieveBounds) -> Result<RetrieveOptions, ApiError> {
@@ -208,6 +209,7 @@ fn bounded(b: RetrieveBounds) -> Result<RetrieveOptions, ApiError> {
         candidates_per_channel: check(b.candidates_per_channel, "candidatesPerChannel", 150)?,
         rerank_candidates: check(b.rerank_candidates, "rerankCandidates", 150)?,
         max_tokens: check(b.max_tokens, "maxTokens", 32_000)?,
+        profile: b.profile,
         as_of: b.as_of,
         anchor: b.anchor,
         channels: b.channels,
@@ -412,5 +414,21 @@ mod rerank_request_tests {
             let request: QueryBody = serde_json::from_value(serde_json::json!({"query":"synthetic fixture","rerankCandidates":n})).unwrap();
             assert!(bounded(request.options).is_err());
         }
+    }
+}
+
+#[cfg(test)]
+mod profiling_tests {
+    use super::*;
+
+    #[test]
+    fn http_passes_profile_through_bounded_options_and_defaults_off() {
+        let plain: QueryBody = serde_json::from_str(r#"{"query":"synthetic fixture"}"#).unwrap();
+        assert!(!bounded(plain.options).ok().unwrap().profile.unwrap_or(false));
+        let profiled: QueryBody = serde_json::from_str(r#"{"query":"synthetic fixture","profile":true,"limit":5}"#).unwrap();
+        let options = bounded(profiled.options).ok().unwrap();
+        assert_eq!(options.profile, Some(true));
+        assert_eq!(options.limit, Some(5));
+        assert!(serde_json::from_str::<QueryBody>(r#"{"query":"fixture","profile":"yes"}"#).is_err());
     }
 }

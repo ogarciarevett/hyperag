@@ -4,6 +4,7 @@
 
 use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
+use std::time::Instant;
 
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
@@ -40,6 +41,8 @@ pub struct RetrieveOptions {
     /// Turn single channels off to evaluate components one at a time.
     pub channels: Option<Channels>,
     pub max_tokens: Option<usize>,
+    /// Opt-in stage wall times; no payload logging.
+    pub profile: Option<bool>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -89,6 +92,54 @@ pub struct Retrieval {
     pub paths_used: Vec<String>,
     pub limitations: Vec<String>,
     pub embedding_space: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub timings_ms: Option<StageTimings>,
+}
+
+
+/// Wall time in the serial retrieval stages, including dependency/model queue waits.
+#[derive(Clone, Debug, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StageTimings {
+    pub embedding: f64,
+    pub lexical: f64,
+    pub vector: f64,
+    pub graph: f64,
+    pub fusion: f64,
+    pub rerank: f64,
+    pub payload_load: f64,
+    pub other: f64,
+    pub total: f64,
+}
+impl StageTimings {
+    fn finish(&mut self, started: Instant) {
+        self.total = started.elapsed().as_secs_f64() * 1000.0;
+        self.other = (self.total - self.embedding - self.lexical - self.vector - self.graph
+            - self.fusion - self.rerank - self.payload_load).max(0.0);
+    }
+}
+enum Stage { Embedding, Lexical, Vector, Graph, Fusion, Rerank, PayloadLoad }
+fn record(timings: &mut Option<StageTimings>, stage: Stage, started: Option<Instant>) {
+    let (Some(t), Some(started)) = (timings, started) else { return };
+    let slot = match stage {
+        Stage::Embedding => &mut t.embedding, Stage::Lexical => &mut t.lexical,
+        Stage::Vector => &mut t.vector, Stage::Graph => &mut t.graph,
+        Stage::Fusion => &mut t.fusion, Stage::Rerank => &mut t.rerank,
+        Stage::PayloadLoad => &mut t.payload_load,
+    };
+    *slot += started.elapsed().as_secs_f64() * 1000.0;
+}
+async fn timed<T>(timings: &mut Option<StageTimings>, stage: Stage, operation: impl std::future::Future<Output = Result<T>>) -> Result<T> {
+    let started = timings.as_ref().map(|_| Instant::now());
+    let result = operation.await;
+    record(timings, stage, started);
+    result
+}
+fn measured<T>(timings: &mut Option<StageTimings>, stage: Stage, operation: impl FnOnce() -> T) -> T {
+    let started = timings.as_ref().map(|_| Instant::now());
+    let result = operation();
+    record(timings, stage, started);
+    result
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -465,6 +516,8 @@ impl Hyperag {
     }
 
     pub async fn retrieve(&self, principal: &str, query: &str, options: &RetrieveOptions) -> Result<Retrieval> {
+        let mut timings = options.profile.unwrap_or(false).then(StageTimings::default);
+        let started = timings.as_ref().map(|_| Instant::now());
         let readable = self.store.scopes(principal, "read").await?;
         let limit = options.limit.unwrap_or(8);
         let candidates = options.candidates_per_channel.unwrap_or(24) as i64;
@@ -479,13 +532,13 @@ impl Hyperag {
         let models = self.models.read().await;
 
         if on(ch.bm25) {
-            lists.push(("bm25", self.store.bm25(&readable, query, candidates, as_of).await?));
+            lists.push(("bm25", timed(&mut timings, Stage::Lexical, self.store.bm25(&readable, query, candidates, as_of)).await?));
             paths.push("bm25".to_owned());
         }
         if on(ch.vector) {
             match (&models.embedder, &models.space) {
-                (Some(e), Some(space)) => match e.embed_query(query).await {
-                    Ok(q) => match self.store.vector(space, &readable, &q, candidates, as_of).await {
+                (Some(e), Some(space)) => match timed(&mut timings, Stage::Embedding, e.embed_query(query)).await {
+                    Ok(q) => match timed(&mut timings, Stage::Vector, self.store.vector(space, &readable, &q, candidates, as_of)).await {
                         Ok(hits) => {
                             lists.push(("vector", hits));
                             paths.push("vector".to_owned());
@@ -497,11 +550,11 @@ impl Hyperag {
                 _ => limitations.push("no embedder configured: lexical retrieval only".into()),
             }
         }
-        let seeds: Vec<String> = fuse(&refs(&lists), self.rrf_k).into_iter().take(8).map(|h| h.id).collect();
+        let seeds: Vec<String> = measured(&mut timings, Stage::Fusion, || fuse(&refs(&lists), self.rrf_k)).into_iter().take(8).map(|h| h.id).collect();
         let mut via: HashMap<String, Vec<String>> = HashMap::new();
         if on(ch.graph) {
             match &self.graph {
-                Some(g) => match g.expand(&seeds, &readable, 2, candidates).await {
+                Some(g) => match timed(&mut timings, Stage::Graph, g.expand(&seeds, &readable, 2, candidates)).await {
                     Ok(expanded) => {
                         let hits = expanded.iter().map(|e| Hit { id: e.id.clone(), score: e.paths, at: 0.0 }).collect();
                         for e in expanded {
@@ -526,9 +579,9 @@ impl Hyperag {
             let asked = temporal::spans(query, anchor);
             if !asked.is_empty() || temporal::intent(query).is_some() {
                 // shortcut: ranks only the fused candidates, not the whole scope; store spans at ingest if dev shows misses.
-                let order = fuse(&refs(&lists), self.rrf_k);
+                let order = measured(&mut timings, Stage::Fusion, || fuse(&refs(&lists), self.rrf_k));
                 let ids: Vec<String> = order.iter().take(candidates as usize).map(|h| h.id.clone()).collect();
-                let loaded = self.store.load(&ids, &readable, as_of).await?;
+                let loaded = timed(&mut timings, Stage::PayloadLoad, self.store.load(&ids, &readable, as_of)).await?;
                 let keep: HashMap<&str, bool> = loaded
                     .iter()
                     .map(|m| {
@@ -544,12 +597,12 @@ impl Hyperag {
             }
         }
 
-        let fused = fuse(&refs(&lists), self.rrf_k);
+        let fused = measured(&mut timings, Stage::Fusion, || fuse(&refs(&lists), self.rrf_k));
         let rerank = on(ch.rerank) && models.reranker.is_some();
         let pool = if rerank { limit.max(candidates as usize) } else { limit };
         // Graph hits and stale candidates are re-checked against the store with the same filters.
         let ids: Vec<String> = fused.iter().take(pool).map(|h| h.id.clone()).collect();
-        let memories = self.store.load(&ids, &readable, as_of).await?;
+        let memories = timed(&mut timings, Stage::PayloadLoad, self.store.load(&ids, &readable, as_of)).await?;
         let fused_score: HashMap<&str, f64> = fused.iter().map(|h| (h.id.as_str(), h.score)).collect();
         let mut items: Vec<RetrievedItem> = memories
             .into_iter()
@@ -573,7 +626,7 @@ impl Hyperag {
         if let (true, Some(r)) = (rerank && !items.is_empty(), &models.reranker) {
             let cap = std::env::var("HYPERAG_RERANK_CANDIDATES").ok();
             let docs = rerank_input(&items, options.rerank_candidates, cap.as_deref())?;
-            match r.rerank(query, &docs).await {
+            match timed(&mut timings, Stage::Rerank, r.rerank(query, &docs)).await {
                 Ok(scores) => {
                     apply_rerank_scores(&mut items, &scores);
                     reranked = true;
@@ -596,7 +649,8 @@ impl Hyperag {
         if readable.is_empty() {
             limitations.push("principal has no readable scope".into());
         }
-        Ok(Retrieval { items, insufficient_evidence: insufficient, paths_used: paths, limitations, embedding_space: models.space.clone() })
+        if let (Some(t), Some(started)) = (timings.as_mut(), started) { t.finish(started); }
+        Ok(Retrieval { timings_ms: timings, items, insufficient_evidence: insufficient, paths_used: paths, limitations, embedding_space: models.space.clone() })
     }
 
     fn has_evidence(&self, items: &[RetrievedItem], lists: &[(&str, Vec<Hit>)], reranked: bool) -> bool {
@@ -748,7 +802,7 @@ mod tests {
                 valid_from: None, valid_to: None, recorded_at: "t".into(), status: "active".into(), status_reason: None, superseded_by: None, metadata: Default::default() },
             score: 1.0, channels: Default::default(), via: None, rerank_score: None, dates: None,
         };
-        let r = Retrieval { items: vec![m("1", &"x".repeat(400)), m("2", "short")], insufficient_evidence: false, paths_used: vec![], limitations: vec![], embedding_space: None };
+        let r = Retrieval { items: vec![m("1", &"x".repeat(400)), m("2", "short")], insufficient_evidence: false, paths_used: vec![], limitations: vec![], embedding_space: None, timings_ms: None };
         let c = build_context(r, 50);
         assert_eq!(c.citations.len(), 1);
         assert_eq!(c.citations[0].memory_id, "2");
@@ -810,4 +864,73 @@ mod tests {
         assert_eq!(rerank_input(&items, Some(150), Some("1")).unwrap().len(), 24);
         for n in [0,151] { assert!(rerank_input(&items, Some(n), Some("8")).is_err()); }
     }
+}
+
+#[cfg(test)]
+mod profiling_tests {
+    use super::*;
+    #[test]
+    fn retrieval_profile_is_opt_in_and_durations_have_no_memory_payload() {
+        let defaults: RetrieveOptions = serde_json::from_str(r#"{}"#).unwrap();
+        assert!(!defaults.profile.unwrap_or(false));
+        let opts: RetrieveOptions = serde_json::from_str(r#"{"profile":true}"#).unwrap();
+        assert_eq!(opts.profile, Some(true));
+        let mut response = Retrieval { items: vec![], insufficient_evidence: true, paths_used: vec![], limitations: vec![], embedding_space: None, timings_ms: None };
+        assert!(serde_json::to_value(&response).unwrap().get("timingsMs").is_none());
+        response.timings_ms = Some(StageTimings::default());
+        let value = serde_json::to_value(response).unwrap();
+        let object = value["timingsMs"].as_object().unwrap();
+        assert_eq!(object.len(), 9);
+        assert!(object.values().all(serde_json::Value::is_number));
+    }
+
+    #[tokio::test]
+    async fn profiling_records_each_await_and_preserves_errors() {
+        let started = std::time::Instant::now();
+        let mut timings = Some(StageTimings::default());
+        let value = timed(&mut timings, Stage::Lexical, async {
+            tokio::time::sleep(std::time::Duration::from_millis(3)).await;
+            Ok::<_, Error>(17)
+        }).await.unwrap();
+        assert_eq!(value, 17);
+        let error = timed(&mut timings, Stage::Vector, async {
+            tokio::time::sleep(std::time::Duration::from_millis(3)).await;
+            Err::<(), _>(Error::InvalidInput("synthetic fixture".into()))
+        }).await;
+        assert!(matches!(error, Err(Error::InvalidInput(_))));
+        let t = timings.as_mut().unwrap();
+        t.finish(started);
+        assert!(t.lexical >= 1.0 && t.vector >= 1.0);
+        assert_eq!(t.embedding, 0.0);
+        assert_eq!(t.rerank, 0.0);
+        assert_eq!(t.graph, 0.0);
+        assert!(t.other >= 0.0);
+        assert!((t.total - t.lexical - t.vector - t.other).abs() < 0.000001);
+    }
+
+    #[tokio::test]
+    async fn disabled_profiling_awaits_the_operation_once_without_timings() {
+        let mut timings = None;
+        let calls = std::sync::atomic::AtomicUsize::new(0);
+        let value = timed(&mut timings, Stage::Embedding, async {
+            calls.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            Ok::<_, Error>("fixture")
+        }).await.unwrap();
+        assert_eq!(value, "fixture");
+        assert_eq!(calls.load(std::sync::atomic::Ordering::Relaxed), 1);
+        assert!(timings.is_none());
+    }
+    #[test]
+    fn synchronous_fusion_records_once_and_leaves_other_stages_zero() {
+        let mut timings = Some(StageTimings::default());
+        let calls = std::cell::Cell::new(0);
+        let result = measured(&mut timings, Stage::Fusion, || { calls.set(calls.get()+1); 42 });
+        assert_eq!((result,calls.get()),(42,1));
+        let t=timings.unwrap();
+        assert!(t.fusion>=0.0);
+        assert_eq!(t.payload_load,0.0);
+        assert_eq!(t.graph,0.0);
+        assert_eq!(t.rerank,0.0);
+    }
+
 }
