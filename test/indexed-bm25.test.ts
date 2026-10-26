@@ -89,6 +89,8 @@ test("metadata/postings backfill is idempotent, bounded and matches every curren
 test("write-maintained statistics preserve equality after mutation and reset fallback",async()=>{
  await pool.query("update memory_versions set text='quartz quartz nebula nebula' where memory_id='both'; update memories set scope='hidden' where id='rare'");
  await compare(["allowed"],null,"ordinary quartz");await compare(["allowed","hidden"],"2035-01-01","quartz nebula");
+ await pool.query("insert into memory_versions(memory_id,version,text,source,author,content_hash) values('both',2,'quartz fresh comet','fixture','fixture','new-head'); update memories set current_version=2 where id='both'");
+ await compare(["allowed","hidden"],null,"quartz nebula");await postingsOracle();
  await pool.query("update memory_versions set status='invalidated' where memory_id='both'; update memories set deleted_at=now() where id='future'");
  await compare(["allowed"],null,"quartz nebula");
  await postingsOracle();
