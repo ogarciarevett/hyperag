@@ -68,7 +68,8 @@ select p.memory_id as id, p.at,
 }
 
 // Readiness and both branches share one MVCC snapshot; unready caches never affect results.
-// OFFSET 0 keeps metadata probes driven by scoped postings instead of a whole-document scan.
+// Lateral bounds preserve term/scope index reads; ordered numeric keys match the covered index.
+// OFFSET 0 also keeps metadata probes driven by scoped postings instead of a whole-document scan.
 const INDEXED_BM25_SQL: &str = r#"with ready as materialized (
   select coalesce((select value='true' from settings where key='lexical_cache_ready'),false)
      and coalesce((select value='true' from settings where key='lexical_postings_ready'),false) as ok
@@ -90,7 +91,11 @@ df as (
 postings as (
   select d.memory_id,d.version,extract(epoch from d.recorded_at)::float8 as at,
          d.doc_len::float8 as dl,p.lexeme,p.tf::float8 as tf
-    from terms t join lexical_postings p using(lexeme)
+    from terms t cross join lateral (
+      select posting_id,lexeme,scope,tf from lexical_postings p
+       where p.lexeme=t.lexeme and p.scope=any($1::text[])
+       order by p.scope,p.posting_id offset 0
+    ) p
     cross join lateral (
       select memory_id,version,recorded_at,doc_len from lexical_documents d
        where d.posting_id=p.posting_id and d.scope=p.scope and d.scope=any($1::text[])
