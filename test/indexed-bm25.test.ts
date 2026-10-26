@@ -1,5 +1,5 @@
 import { afterAll,beforeAll,expect,test } from "bun:test";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { Pool } from "pg";
 import { freshDatabase } from "./helpers";
 
@@ -34,6 +34,10 @@ beforeAll(async()=>{
   update memory_versions set valid_from='2030-01-01',valid_to='2040-01-01' where memory_id='future';
   analyze memories; analyze memory_versions`);
  await pool.query(readFileSync(new URL("../crates/hyperag/migrations/0004_lexical_cache.sql",import.meta.url),"utf8"));
+ // Upgrade a populated legacy cache, not just an empty database.
+ for(let i=0;i<100;i++){if(Number((await pool.query("select lexical_cache_backfill(256)n")).rows[0].n)===0)break;}
+ const migration=new URL("../crates/hyperag/migrations/0005_lexical_postings.sql",import.meta.url);
+ if(existsSync(migration))await pool.query(readFileSync(migration,"utf8"));
 },60000);
 afterAll(async()=>{closing=true;await pool.end();await db.drop();});
 const compare=async(scopes:string[],at:string|null,q:string)=>{
@@ -46,33 +50,53 @@ test("unready falls back, then exact legacy scores/order across scopes, dates an
  await compare(["allowed"],null,"ordinary quartz");
  for(let i=0;i<100;i++){if(Number((await pool.query("select lexical_cache_backfill(256)n")).rows[0].n)===0)break;}
  expect((await pool.query("select value from settings where key='lexical_cache_ready'")).rows[0].value).toBe("true");
+ if((await pool.query("select to_regprocedure('lexical_postings_backfill(integer)') as fn")).rows[0].fn){
+  await pool.query("select lexical_postings_backfill(1)");await compare(["allowed"],null,"ordinary quartz");
+  for(let i=0;i<100;i++){if(Number((await pool.query("select lexical_postings_backfill(256)n")).rows[0].n)===0)break;}
+ }
  for(const scopes of [["allowed"],["hidden"],["allowed","hidden"],[]])
   for(const at of [null,"2026-01-01","2035-01-01","2040-01-01"])
    for(const q of ["ordinary quartz","ordinary quartz nebula","quartz nebula","'quartz' | nebula","no-synthetic-match"])
     await compare(scopes,at,q);
  const rare=await compare(["allowed"],null,"ordinary quartz");expect(rare.some(r=>r.id==='rare')).toBe(true);
 },60000);
-test("ready selective search executes GIN and no document-lexeme expansion",async()=>{
+test("ready search reads indexed postings with no source-table or whole-document scan",async()=>{
  await pool.query("vacuum (analyze) memory_versions");
  const nodes:any[]=[];const walk=(n:any)=>{nodes.push(n);for(const p of n.Plans??[])walk(p);};
  const plan=(await pool.query(`explain(analyze,buffers,format json) ${indexed}`,[["allowed"],null,"ultrararefixturetoken",24])).rows[0]["QUERY PLAN"][0];walk(plan.Plan);
- expect(nodes.some(n=>n["Node Type"]==='Bitmap Index Scan'&&n["Index Name"]==='memory_versions_text_search_idx'&&n["Actual Loops"]>0)).toBe(true);
- expect(nodes.filter(n=>n["Node Type"]==='Seq Scan'&&n["Relation Name"]==='memory_versions').every(n=>n["Actual Loops"]===0)).toBe(true);
+ expect(nodes.some(n=>n["Index Name"]==='lexical_postings_pkey'&&n["Actual Loops"]>0)).toBe(true);
+ expect(nodes.filter(n=>['memory_versions','memories'].includes(n["Relation Name"])).every(n=>n["Actual Loops"]===0)).toBe(true);
  const broad=(await pool.query(`explain(analyze,buffers,format json) ${indexed}`,[["allowed"],null,"ordinary quartz",24])).rows[0]["QUERY PLAN"][0];nodes.length=0;walk(broad.Plan);
  expect(nodes.filter(n=>n["Node Type"]==='Function Scan').every(n=>n["Actual Loops"]<=1)).toBe(true);
  expect(nodes.some(n=>n["Node Type"]==='Function Scan'&&n["Actual Loops"]===1)).toBe(true);
+ expect(nodes.filter(n=>['memory_versions','memories'].includes(n["Relation Name"])||(n["Relation Name"]==='lexical_documents'&&n["Node Type"]==='Seq Scan')).every(n=>n["Actual Loops"]===0)).toBe(true);
  console.info('indexed-bm25-fixture',JSON.stringify({selectiveMs:plan["Execution Time"],broadMs:broad["Execution Time"]}));
 });
+test("metadata/postings backfill is idempotent, bounded and matches every current source lexeme",async()=>{
+ await pool.query("select lexical_cache_backfill(64)");
+ await pool.query("select lexical_postings_backfill(64)");
+ expect((await pool.query("select value from settings where key='lexical_postings_ready'")).rows[0].value).toBe("true");
+ await postingsOracle();
+ for(const n of [null,0,257])await expect(pool.query("select lexical_postings_backfill($1)",[n])).rejects.toThrow();
+});
+
 test("write-maintained statistics preserve equality after mutation and reset fallback",async()=>{
  await pool.query("update memory_versions set text='quartz quartz nebula nebula' where memory_id='both'; update memories set scope='hidden' where id='rare'");
  await compare(["allowed"],null,"ordinary quartz");await compare(["allowed","hidden"],"2035-01-01","quartz nebula");
  await pool.query("update memory_versions set status='invalidated' where memory_id='both'; update memories set deleted_at=now() where id='future'");
  await compare(["allowed"],null,"quartz nebula");
+ await postingsOracle();
  // Prove reset/missing-marker fallback with positive source hits and deliberately empty caches.
- await pool.query("begin; select pg_advisory_xact_lock(1213811052,1); update settings set value='reset' where key='lexical_cache_ready'; truncate lexical_documents,lexical_corpus_stats,lexical_term_stats; commit");
+ await pool.query("begin; select pg_advisory_xact_lock(1213811052,1); update settings set value='reset' where key='lexical_cache_ready'; truncate lexical_documents,lexical_corpus_stats,lexical_term_stats cascade; commit");
  expect((await compare(["allowed","hidden"],null,"quartz nebula")).length).toBeGreaterThan(0);
  await pool.query("delete from settings where key='lexical_cache_ready'");
  await compare(["allowed","hidden"],null,"quartz nebula");
  await pool.query("insert into settings(key,value) values('lexical_cache_ready','reset')");
  await pool.query("begin; select pg_advisory_xact_lock(1213811052,1); truncate memory_versions; commit");await compare(["allowed"],null,"quartz");
 });
+
+async function postingsOracle(){
+ const actual=(await pool.query("select d.memory_id,d.version,d.current_version,d.status,d.scope,d.recorded_at,p.lexeme,p.tf from lexical_documents d join lexical_postings p using(posting_id) order by d.memory_id,p.lexeme")).rows;
+ const expected=(await pool.query("select m.id as memory_id,v.version,m.current_version,v.status,m.scope,v.recorded_at,u.lexeme,coalesce(array_length(u.positions,1),1) as tf from memories m join memory_versions v on v.memory_id=m.id and v.version=m.current_version cross join lateral unnest(v.text_search)u where m.deleted_at is null and v.status='active' order by m.id,u.lexeme")).rows;
+ expect(actual).toEqual(expected);
+}
