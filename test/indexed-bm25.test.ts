@@ -5,9 +5,8 @@ import { freshDatabase } from "./helpers";
 
 const code=readFileSync(new URL("../crates/hyperag/src/store.rs",import.meta.url),"utf8");
 const rankable=code.match(/const RANKABLE: &str = "([\s\S]*?)";/)![1]!;
-const score=code.match(/fn bm25_sum\(\) -> String \{\s*format!\(r#"([\s\S]*?)"#/)![1]!;
-const expand=(s:string)=>s.replaceAll("{score}",score).replaceAll("{RANKABLE}",rankable).replaceAll("{BM25_K1}","1.2").replaceAll("{BM25_B}","0.75");
-const legacy=expand(code.match(/fn bm25_sql\(\) -> String \{\s*let score = bm25_sum\(\);\s*format!\(\s*"([\s\S]*?)"\s*\)/)![1]!);
+const expand=(s:string)=>s.replaceAll("{RANKABLE}",rankable).replaceAll("{BM25_K1}","1.2").replaceAll("{BM25_B}","0.75");
+const legacy=expand(code.match(/fn bm25_sql\(\) -> String \{\s*format!\(\s*"([\s\S]*?)"\s*\)/)![1]!);
 const template=code.match(/const INDEXED_BM25_SQL: &str = r#"([\s\S]*?)"#;/)?.[1];
 // Missing implementation uses unchanged legacy SQL to establish the index-use RED.
 const indexed=template ? expand(template.replace("{legacy}",legacy)) : legacy;

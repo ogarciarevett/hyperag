@@ -7,6 +7,16 @@ use crate::{
 use sqlx::postgres::{PgConnectOptions, PgPoolOptions};
 use std::str::FromStr;
 
+#[test]
+fn default_bm25_sql_keeps_original_query_bytes() {
+    use sha2::{Digest, Sha256};
+    // Freeze the default query from c4384c8, including its unordered floating-point SUM.
+    assert_eq!(
+        hex::encode(Sha256::digest(crate::store::bm25_sql().as_bytes())),
+        "d4d3c3c98fd9886fe0667ae66c2225cf52cdbb2757ab98e5019b4ec2f1c5aba8"
+    );
+}
+
 #[tokio::test]
 async fn authorized_snapshot_keeps_fences_payloads_and_whole_fallback() -> anyhow::Result<()> {
     isolated(
@@ -17,9 +27,9 @@ async fn authorized_snapshot_keeps_fences_payloads_and_whole_fallback() -> anyho
 }
 
 #[tokio::test]
-async fn current_reader_equals_sql_ids_order_and_score_bits() -> anyhow::Result<()> {
+async fn current_reader_equals_sql_ids_order_and_reports_score_gap() -> anyhow::Result<()> {
     isolated(
-        "lexical_read::tests::current_reader_equals_sql_ids_order_and_score_bits",
+        "lexical_read::tests::current_reader_equals_sql_ids_order_and_reports_score_gap",
         sql_parity,
     )
     .await
@@ -90,25 +100,39 @@ async fn sql_parity(store: Store) -> anyhow::Result<()> {
         ('A','allowed','fact','fixture',1),('B','allowed','fact','fixture',1),
         ('tie-a','allowed','fact','fixture',1),('tie-A','allowed','fact','fixture',1),
         ('tie_é','allowed','fact','fixture',1),('newer','allowed','fact','fixture',1),
+        ('tie_e','allowed','fact','fixture',1),('starts','allowed','fact','fixture',1),
+        ('tf-17','allowed','fact','fixture',1),('tf-18','allowed','fact','fixture',1),
         ('empty','allowed','fact','fixture',1),('hidden','denied','fact','fixture',1);
         insert into memory_versions(memory_id,version,text,source,author,content_hash,recorded_at)
         select id,1,case id when 'A' then 'alpha beta beta beta'
             when 'B' then 'alpha beta gamma' when 'empty' then '!!!'
+            when 'tf-17' then 'alpha ' || repeat('beta ',17)
+            when 'tf-18' then 'alpha ' || repeat('beta ',18)
             when 'hidden' then 'alpha alpha alpha' else 'alpha beta beta beta' end,
             'fixture','fixture','hash',case when id='newer' then '2025-01-02'::timestamptz
             else '2025-01-01'::timestamptz end from memories;
-        update memory_versions set valid_to='2025-01-02' where memory_id='B'",
+        update memory_versions set valid_to='2025-01-02' where memory_id='B';
+        update memory_versions set valid_from='2025-01-02',valid_to='2025-01-03'
+            where memory_id='starts'",
     )
     .await?;
     store.grant("reader", "allowed", "read", "fixture").await?;
     let scratch = tempfile::tempdir()?;
     let mut consumer = Consumer::open(&scratch.path().join("index"))?;
     consumer.update(&store.pool).await?;
-    for at in [None, crate::store::parse_time("2025-01-02T00:00:00Z")] {
+    let (mut max_absolute, mut max_relative, mut max_ulp) = (0.0_f64, 0.0_f64, 0_u64);
+    let mut comparisons = 0;
+    for at in [
+        None,
+        crate::store::parse_time("2025-01-01T00:00:00Z"),
+        crate::store::parse_time("2025-01-02T00:00:00Z"),
+        crate::store::parse_time("2025-01-03T00:00:00Z"),
+    ] {
         for query in [
             "alpha",
             "beta",
             "gamma beta ALPHA! alpha",
+            "alpha beta gamma",
             "beta alpha",
             "missing",
             "!!!",
@@ -120,17 +144,33 @@ async fn sql_parity(store: Store) -> anyhow::Result<()> {
                 let expected = store.bm25(&["allowed".into()], query, limit, at).await?;
                 let signature = |hits: &[Hit]| {
                     hits.iter()
-                        .map(|h| (h.id.clone(), h.score.to_bits(), h.at.to_bits()))
+                        .map(|h| (h.id.clone(), h.at.to_bits()))
                         .collect::<Vec<_>>()
                 };
                 anyhow::ensure!(
                     signature(&actual) == signature(&expected),
                     "current reader differs: query={query},limit={limit},at={at:?}\nactual={actual:?}\nSQL={expected:?}"
                 );
+                for (actual, expected) in actual.iter().zip(&expected) {
+                    let absolute = (actual.score - expected.score).abs();
+                    let relative = absolute / expected.score.abs().max(f64::MIN_POSITIVE);
+                    anyhow::ensure!(
+                        actual.score.is_finite() && expected.score > 0.0 && relative <= 1e-12,
+                        "BM25 score differs for {}: native={},SQL={}",
+                        actual.id, actual.score, expected.score
+                    );
+                    max_absolute = max_absolute.max(absolute);
+                    max_relative = max_relative.max(relative);
+                    max_ulp = max_ulp.max(actual.score.to_bits().abs_diff(expected.score.to_bits()));
+                }
+                comparisons += 1;
                 read.close().await?;
             }
         }
     }
+    println!(
+        "native-sql-parity comparisons={comparisons} max_absolute={max_absolute:e} max_relative={max_relative:e} max_ulp={max_ulp}"
+    );
     Ok(())
 }
 

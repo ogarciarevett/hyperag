@@ -6,9 +6,8 @@ import { freshDatabase } from "./helpers";
 // Execute the shipped Rust SQL, with its real parameter types and default planner settings.
 const source = readFileSync(new URL("../crates/hyperag/src/store.rs", import.meta.url), "utf8");
 const rankable = source.match(/const RANKABLE: &str = "([\s\S]*?)";/)![1]!;
-const score = source.match(/fn bm25_sum\(\) -> String \{\s*format!\(r#"([\s\S]*?)"#/)![1]!;
-const templateFor = (name: string) => source.match(new RegExp(String.raw`fn ${name}\(\) -> String \{\s*(?:let score = bm25_sum\(\);\s*)?format!\(\s*"([\s\S]*?)"\s*\)`))?.[1];
-const expand = (template: string) => template.replaceAll("{score}", score).replaceAll("{RANKABLE}", rankable).replaceAll("{BM25_K1}", "1.2").replaceAll("{BM25_B}", "0.75").replaceAll("{{}}", "{}");
+const templateFor = (name: string) => source.match(new RegExp(String.raw`fn ${name}\(\) -> String \{\s*format!\(\s*"([\s\S]*?)"\s*\)`))?.[1];
+const expand = (template: string) => template.replaceAll("{RANKABLE}", rankable).replaceAll("{BM25_K1}", "1.2").replaceAll("{BM25_B}", "0.75").replaceAll("{{}}", "{}");
 // The review head had the fast query in bm25_sql; after the fix each path has its own SQL.
 const sql = expand(templateFor("fast_lexical_sql") ?? templateFor("bm25_sql")!);
 const legacySql = expand(templateFor("bm25_sql")!);
