@@ -3,6 +3,18 @@ use hyperag::store::{CreateInput, Store, VersionInput};
 use sqlx::{postgres::{PgConnectOptions, PgPoolOptions}, Executor, PgPool};
 use std::{str::FromStr, time::Duration};
 
+fn database_name() -> String {
+    let mut nonce = [0u8; 16];
+    getrandom::fill(&mut nonce).expect("fixture database name entropy");
+    format!("lexical_lock_{}", hex::encode(nonce))
+}
+
+#[test]
+fn rapid_fixture_database_names_are_unique() {
+    let names: std::collections::HashSet<_> = (0..10000).map(|_| database_name()).collect();
+    assert_eq!(names.len(), 10000);
+}
+
 fn input(text: &str) -> VersionInput {
     VersionInput { text: text.into(), source: "fixture".into(), valid_from: None, valid_to: None, metadata: None }
 }
@@ -20,7 +32,7 @@ async fn schedule(correction: bool) {
     let url = std::env::var("HYPERAG_PG_URL").unwrap_or_else(|_| "postgres://hyperag:fake-test-only@127.0.0.1:55432/hyperag".into());
     let options = PgConnectOptions::from_str(&url).unwrap();
     let admin = PgPoolOptions::new().max_connections(1).connect_with(options.clone()).await.unwrap();
-    let name = format!("lexical_lock_{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos());
+    let name = database_name();
     sqlx::raw_sql(sqlx::AssertSqlSafe(format!("create database {name}"))).execute(&admin).await.unwrap();
     let pool = PgPoolOptions::new().max_connections(6).connect_with(options.database(&name)).await.unwrap();
     let store = Store::new(pool.clone());
