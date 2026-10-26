@@ -359,6 +359,45 @@ fn private_path_policy_rejects_a_different_owner() -> anyhow::Result<()> {
             "foreign owner accepted"
         );
     }
+    let owner = std::fs::metadata(&directory)?.uid();
+    anyhow::ensure!(check_ancestors(&directory.canonicalize()?, owner).is_ok());
+    if owner != 0 {
+        anyhow::ensure!(
+            check_ancestors(&directory.canonicalize()?, owner.wrapping_add(1)).is_err()
+        );
+    }
+    Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn opened_file_policy_and_resolved_root_survive_path_replacement() -> anyhow::Result<()> {
+    use std::os::unix::fs::{PermissionsExt, symlink};
+    let scratch = tempfile::tempdir()?;
+    let pointer = scratch.path().join("CURRENT");
+    std::fs::write(&pointer, b"null")?;
+    std::fs::set_permissions(&pointer, std::fs::Permissions::from_mode(0o666))?;
+    let opened = std::fs::File::open(&pointer)?;
+    std::fs::rename(&pointer, scratch.path().join("old"))?;
+    std::fs::write(&pointer, b"null")?;
+    std::fs::set_permissions(&pointer, std::fs::Permissions::from_mode(0o600))?;
+    check_private(&pointer, false, current_owner())?;
+    anyhow::ensure!(
+        check_private_metadata(&opened.metadata()?, &pointer, false, current_owner()).is_err(),
+        "path metadata must not substitute for opened file metadata"
+    );
+    let alias = scratch.path().join("alias");
+    symlink(scratch.path(), &alias)?;
+    let consumer = Consumer::open(&alias.join("index"))?;
+    std::fs::remove_file(&alias)?;
+    symlink(scratch.path().join("elsewhere"), &alias)?;
+    assert_eq!(consumer.root, scratch.path().canonicalize()?.join("index"));
+    anyhow::ensure!(
+        Consumer::open(&consumer.root).is_err(),
+        "ownership lock lost"
+    );
+    drop(consumer);
+    drop(Consumer::open(&scratch.path().join("index"))?);
     Ok(())
 }
 
@@ -368,7 +407,7 @@ fn new_root_syncs_parent_and_propagates_sync_failure() -> anyhow::Result<()> {
     let root = scratch.path().join("new");
     let calls = std::cell::Cell::new(0);
     let opened = Consumer::open_with(&root, |parent| {
-        assert_eq!(parent, scratch.path());
+        assert_eq!(parent, scratch.path().canonicalize().unwrap());
         calls.set(calls.get() + 1);
         Err(std::io::Error::new(
             std::io::ErrorKind::PermissionDenied,
@@ -379,7 +418,7 @@ fn new_root_syncs_parent_and_propagates_sync_failure() -> anyhow::Result<()> {
     assert_eq!(calls.get(), 1);
     anyhow::ensure!(!root.exists(), "failed new root must be removed for retry");
     let consumer = Consumer::open_with(&root, |parent| {
-        assert_eq!(parent, scratch.path());
+        assert_eq!(parent, scratch.path().canonicalize().unwrap());
         calls.set(calls.get() + 1);
         Ok(())
     })?;

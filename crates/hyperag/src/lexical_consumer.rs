@@ -4,13 +4,11 @@ use crate::lexical_snapshot::{Checkpoint, SourceSnapshot};
 use sqlx::PgPool;
 use std::{
     fs,
+    io::Read,
     path::{Path, PathBuf},
     sync::{Arc, RwLock},
 };
-use tantivy::{
-    Searcher,
-    directory::{Directory, DirectoryLock, Lock, MmapDirectory},
-};
+use tantivy::Searcher;
 
 #[derive(Clone)]
 struct Active {
@@ -33,7 +31,7 @@ impl ReaderHandle {
 pub(super) struct Consumer {
     root: PathBuf,
     reader: ReaderHandle,
-    _owner: DirectoryLock,
+    _owner: fs::File,
 }
 
 struct Prepared {
@@ -70,7 +68,15 @@ fn current_owner() -> u32 {
 }
 
 fn check_private(path: &Path, directory: bool, _owner: u32) -> anyhow::Result<()> {
-    let metadata = fs::symlink_metadata(path)?;
+    check_private_metadata(&fs::symlink_metadata(path)?, path, directory, _owner)
+}
+
+fn check_private_metadata(
+    metadata: &fs::Metadata,
+    path: &Path,
+    directory: bool,
+    _owner: u32,
+) -> anyhow::Result<()> {
     anyhow::ensure!(
         if directory {
             metadata.is_dir()
@@ -93,6 +99,25 @@ fn check_private(path: &Path, directory: bool, _owner: u32) -> anyhow::Result<()
     Ok(())
 }
 
+fn check_ancestors(parent: &Path, _owner: u32) -> anyhow::Result<()> {
+    // Validate top-down so a trusted parent protects each subsequent pathname.
+    for path in parent.ancestors().collect::<Vec<_>>().into_iter().rev() {
+        let metadata = fs::symlink_metadata(path)?;
+        anyhow::ensure!(metadata.is_dir(), "unsafe consumer ancestor type");
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::MetadataExt;
+            anyhow::ensure!(
+                (metadata.uid() == 0 || metadata.uid() == _owner)
+                    && (metadata.mode() & 0o022 == 0 || metadata.mode() & 0o1000 != 0),
+                "unsafe consumer ancestor owner/mode: {}",
+                path.display()
+            );
+        }
+    }
+    Ok(())
+}
+
 fn current(root: &Path, owner: u32) -> anyhow::Result<Option<Active>> {
     let pointer = root.join("CURRENT");
     if let Err(error) = fs::symlink_metadata(&pointer) {
@@ -102,7 +127,11 @@ fn current(root: &Path, owner: u32) -> anyhow::Result<Option<Active>> {
         return Err(error.into());
     }
     check_private(&pointer, false, owner)?;
-    let Ok(name) = serde_json::from_slice::<String>(&fs::read(&pointer)?) else {
+    let mut file = fs::File::open(&pointer)?;
+    check_private_metadata(&file.metadata()?, &pointer, false, owner)?;
+    let mut bytes = Vec::new();
+    file.read_to_end(&mut bytes)?;
+    let Ok(name) = serde_json::from_slice::<String>(&bytes) else {
         return Ok(None);
     };
     if !valid_name(&name) {
@@ -148,26 +177,33 @@ impl Consumer {
         root: &Path,
         sync_parent: impl FnOnce(&Path) -> std::io::Result<()>,
     ) -> anyhow::Result<Self> {
+        let uid = current_owner();
+        let parent = root
+            .parent()
+            .filter(|path| !path.as_os_str().is_empty())
+            .unwrap_or(Path::new("."))
+            .canonicalize()?;
+        check_ancestors(&parent, uid)?;
+        // Retain the resolved path: later operations must not follow a retargeted alias.
+        let root = parent.join(
+            root.file_name()
+                .ok_or_else(|| anyhow::anyhow!("consumer root must have a basename"))?,
+        );
         let mut directory = fs::DirBuilder::new();
         #[cfg(unix)]
         {
             use std::os::unix::fs::DirBuilderExt;
             directory.mode(0o700);
         }
-        let created = match directory.create(root) {
+        let created = match directory.create(&root) {
             Ok(()) => true,
             Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => false,
             Err(error) => return Err(error.into()),
         };
-        let uid = current_owner();
-        check_private(root, true, uid)?;
+        check_private(&root, true, uid)?;
         if created {
-            let parent = root
-                .parent()
-                .filter(|path| !path.as_os_str().is_empty())
-                .unwrap_or(Path::new("."));
-            if let Err(error) = sync_parent(parent) {
-                fs::remove_dir(root)?; // Retry must create and sync the new root again.
+            if let Err(error) = sync_parent(&parent) {
+                fs::remove_dir(&root)?; // Retry must create and sync the new root again.
                 return Err(error.into());
             }
         }
@@ -185,14 +221,13 @@ impl Consumer {
             Err(error) => return Err(error.into()),
         }
         check_private(&lock, false, uid)?;
-        let owner = MmapDirectory::open(root)?.acquire_lock(&Lock {
-            filepath: ".consumer.lock".into(),
-            is_blocking: false,
-        })?;
+        let owner = fs::OpenOptions::new().write(true).open(&lock)?;
+        check_private_metadata(&owner.metadata()?, &lock, false, uid)?;
+        owner.try_lock()?;
         // Missing/malformed/incompatible state rebuilds; unsafe ownership or modes refuse open.
-        let reader = ReaderHandle(Arc::new(RwLock::new(current(root, uid)?)));
+        let reader = ReaderHandle(Arc::new(RwLock::new(current(&root, uid)?)));
         Ok(Self {
-            root: root.into(),
+            root,
             reader,
             _owner: owner,
         })
