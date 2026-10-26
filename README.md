@@ -1,4 +1,8 @@
-# Hyperag
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/brand/logo/lockup-color-dark.svg">
+  <source media="(prefers-color-scheme: light)" srcset="assets/brand/logo/lockup-color.svg">
+  <img alt="Hyperag" src="assets/brand/logo/lockup-color.svg" width="420">
+</picture>
 
 Shared memory and retrieval for agents, with permissions, version history and cited context.
 
