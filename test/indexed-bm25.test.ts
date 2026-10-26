@@ -22,12 +22,12 @@ beforeAll(async()=>{
   insert into memories(id,scope,kind,created_by,current_version)
    select 'repeated-'||n,'allowed','fact','fixture',1 from generate_series(1,24)n;
   insert into memories(id,scope,kind,created_by,current_version) values
-   ('rare','allowed','fact','fixture',1),('both','allowed','fact','fixture',1),
+   ('all-terms','allowed','fact','fixture',1),('rare','allowed','fact','fixture',1),('both','allowed','fact','fixture',1),
    ('selective','allowed','fact','fixture',1),('punct','allowed','fact','fixture',1),
    ('future','allowed','fact','fixture',1),('hidden','hidden','fact','fixture',1),('stale','allowed','fact','fixture',2);
   insert into memory_versions(memory_id,version,text,source,author,content_hash)
    select id,current_version,case when id like 'repeated-%' then repeat('ordinary ',20)
-     when id='rare' then 'quartz' when id='both' then 'quartz nebula quartz' when id='selective' then 'ultrararefixturetoken'
+     when id='all-terms' then 'ordinary ordinary quartz quartz quartz nebula' when id='rare' then 'quartz' when id='both' then 'quartz nebula quartz' when id='selective' then 'ultrararefixturetoken'
      when id='punct' then '!!!' when id='future' then 'quartz nebula' when id='hidden' then repeat('quartz ',100) else 'neutral current' end,
      'fixture','fixture',id from memories where id not like 'background-%';
   insert into memory_versions(memory_id,version,text,source,author,content_hash)values('stale',1,repeat('quartz ',100),'fixture','fixture','old');
@@ -48,7 +48,7 @@ test("unready falls back, then exact legacy scores/order across scopes, dates an
  expect((await pool.query("select value from settings where key='lexical_cache_ready'")).rows[0].value).toBe("true");
  for(const scopes of [["allowed"],["hidden"],["allowed","hidden"],[]])
   for(const at of [null,"2026-01-01","2035-01-01","2040-01-01"])
-   for(const q of ["ordinary quartz","quartz nebula","'quartz' | nebula","no-synthetic-match"])
+   for(const q of ["ordinary quartz","ordinary quartz nebula","quartz nebula","'quartz' | nebula","no-synthetic-match"])
     await compare(scopes,at,q);
  const rare=await compare(["allowed"],null,"ordinary quartz");expect(rare.some(r=>r.id==='rare')).toBe(true);
 },60000);

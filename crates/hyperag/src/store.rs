@@ -66,6 +66,56 @@ select p.memory_id as id, p.at,
     )
 }
 
+// Readiness and both branches share one MVCC snapshot; unready caches never affect results.
+const INDEXED_BM25_SQL: &str = r#"with ready as materialized (
+  select coalesce((select value='true' from settings where key='lexical_cache_ready'),false) as ok
+),
+query as (select replace(plainto_tsquery('simple', $3)::text, ' & ', ' | ')::tsquery as q),
+terms as materialized (select distinct lexeme from unnest(to_tsvector('simple', $3))),
+stats as (
+  select coalesce(sum(n),0)::float8 as n,
+         coalesce(sum(total_len)::numeric / nullif(sum(n),0),0)::float8 as avgdl
+    from lexical_corpus_stats
+   where (select ok from ready) and scope=any($1::text[])
+     and ($2::timestamptz is null or (valid_from <= $2 and valid_to > $2))
+),
+df as (
+  select s.lexeme,sum(s.df)::float8 as df from lexical_term_stats s join terms t using(lexeme)
+   where (select ok from ready) and s.scope=any($1::text[])
+     and ($2::timestamptz is null or (s.valid_from <= $2 and s.valid_to > $2))
+   group by s.lexeme
+),
+postings as (
+  select v.memory_id,v.version,extract(epoch from v.recorded_at)::float8 as at,
+         d.doc_len::float8 as dl,t.lexeme,(d.tf->>t.lexeme)::float8 as tf
+    from memory_versions v join memories m on m.id=v.memory_id
+    join lexical_documents d on d.memory_id=v.memory_id and d.version=v.version
+    cross join query join terms t on d.tf ? t.lexeme
+   where (select ok from ready) and {RANKABLE} and v.text_search @@ query.q
+),
+indexed_result as (
+  select p.memory_id as id,p.at,
+         sum(ln(1 + (st.n - df.df + 0.5) / (df.df + 0.5)) * (p.tf * ({BM25_K1} + 1))
+             / (p.tf + {BM25_K1} * (1 - {BM25_B} + {BM25_B} * p.dl / greatest(st.avgdl, 1)))
+             order by p.lexeme collate "C") as score
+    from postings p join df using(lexeme) cross join stats st
+   group by p.memory_id,p.version,p.at
+   order by score desc,p.at desc,p.memory_id limit $4
+),
+legacy_result as (
+  select l.* from ({legacy}) l where not (select ok from ready)
+)
+select id,at,score from indexed_result
+union all select id,at,score from legacy_result
+order by score desc,at desc,id limit $4"#;
+
+fn indexed_bm25_sql() -> String {
+    INDEXED_BM25_SQL.replace("{legacy}", &bm25_sql())
+        .replace("{RANKABLE}", RANKABLE)
+        .replace("{BM25_K1}", &BM25_K1.to_string())
+        .replace("{BM25_B}", &BM25_B.to_string())
+}
+
 /// Per-term indexed candidates preserve rare-term coverage before the final budget. Only the query
 /// vector is unpacked; document vectors are scored in PostgreSQL without expanding their lexemes.
 fn fast_lexical_sql() -> String {
@@ -106,14 +156,15 @@ select id, at, score from candidates
 }
 
 #[derive(Debug, PartialEq)]
-enum LexicalScorer { Bm25, Fast }
+enum LexicalScorer { Bm25, Fast, IndexedBm25 }
 
 impl LexicalScorer {
     fn parse(value: Option<&str>) -> Result<Self> {
         match value {
             None | Some("bm25") => Ok(Self::Bm25),
             Some("fast") => Ok(Self::Fast),
-            _ => Err(Error::InvalidInput("HYPERAG_LEXICAL_SCORER must be bm25 or fast".into())),
+            Some("indexed-bm25") => Ok(Self::IndexedBm25),
+            _ => Err(Error::InvalidInput("HYPERAG_LEXICAL_SCORER must be bm25, fast or indexed-bm25".into())),
         }
     }
     fn selected() -> Result<Self> {
@@ -560,7 +611,7 @@ impl Store {
         if scopes.is_empty() || text.trim().is_empty() {
             return Ok(vec![]);
         }
-        let sql = match LexicalScorer::selected()? { LexicalScorer::Bm25 => bm25_sql(), LexicalScorer::Fast => fast_lexical_sql() };
+        let sql = match LexicalScorer::selected()? { LexicalScorer::Bm25 => bm25_sql(), LexicalScorer::Fast => fast_lexical_sql(), LexicalScorer::IndexedBm25 => indexed_bm25_sql() };
         let rows = sqlx::query(sqlx::AssertSqlSafe(sql)).bind(scopes).bind(as_of).bind(text).bind(limit).fetch_all(&self.pool).await?;
         Ok(rows.iter().map(|r| Hit { id: r.get("id"), score: r.get("score"), at: r.get("at") }).collect())
     }
@@ -734,7 +785,7 @@ mod lexical_scorer_tests {
         assert_eq!(LexicalScorer::parse(None).unwrap(), LexicalScorer::Bm25);
         assert_eq!(LexicalScorer::parse(Some("bm25")).unwrap(), LexicalScorer::Bm25);
         assert_eq!(LexicalScorer::parse(Some("fast")).unwrap(), LexicalScorer::Fast);
-        assert!(LexicalScorer::parse(Some("indexed-bm25")).is_ok());
+        assert_eq!(LexicalScorer::parse(Some("indexed-bm25")).unwrap(), LexicalScorer::IndexedBm25);
         assert!(LexicalScorer::parse(Some("unknown")).is_err());
     }
 }
