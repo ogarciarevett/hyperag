@@ -10,7 +10,7 @@ use tantivy::{
     schema::{IndexRecordOption, Schema, Value},
 };
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug)]
 pub(super) struct Ranked {
     pub id: String,
     pub version: i64,
@@ -18,6 +18,11 @@ pub(super) struct Ranked {
     pub score: f32,
 }
 
+impl PartialEq for Ranked {
+    fn eq(&self, other: &Self) -> bool {
+        self.cmp(other) == Ordering::Equal
+    }
+}
 impl Eq for Ranked {}
 impl Ord for Ranked {
     fn cmp(&self, other: &Self) -> Ordering {

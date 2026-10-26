@@ -188,7 +188,8 @@ fn masked_top_k_equals_an_exhaustive_authorized_index() -> anyhow::Result<()> {
 }
 
 #[test]
-fn scoped_average_cannot_prune_the_authorized_winner() -> anyhow::Result<()> {
+fn scoped_average_preserves_the_authorized_winner() -> anyhow::Result<()> {
+    // Index-time block maxima under global averages had skipped bound-128.
     let mut rows = Vec::new();
     for n in 0..512 {
         let (scope, needle, length) = match n {
