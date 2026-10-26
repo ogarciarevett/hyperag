@@ -1,9 +1,23 @@
 # Private exhaustive lexical scoring
 
-This unit scores an immutable Tantivy searcher supplied by a future caller. It
-does not enable a configuration value, start a service worker, or change retrieval.
-The caller must resolve fresh grants and an exact source fence in one authorized
-PostgreSQL snapshot before selecting the searcher. That integration follows separately.
+The private scorer ranks an immutable complete generation. The opt-in Rust request
+path below resolves authorization and an exact source fence before selecting its
+searcher. Service/index writer lifecycle and attachment remain separate.
+
+## Authorized request integration
+
+`HYPERAG_LEXICAL_SCORER=tantivy` opts into one read-only repeatable-read request
+snapshot for the lexical channel and payload loads. The default remains `bm25`;
+`fast` and `indexed-bm25` remain available. The exact value is case-sensitive.
+Fresh grants, PostgreSQL simple query terms and the database/epoch/token fence
+are read together. Only a reader at that fence may supply candidates. Missing,
+lagging, incompatible or failed readers, or a selected payload version/scope
+mismatch, replace the whole lexical list with legacy SQL in the same snapshot.
+Temporal and final fused payload loads use that snapshot; it closes before reranking.
+No writer advisory lock is taken. Fusion, candidate budgets and rerank caps are unchanged.
+
+The store defaults to an empty reader and SQL fallback. Service/index writer
+lifecycle and attachment are a separate slice; this change starts no worker.
 
 The scorer builds scope and valid-time masks over live generation documents.
 Generation construction already excludes deleted and noncurrent/inactive source

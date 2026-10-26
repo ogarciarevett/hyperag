@@ -32,16 +32,16 @@ const BM25_K1: f64 = 1.2;
 const BM25_B: f64 = 0.75;
 
 /// The rows a caller may rank: current, active, not deleted, in a readable scope, valid at `asOf`.
-const RANKABLE: &str = "m.deleted_at IS NULL AND v.version = m.current_version AND v.status = 'active'
+pub(super) const RANKABLE: &str = "m.deleted_at IS NULL AND v.version = m.current_version AND v.status = 'active'
   AND m.scope = ANY($1::text[])
   AND ($2::timestamptz IS NULL OR ((v.valid_from IS NULL OR v.valid_from <= $2)
        AND (v.valid_to IS NULL OR v.valid_to > $2)))";
 
-const VERSION_COLUMNS: &str = "m.id, m.scope, m.kind, v.version, v.text, v.source, v.author, v.valid_from,
+pub(super) const VERSION_COLUMNS: &str = "m.id, m.scope, m.kind, v.version, v.text, v.source, v.author, v.valid_from,
   v.valid_to, v.recorded_at, v.status, v.status_reason, v.superseded_by, v.metadata";
 
 /// BM25 over the caller's readable corpus only (see the TypeScript store for the full rationale).
-fn bm25_sql() -> String {
+pub(super) fn bm25_sql() -> String {
     format!(
         "with scoped as (
   select v.memory_id, v.version, v.text_search, extract(epoch from v.recorded_at)::float8 as at
@@ -164,7 +164,7 @@ select id, at, score from candidates
 }
 
 #[derive(Debug, PartialEq)]
-enum LexicalScorer { Bm25, Fast, IndexedBm25 }
+pub(super) enum LexicalScorer { Bm25, Fast, IndexedBm25, Tantivy }
 
 impl LexicalScorer {
     fn parse(value: Option<&str>) -> Result<Self> {
@@ -172,10 +172,11 @@ impl LexicalScorer {
             None | Some("bm25") => Ok(Self::Bm25),
             Some("fast") => Ok(Self::Fast),
             Some("indexed-bm25") => Ok(Self::IndexedBm25),
-            _ => Err(Error::InvalidInput("HYPERAG_LEXICAL_SCORER must be bm25, fast or indexed-bm25".into())),
+            Some("tantivy") => Ok(Self::Tantivy),
+            _ => Err(Error::InvalidInput("HYPERAG_LEXICAL_SCORER must be bm25, fast, indexed-bm25 or tantivy".into())),
         }
     }
-    fn selected() -> Result<Self> {
+    pub(super) fn selected() -> Result<Self> {
         Self::parse(std::env::var("HYPERAG_LEXICAL_SCORER").ok().as_deref())
     }
 }
@@ -279,7 +280,7 @@ fn vector_table(space: &str) -> Result<String> {
     }
 }
 
-fn memory_of(r: &PgRow) -> Result<Memory> {
+pub(super) fn memory_of(r: &PgRow) -> Result<Memory> {
     let t = |c: &str| -> Result<Option<String>> { Ok(r.try_get::<Option<DateTime<Utc>>, _>(c)?.map(iso_ms)) };
     let metadata: Value = r.try_get("metadata")?;
     Ok(Memory {
@@ -383,11 +384,6 @@ pub struct CreateInput<'a> {
 impl Store {
     pub fn new(pool: PgPool) -> Self {
         Store { pool, lexical_reader: Default::default() }
-    }
-
-    pub(super) fn with_lexical_reader(mut self, reader: crate::lexical_consumer::ReaderHandle) -> Self {
-        self.lexical_reader = reader;
-        self
     }
 
     /// Acquire before any source row/table lock; shared with triggers and bounded backfill.
@@ -625,7 +621,7 @@ impl Store {
         if scopes.is_empty() || text.trim().is_empty() {
             return Ok(vec![]);
         }
-        let sql = match LexicalScorer::selected()? { LexicalScorer::Bm25 => bm25_sql(), LexicalScorer::Fast => fast_lexical_sql(), LexicalScorer::IndexedBm25 => indexed_bm25_sql() };
+        let sql = match LexicalScorer::selected()? { LexicalScorer::Bm25 | LexicalScorer::Tantivy => bm25_sql(), LexicalScorer::Fast => fast_lexical_sql(), LexicalScorer::IndexedBm25 => indexed_bm25_sql() };
         let rows = sqlx::query(sqlx::AssertSqlSafe(sql)).bind(scopes).bind(as_of).bind(text).bind(limit).fetch_all(&self.pool).await?;
         Ok(rows.iter().map(|r| Hit { id: r.get("id"), score: r.get("score"), at: r.get("at") }).collect())
     }

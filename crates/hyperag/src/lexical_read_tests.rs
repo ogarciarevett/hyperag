@@ -112,10 +112,35 @@ async fn exercise(store: Store) -> anyhow::Result<()> {
         "version mismatch must replace the whole lexical list"
     );
     mismatched.close().await?;
-    consumer.update(&store.pool).await?;
+    let indexed = consumer.update(&store.pool).await?;
     let mut fresh = Read::open(&store.pool, "reader", "beta", None).await?;
     anyhow::ensure!(fresh.search(&reader, 24).await?.len() == 1 && fresh.used_tantivy);
     fresh.close().await?;
+    write(&store, "update memories set scope='denied' where id='a'").await?;
+    let mut moved = Read::open(&store.pool, "reader", "beta", None).await?;
+    moved.fence = indexed;
+    anyhow::ensure!(
+        moved.search(&reader, 24).await?.is_empty() && !moved.used_tantivy,
+        "payload scope mismatch did not replace the whole lexical list"
+    );
+    moved.close().await?;
+    write(&store, "update memories set scope='allowed' where id='a'").await?;
+    let before_reset = consumer.update(&store.pool).await?;
+    write(
+        &store,
+        "update lexical_index_state set fence_token=gen_random_uuid()",
+    )
+    .await?;
+    let mut reset = Read::open(&store.pool, "reader", "beta", None).await?;
+    anyhow::ensure!(
+        reset.fence.epoch == before_reset.epoch
+            && reset.fence.fence_token != before_reset.fence_token
+    );
+    anyhow::ensure!(
+        reset.search(&reader, 24).await?.len() == 1 && !reset.used_tantivy,
+        "same-epoch divergent token did not use SQL fallback"
+    );
+    reset.close().await?;
     let at = crate::store::parse_time("2000-01-01T00:00:00Z").unwrap();
     let mut bounded = Read::open(&store.pool, "reader", "alpha", Some(at)).await?;
     anyhow::ensure!(
@@ -123,10 +148,9 @@ async fn exercise(store: Store) -> anyhow::Result<()> {
         "valid_to boundary included"
     );
     bounded.close().await?;
-    let core = Hyperag::init(Config::new(
-        store.clone().with_lexical_reader(reader.clone()),
-    ))
-    .await?;
+    let mut attached = store.clone();
+    attached.lexical_reader = reader.clone();
+    let core = Hyperag::init(Config::new(attached)).await?;
     let options = RetrieveOptions {
         channels: Some(Channels {
             vector: Some(false),

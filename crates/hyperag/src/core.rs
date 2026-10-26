@@ -518,7 +518,6 @@ impl Hyperag {
     pub async fn retrieve(&self, principal: &str, query: &str, options: &RetrieveOptions) -> Result<Retrieval> {
         let mut timings = options.profile.unwrap_or(false).then(StageTimings::default);
         let started = timings.as_ref().map(|_| Instant::now());
-        let readable = self.store.scopes(principal, "read").await?;
         let limit = options.limit.unwrap_or(8);
         let candidates = options.candidates_per_channel.unwrap_or(24) as i64;
         let as_of = match &options.as_of {
@@ -527,12 +526,20 @@ impl Hyperag {
         };
         let ch = options.channels.clone().unwrap_or_default();
         let on = |c: Option<bool>| c.unwrap_or(true);
+        let mut lexical = if on(ch.bm25) && crate::store::LexicalScorer::selected()? == crate::store::LexicalScorer::Tantivy {
+            Some(timed(&mut timings, Stage::Lexical, crate::lexical_read::Read::open(&self.store.pool, principal, query, as_of)).await?)
+        } else { None };
+        let readable = match &lexical { Some(read) => read.scopes.clone(), None => self.store.scopes(principal, "read").await? };
         let (mut limitations, mut paths) = (vec![], vec![]);
         let mut lists: Vec<(&'static str, Vec<Hit>)> = vec![];
         let models = self.models.read().await;
 
         if on(ch.bm25) {
-            lists.push(("bm25", timed(&mut timings, Stage::Lexical, self.store.bm25(&readable, query, candidates, as_of)).await?));
+            let hits = match lexical.as_mut() {
+                Some(read) => timed(&mut timings, Stage::Lexical, read.search(&self.store.lexical_reader, candidates)).await?,
+                None => timed(&mut timings, Stage::Lexical, self.store.bm25(&readable, query, candidates, as_of)).await?,
+            };
+            lists.push(("bm25", hits));
             paths.push("bm25".to_owned());
         }
         if on(ch.vector) {
@@ -581,7 +588,10 @@ impl Hyperag {
                 // shortcut: ranks only the fused candidates, not the whole scope; store spans at ingest if dev shows misses.
                 let order = measured(&mut timings, Stage::Fusion, || fuse(&refs(&lists), self.rrf_k));
                 let ids: Vec<String> = order.iter().take(candidates as usize).map(|h| h.id.clone()).collect();
-                let loaded = timed(&mut timings, Stage::PayloadLoad, self.store.load(&ids, &readable, as_of)).await?;
+                let loaded = match lexical.as_mut() {
+                    Some(read) => timed(&mut timings, Stage::PayloadLoad, read.load(&ids)).await?,
+                    None => timed(&mut timings, Stage::PayloadLoad, self.store.load(&ids, &readable, as_of)).await?,
+                };
                 let keep: HashMap<&str, bool> = loaded
                     .iter()
                     .map(|m| {
@@ -602,7 +612,11 @@ impl Hyperag {
         let pool = if rerank { limit.max(candidates as usize) } else { limit };
         // Graph hits and stale candidates are re-checked against the store with the same filters.
         let ids: Vec<String> = fused.iter().take(pool).map(|h| h.id.clone()).collect();
-        let memories = timed(&mut timings, Stage::PayloadLoad, self.store.load(&ids, &readable, as_of)).await?;
+        let memories = match lexical.as_mut() {
+            Some(read) => timed(&mut timings, Stage::PayloadLoad, read.load(&ids)).await?,
+            None => timed(&mut timings, Stage::PayloadLoad, self.store.load(&ids, &readable, as_of)).await?,
+        };
+        if let Some(read) = lexical { read.close().await?; }
         let fused_score: HashMap<&str, f64> = fused.iter().map(|h| (h.id.as_str(), h.score)).collect();
         let mut items: Vec<RetrievedItem> = memories
             .into_iter()
