@@ -196,6 +196,7 @@ struct RetrieveBounds {
     anchor: Option<String>,
     channels: Option<crate::core::Channels>,
     max_tokens: Option<usize>,
+    profile: Option<bool>,
 }
 
 fn bounded(b: RetrieveBounds) -> Result<RetrieveOptions, ApiError> {
@@ -208,6 +209,7 @@ fn bounded(b: RetrieveBounds) -> Result<RetrieveOptions, ApiError> {
         candidates_per_channel: check(b.candidates_per_channel, "candidatesPerChannel", 150)?,
         rerank_candidates: check(b.rerank_candidates, "rerankCandidates", 150)?,
         max_tokens: check(b.max_tokens, "maxTokens", 32_000)?,
+        profile: b.profile,
         as_of: b.as_of,
         anchor: b.anchor,
         channels: b.channels,
