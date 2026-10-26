@@ -16,7 +16,10 @@ assert.ok(!listing.stdout.includes("package/eval/"));
 
 const { createPostgresStore } = await import(pathToFileURL(join(root, "dist/index.js")));
 const sql = [];
-await createPostgresStore({ query: async (statement) => { sql.push(statement); return { rows: [] }; } }).migrate();
+const client = { query: async (statement) => { sql.push(statement); return { rows: [] }; }, release() {} };
+await createPostgresStore({ connect: async () => client }).migrate();
+assert.deepEqual(sql.slice(0, 2), ["begin", "select pg_advisory_xact_lock(1213811052,1)"]);
+assert.equal(sql.at(-1), "commit");
 assert.ok(sql.some((statement) => statement.toLowerCase().includes("create table")), "migration SQL was not loaded");
 
 const temp = await mkdtemp(join(tmpdir(), "hyperag-npm-consumer-"));

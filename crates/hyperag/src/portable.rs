@@ -237,7 +237,7 @@ pub async fn import(h: &Hyperag, records: &[Record], without_graph: bool) -> Res
         return Err(Error::InvalidInput(format!("the file has {relations} relations and no graph is configured (HYPERAG_NEO4J_URL); pass --without-graph to drop them")));
     }
     let mut done = Imported::default();
-    let mut tx = h.store.pool.begin().await?;
+    let mut tx = h.store.begin_write().await?;
     // One importer per database makes each history check and insert atomic against other imports.
     sqlx::query("select pg_advisory_xact_lock(7480, 1)").execute(&mut *tx).await?;
     for r in records {
