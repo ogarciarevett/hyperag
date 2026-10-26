@@ -1,5 +1,11 @@
 # Hyperag docs
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="../assets/brand/logo/lockup-color-dark.svg">
+  <source media="(prefers-color-scheme: light)" srcset="../assets/brand/logo/lockup-color.svg">
+  <img alt="Hyperag" src="../assets/brand/logo/lockup-color.svg" width="360">
+</picture>
+
 - [Concepts](concepts.md): the memory record, write semantics, evidence and abstention
 - [Configuration](configuration.md): environment variables, tokens, scopes
 - [API](api.md): HTTP routes and the TypeScript library
