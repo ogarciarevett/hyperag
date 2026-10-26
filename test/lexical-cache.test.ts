@@ -78,13 +78,13 @@ test("concurrent writers do not lose frequency or length deltas", async () => {
 });
 
 test("truncate marks derived statistics unready and explicit backfill resets them", async () => {
-  await pool.query("truncate memory_versions");
+  await pool.query("begin; select pg_advisory_xact_lock(1213811052,1); truncate memory_versions; commit");
   expect((await pool.query("select value from settings where key='lexical_cache_ready'")).rows[0].value).toBe("reset");
   expect(Number((await pool.query("select lexical_cache_backfill(2) as n")).rows[0].n)).toBe(0);
   expect((await pool.query("select value from settings where key='lexical_cache_ready'")).rows[0].value).toBe("true");
   await coherent();
   await add(pool,"after-truncate","allowed","quartz"); await coherent();
-  await pool.query("truncate memories cascade");
+  await pool.query("begin; select pg_advisory_xact_lock(1213811052,1); truncate memories cascade; commit");
   expect((await pool.query("select value from settings where key='lexical_cache_ready'")).rows[0].value).toBe("reset");
   expect(Number((await pool.query("select lexical_cache_backfill(2) as n")).rows[0].n)).toBe(0);
   await coherent();

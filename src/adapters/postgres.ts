@@ -110,10 +110,11 @@ type VersionInput = Readonly<{
 }>;
 
 export function createPostgresStore(pool: Pool) {
-  async function tx<T>(fn: (c: PoolClient) => Promise<T>): Promise<T> {
+  async function tx<T>(fn: (c: PoolClient) => Promise<T>, write = true): Promise<T> {
     const client = await pool.connect();
     try {
       await client.query("begin");
+      if (write) await client.query("select pg_advisory_xact_lock(1213811052,1)");
       const value = await fn(client);
       await client.query("commit");
       return value;
@@ -420,7 +421,7 @@ export function createPostgresStore(pool: Pool) {
           [scopes, asOf, vectorLiteral(query), limit],
         );
         return rows.rows.map((r) => ({ id: r.id, version: r.version, score: 1 - Number(r.distance), at: Number(r.at) }));
-      });
+      }, false);
     },
 
     /** The current, active versions of `ids` the caller may read, in the order of `ids`. */

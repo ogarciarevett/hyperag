@@ -325,11 +325,20 @@ impl Store {
         Store { pool }
     }
 
+    /// Acquire before any source row/table lock; shared with triggers and bounded backfill.
+    pub(crate) async fn begin_write(&self) -> Result<Transaction<'_, Postgres>> {
+        let mut tx = self.pool.begin().await?;
+        sqlx::query("select pg_advisory_xact_lock(1213811052,1)").execute(&mut *tx).await?;
+        Ok(tx)
+    }
+
     pub async fn migrate(&self) -> Result<()> {
         LexicalScorer::selected()?;
+        let mut c = self.begin_write().await?;
         for m in MIGRATIONS {
-            sqlx::raw_sql(m).execute(&self.pool).await?;
+            sqlx::raw_sql(m).execute(&mut *c).await?;
         }
+        c.commit().await?;
         Ok(())
     }
 
@@ -342,7 +351,7 @@ impl Store {
     }
 
     pub async fn grant(&self, principal: &str, scope: &str, permission: &str, by: &str) -> Result<()> {
-        let mut c = self.pool.begin().await?;
+        let mut c = self.begin_write().await?;
         sqlx::query("insert into grants (principal, scope, permission, granted_by) values ($1, $2, $3, $4) on conflict do nothing")
             .bind(principal).bind(scope).bind(permission).bind(by).execute(&mut *c).await?;
         sqlx::query("insert into grant_log (principal, scope, permission, action, actor) values ($1, $2, $3, 'grant', $4)")
@@ -352,7 +361,7 @@ impl Store {
     }
 
     pub async fn revoke(&self, principal: &str, scope: &str, permission: &str, by: &str) -> Result<()> {
-        let mut c = self.pool.begin().await?;
+        let mut c = self.begin_write().await?;
         sqlx::query("delete from grants where principal = $1 and scope = $2 and permission = $3")
             .bind(principal).bind(scope).bind(permission).execute(&mut *c).await?;
         sqlx::query("insert into grant_log (principal, scope, permission, action, actor) values ($1, $2, $3, 'revoke', $4)")
@@ -363,6 +372,7 @@ impl Store {
 
     /// Registers a space and creates its own vector table; an existing space is left as it is.
     pub async fn ensure_space(&self, space: &EmbeddingSpace) -> Result<String> {
+        let mut c = self.begin_write().await?;
         let id = space_id(space);
         let table = vector_table(&id)?;
         sqlx::query(
@@ -370,7 +380,7 @@ impl Store {
              values ($1, $2, $3, $4, $5, $6) on conflict (id) do nothing",
         )
         .bind(&id).bind(&space.model).bind(&space.revision).bind(space.dimensions as i32).bind(space.normalized).bind(&space.preprocessing)
-        .execute(&self.pool)
+        .execute(&mut *c)
         .await?;
         sqlx::raw_sql(sql!(
             "create table if not exists {table} (
@@ -380,8 +390,9 @@ impl Store {
              create index if not exists {table}_hnsw on {table} using hnsw (embedding vector_cosine_ops);",
             space.dimensions
         ))
-        .execute(&self.pool)
+        .execute(&mut *c)
         .await?;
+        c.commit().await?;
         Ok(id)
     }
 
@@ -395,7 +406,7 @@ impl Store {
     }
 
     pub async fn create(&self, principal: &str, input: &CreateInput<'_>, hash: &str, vector: Option<&VectorRow>) -> Result<WriteResult> {
-        let mut c = self.pool.begin().await?;
+        let mut c = self.begin_write().await?;
         if let Some(replay) = idempotent(&mut c, principal, input.idempotency_key).await? {
             return Ok(replay);
         }
@@ -462,7 +473,7 @@ impl Store {
         hash: &str,
         vector: Option<&VectorRow>,
     ) -> Result<WriteResult> {
-        let mut c = self.pool.begin().await?;
+        let mut c = self.begin_write().await?;
         if let Some(replay) = idempotent(&mut c, principal, idempotency_key).await? {
             return Ok(replay);
         }
@@ -499,12 +510,13 @@ impl Store {
     }
 
     pub async fn invalidate(&self, id: &str, reason: &str, by: &str) -> Result<()> {
+        let mut c = self.begin_write().await?;
         let status: Option<String> = sqlx::query_scalar(
             "select v.status from memories m join memory_versions v on v.memory_id = m.id and v.version = m.current_version
               where m.id = $1 and m.deleted_at is null",
         )
         .bind(id)
-        .fetch_optional(&self.pool)
+        .fetch_optional(&mut *c)
         .await?;
         match status.as_deref() {
             None => return Err(not_found(id)),
@@ -519,17 +531,18 @@ impl Store {
                and v.status = 'active'",
         )
         .bind(id).bind(reason).bind(by)
-        .execute(&self.pool)
+        .execute(&mut *c)
         .await?;
         if res.rows_affected() == 0 {
             return Err(not_found(id));
         }
+        c.commit().await?;
         Ok(())
     }
 
     /// Removes every version and vector; the memories row stays as a content-free tombstone.
     pub async fn delete(&self, id: &str, reason: &str, by: &str) -> Result<()> {
-        let mut c = self.pool.begin().await?;
+        let mut c = self.begin_write().await?;
         let res = sqlx::query("update memories set deleted_at = now(), deleted_by = $2, delete_reason = $3 where id = $1 and deleted_at is null")
             .bind(id).bind(by).bind(reason)
             .execute(&mut *c)
@@ -657,13 +670,15 @@ impl Store {
     }
 
     pub async fn put_vectors(&self, space: &str, rows: &[(String, i32, Vec<f32>)]) -> Result<()> {
+        let mut c = self.begin_write().await?;
         let table = vector_table(space)?;
         for (id, version, values) in rows {
             sqlx::query(sql!("insert into {table} (memory_id, version, embedding) values ($1, $2, $3) on conflict do nothing"))
                 .bind(id).bind(version).bind(Vector::from(values.clone()))
-                .execute(&self.pool)
+                .execute(&mut *c)
                 .await?;
         }
+        c.commit().await?;
         Ok(())
     }
 
@@ -701,10 +716,12 @@ impl Store {
     }
 
     pub async fn set_setting(&self, key: &str, value: &str) -> Result<()> {
+        let mut c = self.begin_write().await?;
         sqlx::query("insert into settings (key, value) values ($1, $2) on conflict (key) do update set value = excluded.value, updated_at = now()")
             .bind(key).bind(value)
-            .execute(&self.pool)
+            .execute(&mut *c)
             .await?;
+        c.commit().await?;
         Ok(())
     }
 }

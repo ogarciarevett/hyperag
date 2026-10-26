@@ -18,7 +18,8 @@ CREATE TABLE IF NOT EXISTS lexical_term_stats (
 CREATE INDEX IF NOT EXISTS lexical_zero_terms ON lexical_term_stats(scope,valid_from,valid_to) WHERE df=0;
 INSERT INTO settings(key,value) VALUES('lexical_cache_ready','false') ON CONFLICT DO NOTHING;
 
--- Serialize metadata writes before source row locks, including explicit backfill. Reads use MVCC.
+-- Store/administrative transactions acquire this lock before any row/table lock.
+-- Statement guards cover direct DML; they cannot guard an earlier FOR UPDATE or TRUNCATE table lock.
 CREATE OR REPLACE FUNCTION lexical_write_guard() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
   PERFORM pg_advisory_xact_lock(1213811052,1);
