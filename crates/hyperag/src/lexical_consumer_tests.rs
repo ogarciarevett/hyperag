@@ -310,6 +310,38 @@ fn rejects_preexisting_public_root_before_creating_lock() -> anyhow::Result<()> 
 
 #[cfg(unix)]
 #[test]
+fn rejects_replaceable_ancestors_before_creating_lock() -> anyhow::Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+    let scratch = tempfile::tempdir()?;
+    let ancestor = scratch.path().join("replaceable");
+    let parent = ancestor.join("private-parent");
+    let root = parent.join("index");
+    std::fs::create_dir(&ancestor)?;
+    std::fs::create_dir(&parent)?;
+    std::fs::create_dir(&root)?;
+    for path in [&ancestor, &parent, &root] {
+        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o700))?;
+    }
+    for path in [&ancestor, &parent] {
+        for mode in [0o777, 0o770] {
+            std::fs::set_permissions(path, std::fs::Permissions::from_mode(mode))?;
+            let rejected = Consumer::open(&root).is_err();
+            std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o700))?;
+            anyhow::ensure!(rejected, "replaceable ancestor mode {mode:o} accepted");
+            anyhow::ensure!(
+                !root.join(".consumer.lock").exists(),
+                "unsafe root was locked"
+            );
+        }
+    }
+    // Sticky protection prevents other users from replacing our entry.
+    std::fs::set_permissions(&ancestor, std::fs::Permissions::from_mode(0o1777))?;
+    drop(Consumer::open(&root)?);
+    Ok(())
+}
+
+#[cfg(unix)]
+#[test]
 fn private_path_policy_rejects_a_different_owner() -> anyhow::Result<()> {
     use std::os::unix::fs::{MetadataExt, PermissionsExt};
     let scratch = tempfile::tempdir()?;
