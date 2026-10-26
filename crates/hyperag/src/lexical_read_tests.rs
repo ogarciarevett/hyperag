@@ -111,6 +111,11 @@ async fn exercise(store: Store) -> anyhow::Result<()> {
         !mismatched.used_tantivy && hits.len() == 1 && hits[0].id == "b",
         "version mismatch must replace the whole lexical list"
     );
+    let sql = store.bm25(&["allowed".into()], "alpha", 24, None).await?;
+    anyhow::ensure!(
+        hits[0].score.to_bits() == sql[0].score.to_bits(),
+        "fallback retained a native score"
+    );
     mismatched.close().await?;
     let indexed = consumer.update(&store.pool).await?;
     let mut fresh = Read::open(&store.pool, "reader", "beta", None).await?;
@@ -171,8 +176,12 @@ async fn exercise(store: Store) -> anyhow::Result<()> {
         "revoked grants reused"
     );
     store.grant("reader", "allowed", "read", "fixture").await?;
-    write(&store, "delete from memories where id='a'; update memory_versions set status='invalidated' where memory_id='b';
-        select lexical_index_prune((select epoch from lexical_index_state))").await?;
+    write(&store, "delete from memories where id='a'; update memory_versions set status='invalidated' where memory_id='b'").await?;
+    write(
+        &store,
+        "select lexical_index_prune((select epoch from lexical_index_state))",
+    )
+    .await?;
     let mut missing = Read::open(&store.pool, "reader", "alpha beta", None).await?;
     anyhow::ensure!(
         missing
