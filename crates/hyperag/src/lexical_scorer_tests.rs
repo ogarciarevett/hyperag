@@ -184,3 +184,49 @@ fn masked_native_top_k_equals_an_exhaustive_authorized_index() -> anyhow::Result
     }
     Ok(())
 }
+
+#[test]
+fn scoped_average_cannot_prune_the_authorized_winner() -> anyhow::Result<()> {
+    let mut rows = Vec::new();
+    for n in 0..512 {
+        let (scope, needle, length) = match n {
+            0..128 => ("allowed", 5, 80),
+            128 => ("allowed", 10, 100),
+            129..256 => ("hidden", 1, 1),
+            _ => ("hidden", 0, 1),
+        };
+        let mut terms = Vec::new();
+        if needle > 0 {
+            terms.push(("needle".into(), needle));
+        }
+        if length > needle {
+            terms.push(("filler".into(), length - needle));
+        }
+        rows.push(Fixture {
+            id: format!("bound-{n:03}"),
+            scope: scope.into(),
+            at: n as i64,
+            from: None,
+            to: None,
+            terms,
+        });
+    }
+    let shared = build(&rows)?;
+    assert_eq!(shared.segment_readers().len(), 1);
+    let allowed: Vec<_> = rows
+        .iter()
+        .filter(|row| row.scope == "allowed")
+        .cloned()
+        .collect();
+    let authorized = build(&allowed)?;
+    let terms = vec!["needle".into()];
+    let expected = reference(&authorized, &terms, 1)?;
+    let actual = top(&shared, &["allowed".into()], None, &terms, 1)?;
+    eprintln!("scoped-bound candidate={actual:?}; authorized reference={expected:?}");
+    assert_eq!(expected[0].id, "bound-128");
+    assert_eq!(
+        actual, expected,
+        "scoped statistics must preserve safe native block bounds"
+    );
+    Ok(())
+}
