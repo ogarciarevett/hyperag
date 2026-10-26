@@ -76,7 +76,7 @@ async fn exercise(pool: &PgPool) -> anyhow::Result<()> {
         insert into memories(id,scope,kind,created_by,current_version)
         select 'id-'||lpad(n::text,3,'0'),'allowed','fact','fixture',1 from generate_series(1,130) n;
         insert into memory_versions(memory_id,version,text,source,author,content_hash)
-        select id,1,'ALPHA alpha rare!','fixture','fixture','hash' from memories; commit").execute(pool).await?;
+        select id,1,(case id when 'id-010' then repeat('alpha ',101) || 'rare' else 'ALPHA alpha rare!' end) || case id when 'id-005' then ' replacedlexeme' when 'id-006' then ' deletedlexeme' else '' end,'fixture','fixture','hash' from memories; commit").execute(pool).await?;
     let source = SourceSnapshot::open(pool, None).await?;
     let target = source.target_checkpoint().clone();
     let replay = SourceSnapshot::open(pool, Some(&target)).await?;
@@ -205,6 +205,8 @@ async fn exercise(pool: &PgPool) -> anyhow::Result<()> {
     .await?;
     let replay_source = SourceSnapshot::open(pool, Some(&target)).await?;
     let replay_target = replay_source.target_checkpoint().clone();
+    let full_source = SourceSnapshot::open(pool, None).await?;
+    assert_eq!(full_source.target_checkpoint(), &replay_target);
     let replay_path = root.path().join("replayed");
     let base_metadata = std::fs::read(&meta_path)?;
     let mut replay = Generation::replay(&replay_path, &complete_path, replay_source)?;
@@ -217,7 +219,21 @@ async fn exercise(pool: &PgPool) -> anyhow::Result<()> {
         replay.publish().is_err(),
         "a replay page is not source exhaustion"
     );
-    assert!(!replay.advance().await?);
+    sqlx::raw_sql(
+        "begin; select pg_advisory_xact_lock(1213811052,1);
+        update memory_versions set text='futurelexeme' where memory_id='id-009'; commit",
+    )
+    .execute(pool)
+    .await?;
+    assert!(
+        replay.advance().await?,
+        "deleted postings require a fenced rebuild"
+    );
+    assert!(
+        replay.publish().is_err(),
+        "rewinding cannot publish an empty index"
+    );
+    while replay.advance().await? {}
     let replayed = replay.publish()?;
     assert_eq!(replayed.num_docs(), 128);
     assert_eq!(
@@ -227,6 +243,71 @@ async fn exercise(pool: &PgPool) -> anyhow::Result<()> {
         )?,
         127
     );
+    let mut rebuilt = Generation::create(&root.path().join("rebuilt"), full_source)?;
+    while rebuilt.advance().await? {}
+    let rebuilt = rebuilt.publish()?;
+    assert_eq!(replayed.num_docs(), rebuilt.num_docs());
+    for text in [
+        "alpha",
+        "rare",
+        "incrementallexeme",
+        "deletedlexeme",
+        "replacedlexeme",
+        "futurelexeme",
+    ] {
+        let term = Term::from_field_text(terms, text);
+        println!(
+            "replay-vs-rebuild term={text} replay_df={} rebuild_df={}",
+            replayed.doc_freq(&term)?,
+            rebuilt.doc_freq(&term)?
+        );
+        anyhow::ensure!(
+            replayed.doc_freq(&term)? == rebuilt.doc_freq(&term)?,
+            "replay/rebuild doc_freq mismatch for {text}"
+        );
+        let query = tantivy::query::TermQuery::new(term, IndexRecordOption::WithFreqs);
+        let scored = |searcher: &Searcher| -> anyhow::Result<Vec<(String, f32)>> {
+            let mut hits = Vec::new();
+            for (score, address) in searcher.search(
+                &query,
+                &tantivy::collector::TopDocs::with_limit(200).order_by_score(),
+            )? {
+                let doc: tantivy::TantivyDocument = searcher.doc(address)?;
+                hits.push((
+                    doc.get_first(searcher.schema().get_field("id")?)
+                        .unwrap()
+                        .as_str()
+                        .unwrap()
+                        .to_owned(),
+                    score,
+                ));
+            }
+            hits.sort_by(|left, right| left.0.cmp(&right.0));
+            Ok(hits)
+        };
+        anyhow::ensure!(
+            scored(&replayed)? == scored(&rebuilt)?,
+            "BM25 scores differ for {text}"
+        );
+    }
+    let statistics = |searcher: &Searcher| -> anyhow::Result<(u64, u64)> {
+        searcher
+            .segment_readers()
+            .iter()
+            .try_fold((0, 0), |(docs, tokens), segment| {
+                Ok((
+                    docs + u64::from(segment.max_doc()),
+                    tokens + segment.inverted_index(terms)?.total_num_tokens(),
+                ))
+            })
+    };
+    println!(
+        "replay-vs-rebuild raw stats replay={:?} rebuild={:?}",
+        statistics(&replayed)?,
+        statistics(&rebuilt)?
+    );
+    assert_eq!(statistics(&replayed)?, statistics(&rebuilt)?);
+    assert_eq!(statistics(&replayed)?.0, replayed.num_docs());
     assert_eq!(recovered.num_docs(), 130);
     drop(replay);
     assert!(recover(&replay_path, &target)?.is_none());

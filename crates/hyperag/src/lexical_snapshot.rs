@@ -150,6 +150,16 @@ impl SourceSnapshot {
         Ok(Some(Batch { ids, documents }))
     }
 
+    /// Discard replay statistics without opening a newer source snapshot.
+    pub async fn rewind_for_rebuild(&mut self) -> anyhow::Result<()> {
+        anyhow::ensure!(self.drained, "only an exhausted snapshot can rewind");
+        sqlx::query(
+            "declare lexical_source_ids no scroll cursor for select id collate \"C\" from memories order by id collate \"C\"",
+        ).execute(&mut *self.tx).await?;
+        self.drained = false;
+        Ok(())
+    }
+
     /// This proves source exhaustion only; index commit/reload and query fencing remain mandatory.
     pub fn completed_checkpoint(&self) -> Option<&Checkpoint> {
         self.drained.then_some(&self.fence)

@@ -101,6 +101,11 @@ fn document(source: SourceDocument, schema: &Schema) -> anyhow::Result<TantivyDo
 }
 
 impl Generation {
+    #[cfg(test)]
+    pub fn source_for_test(&mut self) -> &mut SourceSnapshot {
+        &mut self.source
+    }
+
     pub fn replay(path: &Path, base: &Path, source: SourceSnapshot) -> anyhow::Result<Self> {
         let expected = source.fresh_replay_base().ok_or_else(|| {
             anyhow::anyhow!("replay requires an unconsumed source stream and its base checkpoint")
@@ -165,6 +170,19 @@ impl Generation {
         );
         self.interrupted = true;
         let Some(batch) = self.source.next_batch().await? else {
+            if self
+                .index
+                .searchable_segment_metas()?
+                .iter()
+                .any(|segment| segment.has_deletes())
+            {
+                // Native merges approximate token totals; rebuild at the same MVCC fence.
+                self.writer.delete_all_documents()?;
+                self.source.rewind_for_rebuild().await?;
+                self.commit_state(false)?;
+                self.interrupted = false;
+                return Ok(true);
+            }
             self.interrupted = false;
             return Ok(false);
         };
