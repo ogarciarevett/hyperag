@@ -393,3 +393,22 @@ async fn set_models(State(a): State<App>, Who(w): Who, Body(b): Body<ModelsBody>
     crate::cli::switch(&a.hyperag, &w, b.embedding.as_deref(), b.reranker.as_deref()).await?;
     Ok(Json(models_view(&a.hyperag).await?))
 }
+
+#[cfg(test)]
+mod rerank_request_tests {
+    use super::*;
+    #[test]
+    fn rerank_request_cap_is_forwarded_independently_and_bounded() {
+        let request: QueryBody = serde_json::from_str(r#"{"query":"synthetic fixture","limit":5,"candidatesPerChannel":24,"rerankCandidates":8}"#).unwrap();
+        let options = bounded(request.options).unwrap_or_else(|_| panic!("valid request rejected"));
+        assert_eq!(options.rerank_candidates, Some(8));
+        assert_eq!(options.candidates_per_channel, Some(24));
+        assert_eq!(options.limit, Some(5));
+        let default: QueryBody = serde_json::from_str(r#"{"query":"synthetic fixture"}"#).unwrap();
+        assert_eq!(bounded(default.options).unwrap_or_else(|_| panic!("valid default rejected")).rerank_candidates, None);
+        for n in [0,151] {
+            let request: QueryBody = serde_json::from_value(serde_json::json!({"query":"synthetic fixture","rerankCandidates":n})).unwrap();
+            assert!(bounded(request.options).is_err());
+        }
+    }
+}
