@@ -30,8 +30,6 @@ pub(super) struct Batch {
 pub(super) struct SourceSnapshot {
     tx: Transaction<'static, Postgres>,
     fence: Checkpoint,
-    after_epoch: Option<i64>,
-    cursor: Option<String>,
     drained: bool,
 }
 
@@ -86,11 +84,24 @@ impl SourceSnapshot {
                 "lexical source gap/reset/lineage mismatch: rebuild required"
             );
         }
+        // Execute one coalesced, ordered stream; FETCH must not rerun its scans/sort per page.
+        sqlx::query(
+            r#"
+            declare lexical_source_ids no scroll cursor for
+            select memory_id collate "C" as id from lexical_index_changes
+             where $1::bigint is not null and epoch>$1 and epoch<=$2 and kind='memory'
+            union
+            select id collate "C" from memories where $1::bigint is null
+            order by id
+        "#,
+        )
+        .bind(after.map(|c| c.epoch))
+        .bind(fence.epoch)
+        .execute(&mut *tx)
+        .await?;
         Ok(Self {
             tx,
             fence,
-            after_epoch: after.map(|c| c.epoch),
-            cursor: None,
             drained: false,
         })
     }
@@ -100,33 +111,13 @@ impl SourceSnapshot {
         if self.drained {
             return Ok(None);
         }
-        let ids: Vec<String> = if let Some(epoch) = self.after_epoch {
-            sqlx::query_scalar(
-                r#"
-                select distinct memory_id collate "C" as id from lexical_index_changes
-                 where epoch>$1 and epoch<=$2 and kind='memory'
-                   and ($3::text is null or memory_id collate "C">$3 collate "C")
-                 order by id limit 64
-            "#,
-            )
-            .bind(epoch)
-            .bind(self.fence.epoch)
-            .bind(&self.cursor)
+        let ids: Vec<String> = sqlx::query_scalar("fetch forward 64 from lexical_source_ids")
             .fetch_all(&mut *self.tx)
-            .await?
-        } else {
-            sqlx::query_scalar(
-                r#"
-                select id collate "C" from memories
-                 where $1::text is null or id collate "C">$1 collate "C"
-                 order by id collate "C" limit 64
-            "#,
-            )
-            .bind(&self.cursor)
-            .fetch_all(&mut *self.tx)
-            .await?
-        };
+            .await?;
         if ids.is_empty() {
+            sqlx::query("close lexical_source_ids")
+                .execute(&mut *self.tx)
+                .await?;
             self.drained = true;
             return Ok(None);
         }
@@ -139,7 +130,6 @@ impl SourceSnapshot {
              where m.id=any($1::text[]) and m.deleted_at is null and v.status='active'
              order by m.id collate "C"
         "#).bind(&ids).fetch_all(&mut *self.tx).await?;
-        self.cursor = ids.last().cloned();
         Ok(Some(Batch { ids, documents }))
     }
 

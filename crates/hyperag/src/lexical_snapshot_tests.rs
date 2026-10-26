@@ -208,5 +208,39 @@ async fn exercise(pool: &PgPool) -> anyhow::Result<()> {
         batches.iter().map(|b| b.documents.len()).sum::<usize>(),
         128
     );
+    let checkpoint = rebuild.completed_checkpoint().unwrap().clone();
+    drop(rebuild);
+    write(pool, "insert into memories(id,scope,kind,created_by,current_version)
+        select 'bulk-'||lpad(n::text,6,'0'),'fixture','fact','fixture',1 from generate_series(1,20000) n;
+        insert into memory_versions(memory_id,version,text,source,author,content_hash)
+        select id,1,'synthetic lexical fixture','fixture','fixture','hash' from memories where id like 'bulk-%';
+        analyze memories; analyze memory_versions; analyze lexical_index_changes").await;
+    for after in [Some(&checkpoint), None] {
+        let started = std::time::Instant::now();
+        let mut snapshot = SourceSnapshot::open(pool, after).await?;
+        let mut ids = 0;
+        while let Some(batch) = snapshot.next_batch().await? {
+            assert!(batch.ids.len() <= 64 && snapshot.completed_checkpoint().is_none());
+            ids += batch.ids.len();
+        }
+        assert_eq!(ids, if after.is_some() { 20000 } else { 20129 });
+        // Same-backend transaction counters include index-only scans and final-row fetches.
+        let visits: Vec<(String, i64)> = sqlx::query_as(
+            "select t.relname,t.seq_tup_read+coalesce((select sum(pg_stat_get_xact_tuples_returned(i.indexrelid))
+               from pg_index i where i.indrelid=t.relid),0)::bigint
+             from pg_stat_xact_user_tables t
+             where t.relname in ('memories','memory_versions','lexical_index_changes') order by t.relname"
+        ).fetch_all(&mut *snapshot.tx).await?;
+        let total: i64 = visits.iter().map(|(_, count)| count).sum();
+        println!(
+            "source-paging-cost mode={} ids={ids} visits={visits:?} ms={}",
+            if after.is_some() { "replay" } else { "rebuild" },
+            started.elapsed().as_millis()
+        );
+        anyhow::ensure!(
+            total > 0 && total <= ids as i64 * 8,
+            "source work must stay within 8 visits per ID: {total}"
+        );
+    }
     Ok(())
 }
