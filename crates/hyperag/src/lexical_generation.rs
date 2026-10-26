@@ -31,7 +31,7 @@ struct Manifest {
     complete: bool,
 }
 
-fn schema() -> Schema {
+pub(super) fn schema() -> Schema {
     let mut schema = Schema::builder();
     schema.add_text_field("id", STRING | FAST | STORED);
     schema.add_text_field("scope", STRING | FAST | STORED);
@@ -59,7 +59,7 @@ fn fingerprint(schema: &Schema) -> String {
     ))
 }
 
-fn document(source: SourceDocument, schema: &Schema) -> anyhow::Result<TantivyDocument> {
+pub(super) fn document(source: SourceDocument, schema: &Schema) -> anyhow::Result<TantivyDocument> {
     let mut doc = TantivyDocument::default();
     doc.add_text(schema.get_field("id")?, source.id);
     doc.add_text(schema.get_field("scope")?, source.scope);
