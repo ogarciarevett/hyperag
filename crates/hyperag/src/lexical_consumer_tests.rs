@@ -112,9 +112,12 @@ async fn exercise(pool: &PgPool) -> anyhow::Result<()> {
         use std::os::unix::fs::PermissionsExt;
         drop(consumer);
         let generation: String = serde_json::from_slice(&original_pointer)?;
+        let meta = root.join(&generation).join("meta.json");
+        let meta_mode = std::fs::metadata(&meta)?.permissions().mode() & 0o777;
         for (path, unsafe_mode, private_mode) in [
             (root.join("CURRENT"), 0o644, 0o600),
-            (root.join(generation), 0o755, 0o700),
+            (root.join(&generation), 0o755, 0o700),
+            (meta, 0o666, meta_mode),
             (root.join(".consumer.lock"), 0o666, 0o600),
         ] {
             std::fs::set_permissions(&path, std::fs::Permissions::from_mode(unsafe_mode))?;
@@ -276,7 +279,7 @@ async fn exercise(pool: &PgPool) -> anyhow::Result<()> {
         let link = format!("gen-{}", "a".repeat(32));
         std::os::unix::fs::symlink(root.join(&ready.name), root.join(&link))?;
         std::fs::write(root.join("CURRENT"), serde_json::to_vec(&link)?)?;
-        assert!(Consumer::open(&root)?.at(&next).is_none());
+        assert!(Consumer::open(&root).is_err());
         let alias = scratch.path().join("alias");
         std::os::unix::fs::symlink(&root, &alias)?;
         assert!(Consumer::open(&alias).is_err());

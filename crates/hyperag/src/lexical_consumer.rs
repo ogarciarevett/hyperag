@@ -54,30 +54,89 @@ fn generation_name() -> anyhow::Result<String> {
     Ok(format!("gen-{}", hex::encode(nonce)))
 }
 
-fn check_private(_path: &Path, _directory: bool, _owner: u32) -> anyhow::Result<()> {
+fn current_owner() -> u32 {
+    #[cfg(unix)]
+    {
+        unsafe extern "C" {
+            fn geteuid() -> std::os::raw::c_uint;
+        }
+        // SAFETY: geteuid takes no arguments and returns the effective Unix UID.
+        unsafe { geteuid() }
+    }
+    #[cfg(not(unix))]
+    {
+        0
+    }
+}
+
+fn check_private(path: &Path, directory: bool, _owner: u32) -> anyhow::Result<()> {
+    let metadata = fs::symlink_metadata(path)?;
+    anyhow::ensure!(
+        if directory {
+            metadata.is_dir()
+        } else {
+            metadata.is_file()
+        },
+        "unsafe consumer path type: {}",
+        path.display()
+    );
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        let mode = if directory { 0o700 } else { 0o600 };
+        anyhow::ensure!(
+            metadata.uid() == _owner && metadata.mode() & 0o777 == mode,
+            "unsafe consumer path owner/mode: {}",
+            path.display()
+        );
+    }
     Ok(())
 }
 
-fn current(root: &Path) -> anyhow::Result<Option<Active>> {
-    if !fs::symlink_metadata(root.join("CURRENT"))?
-        .file_type()
-        .is_file()
-    {
+fn current(root: &Path, owner: u32) -> anyhow::Result<Option<Active>> {
+    let pointer = root.join("CURRENT");
+    if let Err(error) = fs::symlink_metadata(&pointer) {
+        if error.kind() == std::io::ErrorKind::NotFound {
+            return Ok(None);
+        }
+        return Err(error.into());
+    }
+    check_private(&pointer, false, owner)?;
+    let Ok(name) = serde_json::from_slice::<String>(&fs::read(&pointer)?) else {
+        return Ok(None);
+    };
+    if !valid_name(&name) {
         return Ok(None);
     }
-    let name: String = serde_json::from_slice(&fs::read(root.join("CURRENT"))?)?;
-    if !valid_name(&name) || !fs::symlink_metadata(root.join(&name))?.file_type().is_dir() {
-        return Ok(None);
+    let generation = root.join(&name);
+    if let Err(error) = fs::symlink_metadata(&generation) {
+        if error.kind() == std::io::ErrorKind::NotFound {
+            return Ok(None);
+        }
+        return Err(error.into());
     }
-    Ok(
-        lexical_generation::recover_complete(&root.join(&name), None)?.map(
-            |(checkpoint, searcher)| Active {
-                name,
-                checkpoint,
-                searcher,
-            },
-        ),
-    )
+    check_private(&generation, true, owner)?;
+    for entry in fs::read_dir(&generation)? {
+        let metadata = fs::symlink_metadata(entry?.path())?;
+        anyhow::ensure!(metadata.is_file(), "nonregular recovered index entry");
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::MetadataExt;
+            // Index files may be readable outside the private directory, never writable.
+            anyhow::ensure!(
+                metadata.uid() == owner && metadata.mode() & 0o022 == 0,
+                "unsafe recovered index file owner/mode"
+            );
+        }
+    }
+    Ok(lexical_generation::recover_complete(&generation, None)
+        .ok()
+        .flatten()
+        .map(|(checkpoint, searcher)| Active {
+            name,
+            checkpoint,
+            searcher,
+        }))
 }
 
 impl Consumer {
@@ -87,7 +146,7 @@ impl Consumer {
 
     fn open_with(
         root: &Path,
-        _sync_parent: impl FnOnce(&Path) -> std::io::Result<()>,
+        sync_parent: impl FnOnce(&Path) -> std::io::Result<()>,
     ) -> anyhow::Result<Self> {
         let mut directory = fs::DirBuilder::new();
         #[cfg(unix)]
@@ -95,21 +154,43 @@ impl Consumer {
             use std::os::unix::fs::DirBuilderExt;
             directory.mode(0o700);
         }
-        match directory.create(root) {
-            Ok(()) => (),
+        let created = match directory.create(root) {
+            Ok(()) => true,
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => false,
+            Err(error) => return Err(error.into()),
+        };
+        let uid = current_owner();
+        check_private(root, true, uid)?;
+        if created {
+            let parent = root
+                .parent()
+                .filter(|path| !path.as_os_str().is_empty())
+                .unwrap_or(Path::new("."));
+            if let Err(error) = sync_parent(parent) {
+                fs::remove_dir(root)?; // Retry must create and sync the new root again.
+                return Err(error.into());
+            }
+        }
+        let lock = root.join(".consumer.lock");
+        let mut options = fs::OpenOptions::new();
+        options.write(true).create_new(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.mode(0o600);
+        }
+        match options.open(&lock) {
+            Ok(_) => (),
             Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => (),
             Err(error) => return Err(error.into()),
         }
-        anyhow::ensure!(
-            fs::symlink_metadata(root)?.file_type().is_dir(),
-            "consumer root must be a real directory"
-        );
+        check_private(&lock, false, uid)?;
         let owner = MmapDirectory::open(root)?.acquire_lock(&Lock {
             filepath: ".consumer.lock".into(),
             is_blocking: false,
         })?;
-        // Missing, malformed or incompatible pointers require an explicit rebuild.
-        let reader = ReaderHandle(Arc::new(RwLock::new(current(root).unwrap_or(None))));
+        // Missing/malformed/incompatible state rebuilds; unsafe ownership or modes refuse open.
+        let reader = ReaderHandle(Arc::new(RwLock::new(current(root, uid)?)));
         Ok(Self {
             root: root.into(),
             reader,
