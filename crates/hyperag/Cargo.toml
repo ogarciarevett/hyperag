@@ -12,6 +12,9 @@ keywords = ["rag", "memory", "retrieval", "pgvector", "mcp"]
 categories = ["database", "command-line-utilities"]
 rust-version = "1.99"
 
+[features]
+coreml = ["ort/coreml"]
+
 [dependencies]
 anyhow = "=1.0.104"
 axum = "=0.8.9"
