@@ -16,21 +16,27 @@ mismatch, replace the whole lexical list with legacy SQL in the same snapshot.
 Temporal and final fused payload loads use that snapshot; it closes before reranking.
 No writer advisory lock is taken. Fusion, candidate budgets and rerank caps are unchanged.
 
-The current-reader path uses PostgreSQL-compatible BM25, not widened native scores.
-It counts exact distinct lexemes (`length(text_search)`) for document length, all
-authorized active documents for N/average, and masked postings for TF/DF. The generation
-stores `num_lexemes`; its schema fingerprint rejects older generations until rebuilt.
-Tantivy supplies these statistics and query postings to the request transaction.
-PostgreSQL evaluates the shared float8 expression (k1=1.2, b=0.75), numeric average
-and `ln`, then applies score/time/ID ordering using the database's ID collation.
-Both SQL and current-reader paths sum contributions in C lexeme order. Ordering the
-formerly unordered default SQL sum can change score bits; frozen-30 default ID/order
-and score-bit comparisons are required evidence, alongside real-copy latency.
-This path scans no source corpus in SQL, but includes serialization, transfer and SQL
-arithmetic; the earlier native scorer's ~97 ms p95 is not proof of its latency.
+The current-reader path computes BM25 directly in Rust `f64` over native exhaustive
+postings. Document length is the stored exact distinct-lexeme count
+(`length(text_search)`), TF is unquantized, and N/DF/average include only authorized,
+active, temporally valid documents. Empty documents count toward N and average.
+It uses SQL's expression grouping, k1=1.2 and b=0.75, without native field norms.
+The `num_lexemes` schema fingerprint rejects older generations until rebuilt.
+
+Query terms are deduplicated and summed in lexeme order. A bounded heap selects
+score/time candidates, retaining every cutoff tie; PostgreSQL applies its ID
+collation to those final candidates. No postings or scoring expression are sent
+to PostgreSQL. Distant recorded times with unsafe float8 ordering fall back to SQL.
+Near-tied scores with incompatible arithmetic inputs or unordered multi-term sums
+replace the whole request with SQL. Oversized tie sets also fall back.
+The default SQL query, including its unordered SUM, is unchanged from the baseline;
+`fast` and `indexed-bm25` keep their existing behavior. Floating-point rounding may
+differ, so parity fixtures require equal IDs/order/timestamps and report maximum
+absolute, relative and ULP score gaps. Frozen-30 parity and latency require separate
+evidence on a current immutable copy.
 
 Vector SQL reuses the snapshot connection, avoiding a second pool acquisition when
-all eight service connections are held by requests. Scoring and vector savepoints
+all eight service connections are held by requests. Candidate ordering and vector savepoints
 keep whole-list SQL fallback and lexical payload reads usable after SQL failures.
 Retrieval takes the model read lock before opening its pooled snapshot, matching
 the model switch's lock order and leaving connections available to its final pass.
@@ -58,7 +64,7 @@ The independent reference builds an index containing only authorized documents,
 uses native TermQuery weights without pruning, adds their contributions in the
 same lexeme order and type, then sorts all matches. Tests require identical IDs,
 versions, recorded times and native score bits. Request integration tests separately
-require SQL IDs/order/score-bit equality for repeated terms, ties and validity masks.
+require SQL IDs/order equality for repeated terms, ties and validity masks, and report score gaps.
 
 Native WAND was rejected: scoped averages can invalidate the stored block-max
 pair, and dynamic OR accumulation produced a 1 ULP discrepancy. The retained

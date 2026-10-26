@@ -2,7 +2,7 @@
 use crate::{
     lexical_consumer::ReaderHandle,
     lexical_snapshot::Checkpoint,
-    store::{RANKABLE, Store, VERSION_COLUMNS, bm25_sql, bm25_sum, memory_of},
+    store::{RANKABLE, Store, VERSION_COLUMNS, bm25_sql, memory_of},
     types::{Error, Hit, Memory, Result},
 };
 use chrono::{DateTime, Utc};
@@ -50,32 +50,27 @@ impl Read {
         })
     }
     pub async fn search(&mut self, reader: &ReaderHandle, limit: i64) -> Result<Vec<Hit>> {
-        usize::try_from(limit).map_err(|_| Error::InvalidInput("negative lexical limit".into()))?;
+        let count = usize::try_from(limit)
+            .map_err(|_| Error::InvalidInput("negative lexical limit".into()))?;
         self.used_tantivy = false;
         if let Some(searcher) = reader.at(&self.fence) {
             let scopes = self.scopes.clone();
             let terms = self.terms.clone();
             let at = self.as_of.map(|time| time.timestamp_micros());
-            let corpus = tokio::task::spawn_blocking(move || {
-                crate::lexical_scorer::sql_corpus(&searcher, &scopes, at, &terms)
+            let candidates = tokio::task::spawn_blocking(move || {
+                crate::lexical_scorer::exact_top(&searcher, &scopes, at, &terms, count)
             })
             .await;
-            if let Ok(Ok(corpus)) = corpus {
+            if let Ok(Ok(candidates)) = candidates {
                 // A savepoint keeps SQL fallback usable if the indexed calculation fails.
                 let mut scoring = self.tx.begin().await?;
-                let score = bm25_sum();
-                let rows = sqlx::query(sqlx::AssertSqlSafe(format!(r#"
-                    with st as (select ($1::jsonb->>'n')::float8 as n,
-                        ((($1->>'total_len')::numeric) / greatest(($1->>'n')::numeric,1))::float8 as avgdl),
-                    postings as (select memory_id,version,extract(epoch from recorded_at)::float8 as at,dl,lexeme,tf
-                        from jsonb_to_recordset($1->'postings')
-                        as p(memory_id text,version bigint,recorded_at timestamptz,dl float8,lexeme text,tf float8)),
-                    df as (select lexeme,count(*)::float8 as df from postings group by lexeme)
-                    select p.memory_id as id,p.version,p.at,{score} as score
-                        from postings p join df using(lexeme) cross join st
-                        group by p.memory_id,p.version,p.at
-                        order by score desc,p.at desc,p.memory_id limit $2
-                "#))).bind(sqlx::types::Json(corpus)).bind(limit).fetch_all(&mut *scoring).await;
+                // Only final candidates cross the connection; all BM25 arithmetic is native f64.
+                let rows = sqlx::query(r#"
+                    select memory_id as id,version,extract(epoch from recorded_at)::float8 as at,score
+                    from jsonb_to_recordset($1) as h(memory_id text,version bigint,
+                        recorded_at timestamptz,score float8)
+                    order by score desc,at desc,memory_id limit $2
+                "#).bind(sqlx::types::Json(candidates)).bind(limit).fetch_all(&mut *scoring).await;
                 let rows = match rows {
                     Ok(rows) => {
                         scoring.commit().await?;

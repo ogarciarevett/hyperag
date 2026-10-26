@@ -157,11 +157,14 @@ async fn sql_parity(store: Store) -> anyhow::Result<()> {
                     anyhow::ensure!(
                         actual.score.is_finite() && expected.score > 0.0 && relative <= 1e-12,
                         "BM25 score differs for {}: native={},SQL={}",
-                        actual.id, actual.score, expected.score
+                        actual.id,
+                        actual.score,
+                        expected.score
                     );
                     max_absolute = max_absolute.max(absolute);
                     max_relative = max_relative.max(relative);
-                    max_ulp = max_ulp.max(actual.score.to_bits().abs_diff(expected.score.to_bits()));
+                    max_ulp =
+                        max_ulp.max(actual.score.to_bits().abs_diff(expected.score.to_bits()));
                 }
                 comparisons += 1;
                 read.close().await?;
@@ -171,6 +174,33 @@ async fn sql_parity(store: Store) -> anyhow::Result<()> {
     println!(
         "native-sql-parity comparisons={comparisons} max_absolute={max_absolute:e} max_relative={max_relative:e} max_ulp={max_ulp}"
     );
+    // Three unequal contributions can change an unordered SQL sum at a tied rank boundary.
+    write(
+        &store,
+        "insert into memories(id,scope,kind,created_by,current_version) values
+        ('round-a','allowed','fact','fixture',1),('round-b','allowed','fact','fixture',1);
+        insert into memory_versions(memory_id,version,text,source,author,content_hash,recorded_at)
+        select id,1,'alpha beta beta gamma gamma gamma','fixture','fixture','hash','2025-01-01'
+            from memories where id in ('round-a','round-b')",
+    )
+    .await?;
+    consumer.update(&store.pool).await?;
+    for limit in [1, 24] {
+        let query = "gamma beta alpha alpha";
+        let mut read = Read::open(&store.pool, "reader", query, None).await?;
+        let actual = read.search(&consumer.reader(), limit).await?;
+        let expected = store.bm25(&["allowed".into()], query, limit, None).await?;
+        let signature = |hits: &[Hit]| {
+            hits.iter()
+                .map(|h| (h.id.clone(), h.score.to_bits(), h.at.to_bits()))
+                .collect::<Vec<_>>()
+        };
+        anyhow::ensure!(
+            !read.used_tantivy && signature(&actual) == signature(&expected),
+            "rounding-ambiguous ranks must use whole SQL fallback: limit={limit}"
+        );
+        read.close().await?;
+    }
     Ok(())
 }
 

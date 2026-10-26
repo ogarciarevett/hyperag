@@ -31,12 +31,6 @@ const MIGRATIONS: [&str; 6] = [
 const BM25_K1: f64 = 1.2;
 const BM25_B: f64 = 0.75;
 
-pub(super) fn bm25_sum() -> String {
-    format!(r#"sum(ln(1 + (st.n - df.df + 0.5) / (df.df + 0.5)) * (p.tf * ({BM25_K1} + 1))
-        / (p.tf + {BM25_K1} * (1 - {BM25_B} + {BM25_B} * p.dl / greatest(st.avgdl, 1)))
-        order by p.lexeme collate "C")"#)
-}
-
 /// The rows a caller may rank: current, active, not deleted, in a readable scope, valid at `asOf`.
 pub(super) const RANKABLE: &str = "m.deleted_at IS NULL AND v.version = m.current_version AND v.status = 'active'
   AND m.scope = ANY($1::text[])
@@ -48,7 +42,6 @@ pub(super) const VERSION_COLUMNS: &str = "m.id, m.scope, m.kind, v.version, v.te
 
 /// BM25 over the caller's readable corpus only (see the TypeScript store for the full rationale).
 pub(super) fn bm25_sql() -> String {
-    let score = bm25_sum();
     format!(
         "with scoped as (
   select v.memory_id, v.version, v.text_search, extract(epoch from v.recorded_at)::float8 as at
@@ -65,7 +58,9 @@ postings as (
    where s.text_search @@ query.q and u.lexeme in (select lexeme from terms)
 ),
 df as (select lexeme, count(*)::float8 as df from postings group by lexeme)
-select p.memory_id as id, p.at, {score} as score
+select p.memory_id as id, p.at,
+       sum(ln(1 + (st.n - df.df + 0.5) / (df.df + 0.5)) * (p.tf * ({BM25_K1} + 1))
+           / (p.tf + {BM25_K1} * (1 - {BM25_B} + {BM25_B} * p.dl / greatest(st.avgdl, 1)))) as score
   from postings p join df using (lexeme) cross join stats st
  group by p.memory_id, p.version, p.at
  order by score desc, p.at desc, p.memory_id
