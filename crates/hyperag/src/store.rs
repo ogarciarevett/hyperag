@@ -734,6 +734,7 @@ mod lexical_scorer_tests {
         assert_eq!(LexicalScorer::parse(None).unwrap(), LexicalScorer::Bm25);
         assert_eq!(LexicalScorer::parse(Some("bm25")).unwrap(), LexicalScorer::Bm25);
         assert_eq!(LexicalScorer::parse(Some("fast")).unwrap(), LexicalScorer::Fast);
+        assert!(LexicalScorer::parse(Some("indexed-bm25")).is_ok());
         assert!(LexicalScorer::parse(Some("unknown")).is_err());
     }
 }
