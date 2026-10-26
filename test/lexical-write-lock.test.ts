@@ -52,7 +52,9 @@ test("grep audit: direct pool access is confined to explicitly read-only Store m
     const source = read(path), methods = [...source.matchAll(header)];
     for (const [i, match] of methods.entries()) {
       const body = source.slice(match.index, methods[i+1]?.index ?? source.length);
-      if (!reads.includes(match[1]!) && /pool\s*\.\s*(?:query|connect|begin)\s*\(|(?:execute|fetch_\w+)\s*\(\s*&self\.pool\s*\)/u.test(body)) violations.push(`${path}:${match[1]}`);
+      const direct = /pool\s*\.\s*(?:query|connect|begin)\s*\(|(?:execute|fetch_\w+)\s*\(\s*&self\.pool\s*\)/u.test(body);
+      const writes = /["`]\s*(?:insert|update|delete|create|alter|drop|truncate)\b/iu.test(body);
+      if (direct && (!reads.includes(match[1]!) || writes)) violations.push(`${path}:${match[1]}`);
     }
   }
   expect(violations).toEqual([]);

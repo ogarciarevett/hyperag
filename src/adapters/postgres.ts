@@ -184,7 +184,9 @@ export function createPostgresStore(pool: Pool) {
 
   return {
     async migrate() {
-      for (const migration of MIGRATIONS) await pool.query(readFileSync(migration, "utf8"));
+      await tx(async (c) => {
+        for (const migration of MIGRATIONS) await c.query(readFileSync(migration, "utf8"));
+      });
     },
 
     async scopes(principal: string, permission: "read" | "write"): Promise<string[]> {
@@ -224,21 +226,23 @@ export function createPostgresStore(pool: Pool) {
 
     /** Registers a space and creates its own vector table; an existing space is left as it is. */
     async ensureSpace(space: EmbeddingSpace): Promise<string> {
-      const id = spaceId(space);
-      const table = vectorTable(id);
-      await pool.query(
-        `insert into embedding_spaces (id, model, revision, dimensions, normalized, preprocessing)
-         values ($1, $2, $3, $4, $5, $6) on conflict (id) do nothing`,
-        [id, space.model, space.revision, space.dimensions, space.normalized, space.preprocessing],
-      );
-      await pool.query(`create table if not exists ${table} (
-          memory_id text not null, version int not null, embedding vector(${space.dimensions}) not null,
-          primary key (memory_id, version),
-          foreign key (memory_id, version) references memory_versions (memory_id, version) on delete cascade)`);
-      await pool.query(
-        `create index if not exists ${table}_hnsw on ${table} using hnsw (embedding vector_cosine_ops)`,
-      );
-      return id;
+      return tx(async (c) => {
+        const id = spaceId(space);
+        const table = vectorTable(id);
+        await c.query(
+          `insert into embedding_spaces (id, model, revision, dimensions, normalized, preprocessing)
+           values ($1, $2, $3, $4, $5, $6) on conflict (id) do nothing`,
+          [id, space.model, space.revision, space.dimensions, space.normalized, space.preprocessing],
+        );
+        await c.query(`create table if not exists ${table} (
+            memory_id text not null, version int not null, embedding vector(${space.dimensions}) not null,
+            primary key (memory_id, version),
+            foreign key (memory_id, version) references memory_versions (memory_id, version) on delete cascade)`);
+        await c.query(
+          `create index if not exists ${table}_hnsw on ${table} using hnsw (embedding vector_cosine_ops)`,
+        );
+        return id;
+      });
     },
 
     /** Scopes of the live (not deleted) memories among `ids`. */
@@ -353,23 +357,25 @@ export function createPostgresStore(pool: Pool) {
     },
 
     async invalidate(id: string, reason: string, by: string) {
-      const head = await pool.query<{ status: string }>(
-        `select v.status from memories m join memory_versions v on v.memory_id = m.id and v.version = m.current_version
-          where m.id = $1 and m.deleted_at is null`,
-        [id],
-      );
-      const status = head.rows[0]?.status;
-      if (status !== undefined && status !== "active")
-        throw new HyperagError("not_active", `memory ${id} is ${status}`, { status });
-      const res = await pool.query(
-        `update memory_versions v set status = 'invalidated', status_reason = $2 || ' (by ' || $3 || ')',
-           valid_to = coalesce(v.valid_to, now())
-          from memories m
-         where m.id = v.memory_id and m.id = $1 and v.version = m.current_version and m.deleted_at is null
-           and v.status = 'active'`,
-        [id, reason, by],
-      );
-      if (res.rowCount === 0) throw new HyperagError("not_found", `memory ${id} not found`);
+      await tx(async (c) => {
+        const head = await c.query<{ status: string }>(
+          `select v.status from memories m join memory_versions v on v.memory_id = m.id and v.version = m.current_version
+            where m.id = $1 and m.deleted_at is null`,
+          [id],
+        );
+        const status = head.rows[0]?.status;
+        if (status !== undefined && status !== "active")
+          throw new HyperagError("not_active", `memory ${id} is ${status}`, { status });
+        const res = await c.query(
+          `update memory_versions v set status = 'invalidated', status_reason = $2 || ' (by ' || $3 || ')',
+             valid_to = coalesce(v.valid_to, now())
+            from memories m
+           where m.id = v.memory_id and m.id = $1 and v.version = m.current_version and m.deleted_at is null
+             and v.status = 'active'`,
+          [id, reason, by],
+        );
+        if (res.rowCount === 0) throw new HyperagError("not_found", `memory ${id} not found`);
+      });
     },
 
     /** Removes every version and vector; the memories row stays as a content-free tombstone. */
@@ -490,12 +496,14 @@ export function createPostgresStore(pool: Pool) {
     },
 
     async putVectors(space: string, rows: ReadonlyArray<{ id: string; version: number; values: number[] }>) {
-      for (const row of rows)
-        await pool.query(
-          `insert into ${vectorTable(space)} (memory_id, version, embedding) values ($1, $2, $3::vector)
-           on conflict do nothing`,
-          [row.id, row.version, vectorLiteral(row.values)],
-        );
+      await tx(async (c) => {
+        for (const row of rows)
+          await c.query(
+            `insert into ${vectorTable(space)} (memory_id, version, embedding) values ($1, $2, $3::vector)
+             on conflict do nothing`,
+            [row.id, row.version, vectorLiteral(row.values)],
+          );
+      });
     },
 
     async stats() {
