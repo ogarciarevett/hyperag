@@ -27,11 +27,13 @@ Query terms are deduplicated and summed in lexeme order. A bounded heap selects
 score/time candidates, retaining every cutoff tie; PostgreSQL applies its ID
 collation to those final candidates. No postings or scoring expression are sent
 to PostgreSQL. Distant recorded times with unsafe float8 ordering fall back to SQL.
-Near-tied scores with incompatible arithmetic inputs or unordered multi-term sums
-replace the whole request with SQL. Oversized tie sets also fall back.
+Rounding ties retain native scores and deterministic score/time/ID ordering.
+Only incompatible metadata/readers or request errors trigger whole-list SQL fallback.
 The default SQL query, including its unordered SUM, is unchanged from the baseline;
 `fast` and `indexed-bm25` keep their existing behavior. Floating-point rounding may
-differ, so parity fixtures require equal IDs/order/timestamps and report maximum
+differ. Parity requires identical IDs/timestamps, strict order between SQL-anchored
+4-ULP score groups, and equal membership inside each group; anchoring prevents
+transitive tolerance widening. Tests reject any non-tie position change and report
 absolute, relative and ULP score gaps. Frozen-30 parity and latency require separate
 evidence on a current immutable copy.
 
@@ -64,7 +66,7 @@ The independent reference builds an index containing only authorized documents,
 uses native TermQuery weights without pruning, adds their contributions in the
 same lexeme order and type, then sorts all matches. Tests require identical IDs,
 versions, recorded times and native score bits. Request integration tests separately
-require SQL IDs/order equality for repeated terms, ties and validity masks, and report score gaps.
+require equal SQL IDs and non-tie positions, equal tie-group membership and score gaps.
 
 Native WAND was rejected: scoped averages can invalidate the stored block-max
 pair, and dynamic OR accumulation produced a 1 ULP discrepancy. The retained

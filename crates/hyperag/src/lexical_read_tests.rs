@@ -17,6 +17,64 @@ fn default_bm25_sql_keeps_original_query_bytes() {
     );
 }
 
+fn same_rank_groups(actual: &[Hit], expected: &[Hit]) -> bool {
+    let signature = |hits: &[Hit]| {
+        let mut ids: Vec<_> = hits
+            .iter()
+            .map(|h| (h.id.clone(), h.at.to_bits()))
+            .collect();
+        ids.sort_unstable();
+        ids
+    };
+    if actual.len() != expected.len() {
+        return false;
+    }
+    let mut start = 0;
+    while start < expected.len() {
+        let end = (start + 1..expected.len())
+            .find(|&i| {
+                expected[start]
+                    .score
+                    .to_bits()
+                    .abs_diff(expected[i].score.to_bits())
+                    > 4
+            })
+            .unwrap_or(expected.len());
+        if signature(&actual[start..end]) != signature(&expected[start..end]) {
+            return false;
+        }
+        start = end;
+    }
+    true
+}
+
+#[test]
+fn rank_groups_allow_four_ulp_without_crossing_or_chaining() {
+    let hits = |values: &[(&str, u64)]| {
+        values
+            .iter()
+            .map(|&(id, ulp)| Hit {
+                id: id.into(),
+                score: f64::from_bits(1.0_f64.to_bits() + ulp),
+                at: 1.0,
+            })
+            .collect::<Vec<_>>()
+    };
+    let expected = hits(&[("a", 8), ("b", 4), ("c", 0)]);
+    assert!(same_rank_groups(
+        &hits(&[("b", 4), ("a", 8), ("c", 0)]),
+        &expected
+    ));
+    assert!(!same_rank_groups(
+        &hits(&[("a", 8), ("c", 0), ("b", 4)]),
+        &expected
+    ));
+    assert!(!same_rank_groups(
+        &hits(&[("b", 0), ("a", 5)]),
+        &hits(&[("a", 5), ("b", 0)])
+    ));
+}
+
 #[tokio::test]
 async fn authorized_snapshot_keeps_fences_payloads_and_whole_fallback() -> anyhow::Result<()> {
     isolated(
@@ -27,9 +85,9 @@ async fn authorized_snapshot_keeps_fences_payloads_and_whole_fallback() -> anyho
 }
 
 #[tokio::test]
-async fn current_reader_equals_sql_ids_order_and_reports_score_gap() -> anyhow::Result<()> {
+async fn current_reader_preserves_sql_rank_groups_and_reports_score_gap() -> anyhow::Result<()> {
     isolated(
-        "lexical_read::tests::current_reader_equals_sql_ids_order_and_reports_score_gap",
+        "lexical_read::tests::current_reader_preserves_sql_rank_groups_and_reports_score_gap",
         sql_parity,
     )
     .await
@@ -102,12 +160,15 @@ async fn sql_parity(store: Store) -> anyhow::Result<()> {
         ('tie_é','allowed','fact','fixture',1),('newer','allowed','fact','fixture',1),
         ('tie_e','allowed','fact','fixture',1),('starts','allowed','fact','fixture',1),
         ('tf-17','allowed','fact','fixture',1),('tf-18','allowed','fact','fixture',1),
+        ('round-a','allowed','fact','fixture',1),('round-b','allowed','fact','fixture',1),
         ('empty','allowed','fact','fixture',1),('hidden','denied','fact','fixture',1);
         insert into memory_versions(memory_id,version,text,source,author,content_hash,recorded_at)
         select id,1,case id when 'A' then 'alpha beta beta beta'
             when 'B' then 'alpha beta gamma' when 'empty' then '!!!'
             when 'tf-17' then 'alpha ' || repeat('beta ',17)
             when 'tf-18' then 'alpha ' || repeat('beta ',18)
+            when 'round-a' then 'alpha beta beta gamma gamma gamma'
+            when 'round-b' then 'alpha beta beta gamma gamma gamma'
             when 'hidden' then 'alpha alpha alpha' else 'alpha beta beta beta' end,
             'fixture','fixture','hash',case when id='newer' then '2025-01-02'::timestamptz
             else '2025-01-01'::timestamptz end from memories;
@@ -142,16 +203,12 @@ async fn sql_parity(store: Store) -> anyhow::Result<()> {
                 let actual = read.search(&consumer.reader(), limit).await?;
                 anyhow::ensure!(read.used_tantivy, "current reader fell back: {query}");
                 let expected = store.bm25(&["allowed".into()], query, limit, at).await?;
-                let signature = |hits: &[Hit]| {
-                    hits.iter()
-                        .map(|h| (h.id.clone(), h.at.to_bits()))
-                        .collect::<Vec<_>>()
-                };
                 anyhow::ensure!(
-                    signature(&actual) == signature(&expected),
+                    same_rank_groups(&actual, &expected),
                     "current reader differs: query={query},limit={limit},at={at:?}\nactual={actual:?}\nSQL={expected:?}"
                 );
-                for (actual, expected) in actual.iter().zip(&expected) {
+                for actual in &actual {
+                    let expected = expected.iter().find(|h| h.id == actual.id).unwrap();
                     let absolute = (actual.score - expected.score).abs();
                     let relative = absolute / expected.score.abs().max(f64::MIN_POSITIVE);
                     anyhow::ensure!(
@@ -174,33 +231,6 @@ async fn sql_parity(store: Store) -> anyhow::Result<()> {
     println!(
         "native-sql-parity comparisons={comparisons} max_absolute={max_absolute:e} max_relative={max_relative:e} max_ulp={max_ulp}"
     );
-    // Three unequal contributions can change an unordered SQL sum at a tied rank boundary.
-    write(
-        &store,
-        "insert into memories(id,scope,kind,created_by,current_version) values
-        ('round-a','allowed','fact','fixture',1),('round-b','allowed','fact','fixture',1);
-        insert into memory_versions(memory_id,version,text,source,author,content_hash,recorded_at)
-        select id,1,'alpha beta beta gamma gamma gamma','fixture','fixture','hash','2025-01-01'
-            from memories where id in ('round-a','round-b')",
-    )
-    .await?;
-    consumer.update(&store.pool).await?;
-    for limit in [1, 24] {
-        let query = "gamma beta alpha alpha";
-        let mut read = Read::open(&store.pool, "reader", query, None).await?;
-        let actual = read.search(&consumer.reader(), limit).await?;
-        let expected = store.bm25(&["allowed".into()], query, limit, None).await?;
-        let signature = |hits: &[Hit]| {
-            hits.iter()
-                .map(|h| (h.id.clone(), h.score.to_bits(), h.at.to_bits()))
-                .collect::<Vec<_>>()
-        };
-        anyhow::ensure!(
-            !read.used_tantivy && signature(&actual) == signature(&expected),
-            "rounding-ambiguous ranks must use whole SQL fallback: limit={limit}"
-        );
-        read.close().await?;
-    }
     Ok(())
 }
 

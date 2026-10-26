@@ -16,8 +16,6 @@ pub(super) struct ExactHit {
     version: i64,
     recorded_at: chrono::DateTime<chrono::Utc>,
     score: f64,
-    #[serde(skip)]
-    contributions: Vec<(f64, u32, u64, usize)>,
 }
 
 /// Score native postings in float8; retain cutoff ties for the database's ID collation.
@@ -111,8 +109,8 @@ pub(super) fn exact_top(
     let mut hits = Vec::new();
     for (ordinal, segment) in searcher.segment_readers().iter().enumerate() {
         let inverted = segment.inverted_index(field)?;
-        let mut scores = vec![Vec::new(); segment.max_doc() as usize];
-        for (term_index, (term, idf)) in terms.iter().zip(&weights).enumerate() {
+        let mut scores = vec![None; segment.max_doc() as usize];
+        for (term, idf) in terms.iter().zip(&weights) {
             if let Some(mut postings) =
                 inverted.read_postings(term, IndexRecordOption::WithFreqs)?
             {
@@ -120,21 +118,15 @@ pub(super) fn exact_top(
                     let doc = postings.doc() as usize;
                     if let Some((_, _, _, dl)) = &masks[ordinal][doc] {
                         let tf = f64::from(postings.term_freq());
-                        scores[doc].push((
-                            idf * (tf * (1.2 + 1.0))
-                                / (tf + 1.2 * (1.0 - 0.75 + 0.75 * *dl as f64 / average)),
-                            postings.term_freq(),
-                            *dl,
-                            term_index,
-                        ));
+                        *scores[doc].get_or_insert(0.0f64) += idf * (tf * (1.2 + 1.0))
+                            / (tf + 1.2 * (1.0 - 0.75 + 0.75 * *dl as f64 / average));
                     }
                     postings.advance();
                 }
             }
         }
-        for (doc, contributions) in scores.into_iter().enumerate() {
-            if !contributions.is_empty() {
-                let score: f64 = contributions.iter().map(|x| x.0).sum();
+        for (doc, score) in scores.into_iter().enumerate() {
+            if let Some(score) = score {
                 anyhow::ensure!(score.is_finite() && score >= 0.0, "invalid lexical score");
                 let (id, version, at, _) = masks[ordinal][doc].take().unwrap();
                 heap.push(std::cmp::Reverse((score.to_bits(), at)));
@@ -147,31 +139,14 @@ pub(super) fn exact_top(
                     recorded_at: chrono::DateTime::from_timestamp_micros(at)
                         .ok_or_else(|| anyhow::anyhow!("invalid recorded time"))?,
                     score,
-                    contributions,
                 });
             }
         }
     }
-    let near = |a: f64, b: f64| (a - b).abs() <= a.max(b) * (terms.len() as f64 * 1e-12);
     if heap.len() == limit {
-        let cutoff = f64::from_bits(heap.peek().unwrap().0.0);
-        hits.retain(|h| h.score >= cutoff || near(h.score, cutoff));
+        let cutoff = heap.peek().unwrap().0;
+        hits.retain(|h| (h.score.to_bits(), h.recorded_at.timestamp_micros()) >= cutoff);
     }
-    hits.sort_by(|a, b| b.score.total_cmp(&a.score));
-    for pair in hits.windows(2) {
-        if near(pair[0].score, pair[1].score) {
-            let terms = &pair[0].contributions;
-            // Shared <=2-term inputs are insensitive to SQL's unordered SUM.
-            anyhow::ensure!(
-                terms == &pair[1].contributions && terms.len() <= 2,
-                "rounding-ambiguous lexical order"
-            );
-        }
-    }
-    anyhow::ensure!(
-        hits.len() <= limit.saturating_mul(64).min(4096),
-        "excessive lexical ties"
-    );
     Ok(hits)
 }
 
