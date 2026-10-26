@@ -70,6 +70,7 @@ test("ready search reads indexed postings with no source-table or whole-document
  expect(nodes.filter(n=>n["Node Type"]==='Function Scan').every(n=>n["Actual Loops"]<=1)).toBe(true);
  expect(nodes.some(n=>n["Node Type"]==='Function Scan'&&n["Actual Loops"]===1)).toBe(true);
  expect(nodes.filter(n=>['memory_versions','memories'].includes(n["Relation Name"])||(n["Relation Name"]==='lexical_documents'&&n["Node Type"]==='Seq Scan')).every(n=>n["Actual Loops"]===0)).toBe(true);
+ expect(nodes.filter(n=>n["Relation Name"]==='lexical_postings'&&n["Node Type"]==='Seq Scan').every(n=>n["Actual Loops"]===0)).toBe(true);
  console.info('indexed-bm25-fixture',JSON.stringify({selectiveMs:plan["Execution Time"],broadMs:broad["Execution Time"]}));
 });
 test("metadata/postings backfill is idempotent, bounded and matches every current source lexeme",async()=>{
@@ -109,3 +110,40 @@ async function postingsOracle(){
  expect(actual.length).toBeGreaterThan(3000);
  expect(actual).toEqual(expected);
 }
+
+test("100k broad query reads only indexed term/scope postings",async()=>{
+ await pool.query("select lexical_cache_backfill(64); select lexical_postings_backfill(64)");
+ // Bulk-load equivalent synthetic source/cache rows so this tests the planner, not backfill throughput.
+ await pool.query(`begin; select pg_advisory_xact_lock(1213811052,1);
+  alter table memories disable trigger lexical_memory_sync;
+  alter table memory_versions disable trigger lexical_version_sync;
+  alter table lexical_documents disable trigger lexical_delta;
+  alter table lexical_documents disable trigger lexical_postings_sync;
+  insert into memories(id,scope,kind,created_by,current_version)
+   select 'large-'||n,case when n%7=0 then 'hidden' else 'allowed' end,'fact','fixture',1 from generate_series(1,100000)n;
+  insert into memory_versions(memory_id,version,text,source,author,content_hash)
+   select id,1,'ordinary quartz common term'||substring(id from 7),'fixture','fixture',id from memories where id like 'large-%';
+  insert into lexical_documents(memory_id,version,scope,valid_from,valid_to,doc_len,tf,current_version,status,recorded_at)
+   select m.id,v.version,m.scope,'-infinity','infinity',length(v.text_search),
+    (select jsonb_object_agg(u.lexeme,coalesce(array_length(u.positions,1),1)) from unnest(v.text_search)u),
+    m.current_version,v.status,v.recorded_at from memories m join memory_versions v on v.memory_id=m.id;
+  insert into lexical_corpus_stats select scope,valid_from,valid_to,count(*),sum(doc_len) from lexical_documents group by scope,valid_from,valid_to;
+  insert into lexical_term_stats select d.scope,k.key,d.valid_from,d.valid_to,count(*) from lexical_documents d cross join lateral jsonb_each(d.tf)k group by d.scope,k.key,d.valid_from,d.valid_to;
+  insert into lexical_postings select d.posting_id,k.key,d.scope,k.value::int from lexical_documents d cross join lateral jsonb_each_text(d.tf)k;
+  alter table memories enable trigger lexical_memory_sync;
+  alter table memory_versions enable trigger lexical_version_sync;
+  alter table lexical_documents enable trigger lexical_delta;
+  alter table lexical_documents enable trigger lexical_postings_sync; commit`);
+ for(const name of ["memories","memory_versions","lexical_documents","lexical_postings","lexical_corpus_stats","lexical_term_stats"])
+  await pool.query(`vacuum(analyze) ${name}`);
+ expect(Number((await pool.query("select count(*)n from memory_versions")).rows[0].n)).toBe(100000);
+ expect(Number((await pool.query("select count(*)n from lexical_postings")).rows[0].n)).toBe(400000);
+ await compare(["allowed"],null,"ordinary quartz");
+ const plan=(await pool.query(`explain(analyze,buffers,format json) ${indexed}`,[["allowed"],null,"ordinary quartz",24])).rows[0]["QUERY PLAN"][0];
+ const nodes:any[]=[];const walk=(n:any)=>{nodes.push(n);for(const c of n.Plans??[])walk(c);};walk(plan.Plan);
+ expect(nodes.filter(n=>n["Relation Name"]==='lexical_postings'&&n["Node Type"]==='Seq Scan').every(n=>n["Actual Loops"]===0)).toBe(true);
+ const termScans=nodes.filter(n=>n["Index Name"]==='lexical_postings_pkey'&&n["Actual Loops"]>0);
+ expect(termScans.length).toBeGreaterThan(0);
+ expect(termScans.every(n=>n["Index Cond"]?.includes('lexeme')&&n["Index Cond"]?.includes('scope'))).toBe(true);
+ console.info('postings-100k-plan',JSON.stringify({executionMs:plan["Execution Time"],sourceRows:100000,postings:400000}));
+},180000);
