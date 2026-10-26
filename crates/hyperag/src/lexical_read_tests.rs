@@ -9,12 +9,41 @@ use std::str::FromStr;
 
 #[tokio::test]
 async fn authorized_snapshot_keeps_fences_payloads_and_whole_fallback() -> anyhow::Result<()> {
+    isolated(
+        "authorized_snapshot_keeps_fences_payloads_and_whole_fallback",
+        exercise,
+    )
+    .await
+}
+
+#[tokio::test]
+async fn current_reader_equals_sql_ids_order_and_score_bits() -> anyhow::Result<()> {
+    isolated(
+        "current_reader_equals_sql_ids_order_and_score_bits",
+        sql_parity,
+    )
+    .await
+}
+
+#[tokio::test]
+async fn concurrent_opt_in_vector_requests_fit_the_service_pool() -> anyhow::Result<()> {
+    isolated(
+        "concurrent_opt_in_vector_requests_fit_the_service_pool",
+        concurrent_vectors,
+    )
+    .await
+}
+
+async fn isolated(
+    test: &str,
+    exercise: impl AsyncFn(Store) -> anyhow::Result<()>,
+) -> anyhow::Result<()> {
     // Run the opt-in environment in its own process, without racing other tests' defaults.
     if std::env::var("HYPERAG_LEXICAL_READ_CHILD").as_deref() != Ok("1") {
         let status = std::process::Command::new(std::env::current_exe()?)
             .args([
                 "--exact",
-                "lexical_read::tests::authorized_snapshot_keeps_fences_payloads_and_whole_fallback",
+                &format!("lexical_read::tests::{test}"),
                 "--nocapture",
                 "--test-threads=1",
             ])
@@ -39,7 +68,8 @@ async fn authorized_snapshot_keeps_fences_payloads_and_whole_fallback() -> anyho
         .execute(&admin)
         .await?;
     let pool = PgPoolOptions::new()
-        .max_connections(4)
+        .max_connections(8)
+        .acquire_timeout(std::time::Duration::from_secs(3))
         .connect_with(options.database(&name))
         .await?;
     let result = async {
@@ -55,6 +85,144 @@ async fn authorized_snapshot_keeps_fences_payloads_and_whole_fallback() -> anyho
     .execute(&admin)
     .await?;
     admin.close().await;
+    result
+}
+
+async fn sql_parity(store: Store) -> anyhow::Result<()> {
+    write(
+        &store,
+        "insert into memories(id,scope,kind,created_by,current_version) values
+        ('A','allowed','fact','fixture',1),('B','allowed','fact','fixture',1),
+        ('tie-a','allowed','fact','fixture',1),('tie-A','allowed','fact','fixture',1),
+        ('tie_é','allowed','fact','fixture',1),('newer','allowed','fact','fixture',1),
+        ('empty','allowed','fact','fixture',1),('hidden','denied','fact','fixture',1);
+        insert into memory_versions(memory_id,version,text,source,author,content_hash,recorded_at)
+        select id,1,case id when 'A' then 'alpha beta beta beta'
+            when 'B' then 'alpha beta gamma' when 'empty' then '!!!'
+            when 'hidden' then 'alpha alpha alpha' else 'alpha beta beta beta' end,
+            'fixture','fixture','hash',case when id='newer' then '2025-01-02'::timestamptz
+            else '2025-01-01'::timestamptz end from memories;
+        update memory_versions set valid_to='2025-01-02' where memory_id='B'",
+    )
+    .await?;
+    store.grant("reader", "allowed", "read", "fixture").await?;
+    let scratch = tempfile::tempdir()?;
+    let mut consumer = Consumer::open(&scratch.path().join("index"))?;
+    consumer.update(&store.pool).await?;
+    for at in [None, crate::store::parse_time("2025-01-02T00:00:00Z")] {
+        for query in [
+            "alpha",
+            "beta",
+            "gamma beta ALPHA! alpha",
+            "beta alpha",
+            "missing",
+            "!!!",
+        ] {
+            for limit in [1, 3, 24] {
+                let mut read = Read::open(&store.pool, "reader", query, at).await?;
+                let actual = read.search(&consumer.reader(), limit).await?;
+                anyhow::ensure!(read.used_tantivy, "current reader fell back: {query}");
+                let expected = store.bm25(&["allowed".into()], query, limit, at).await?;
+                let signature = |hits: &[Hit]| {
+                    hits.iter()
+                        .map(|h| (h.id.clone(), h.score.to_bits(), h.at.to_bits()))
+                        .collect::<Vec<_>>()
+                };
+                anyhow::ensure!(
+                    signature(&actual) == signature(&expected),
+                    "current reader differs: query={query},limit={limit},at={at:?}\nactual={actual:?}\nSQL={expected:?}"
+                );
+                read.close().await?;
+            }
+        }
+    }
+    Ok(())
+}
+
+async fn concurrent_vectors(store: Store) -> anyhow::Result<()> {
+    use axum::{Json, Router, routing::post};
+    use std::sync::Arc;
+    use tokio::{sync::Barrier, task::JoinSet};
+    let barrier = Arc::new(Barrier::new(8));
+    let app = Router::new().route(
+        "/v1/embeddings",
+        post(move || {
+            let barrier = barrier.clone();
+            async move {
+                // All eight request snapshots own a connection before any embedding completes.
+                barrier.wait().await;
+                Json(serde_json::json!({"data":[{"index":0,"embedding":[1.0,0.0,0.0]}]}))
+            }
+        }),
+    );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
+    let spec = format!(
+        "http:http://{}?model=fixture&dims=3",
+        listener.local_addr()?
+    );
+    let server = tokio::spawn(async move { axum::serve(listener, app).await });
+    let result = async {
+        let embedder = crate::models::Embedder::from_spec(&spec).await?.unwrap();
+        let space = store.ensure_space(embedder.describe()).await?;
+        write(
+            &store,
+            "insert into memories(id,scope,kind,created_by,current_version)
+            values('vector','allowed','fact','fixture',1);
+            insert into memory_versions(memory_id,version,text,source,author,content_hash)
+            values('vector',1,'alpha','fixture','fixture','hash')",
+        )
+        .await?;
+        store.grant("reader", "allowed", "read", "fixture").await?;
+        store
+            .put_vectors(&space, &[("vector".into(), 1, vec![1.0, 0.0, 0.0])])
+            .await?;
+        let scratch = tempfile::tempdir()?;
+        let mut consumer = Consumer::open(&scratch.path().join("index"))?;
+        consumer.update(&store.pool).await?;
+        for reader in [ReaderHandle::default(), consumer.reader()] {
+            let mut attached = store.clone();
+            attached.lexical_reader = reader;
+            let mut config = Config::new(attached);
+            config.embedder = crate::models::Embedder::from_spec(&spec).await?;
+            let core = Arc::new(Hyperag::init(config).await?);
+            let mut tasks = JoinSet::new();
+            for _ in 0..8 {
+                let core = core.clone();
+                tasks.spawn(async move {
+                    core.retrieve(
+                        "reader",
+                        "alpha",
+                        &RetrieveOptions {
+                            channels: Some(Channels {
+                                graph: Some(false),
+                                rerank: Some(false),
+                                ..Default::default()
+                            }),
+                            ..Default::default()
+                        },
+                    )
+                    .await
+                });
+            }
+            tokio::time::timeout(std::time::Duration::from_secs(10), async {
+                while let Some(result) = tasks.join_next().await {
+                    let retrieval = result??;
+                    anyhow::ensure!(
+                        retrieval.paths_used.iter().any(|p| p == "vector")
+                            && retrieval.items.len() == 1
+                            && retrieval.items[0].channels.contains_key("vector"),
+                        "vector channel lost at pool capacity: {:?}",
+                        retrieval.limitations
+                    );
+                }
+                Ok::<_, anyhow::Error>(())
+            })
+            .await??;
+        }
+        Ok(())
+    }
+    .await;
+    server.abort();
     result
 }
 
