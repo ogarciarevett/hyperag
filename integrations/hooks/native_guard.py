@@ -475,6 +475,7 @@ def _hook(config, event, harness):
         shared_started = _shared_time() - age
         _step(trace, 'hook', 'watchdog_ready')
         arm(config, trace=trace)
+        _step(trace, 'hook', 'inflight_write')
         _write(inflight, {'pid': os.getpid(), 'started': shared_started, 'started_at': float(epoch),
                           'agent': harness, 'event': event}, durable=False)
         _step(trace, 'hook', 'read_input')
@@ -504,9 +505,10 @@ def _hook(config, event, harness):
         error = type(exception).__name__
     latency = round((time.monotonic() - STARTED) * 1000 + TAIL_MARGIN_MS, 3)
     row = {'event': event, 'agent': harness, 'scope': report.get('scope'), 'cohort': 'controlled' if os.getenv('HYPERAG_HOOK_CHECK_COHORT') == 'controlled' else 'organic', 'latency_ms': latency, 'error': error}
-    monitor_trace = _trace('hook_monitor', 'record_call', agent=harness, event=event, child_pid=trace.get('child_pid'))
+    monitor_trace = _trace('hook_monitor', 'record_call', agent=harness, event=event)
     try:
         if not error and report.get('category') in SKIPS | {'cancelled'}:
+            _step(monitor_trace, 'hook_monitor', 'record_skip')
             _append(directory / 'skips.jsonl', {'category': report['category']})
             if latency > 1000:
                 policy_trace = _trace('hook_policy', 'single_call_limit', _started=STARTED,
