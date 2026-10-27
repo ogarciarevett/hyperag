@@ -179,7 +179,7 @@ at runtime; re-run install to reconcile the native subscriptions. Session start 
 recent context, prompt stores up to 4,000 characters, and session end stores a marker.
 The token comes from the named environment variable, or the optional private `token_file`,
 and is never copied into generated settings. Native hooks use a current-thread runtime;
-every project call fetches fresh permissions, without a local grant cache. See the
+every scope call fetches fresh permissions, without a local grant cache. See the
 [native hook path and hosted measurement](integrations/hooks/FAST_PATH.md).
 Gemini's [environment redaction](https://geminicli.com/docs/hooks/best-practices/#sanitize-environment)
 filters token names. Setup adds only `token_env` to

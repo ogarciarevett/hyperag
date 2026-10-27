@@ -124,6 +124,20 @@ class FastPath(unittest.TestCase):
         self.assertEqual((self.backend.scope_calls, self.backend.recent_calls, self.backend.posts), (5, 2, 0))
         self.no_runtime_state()
 
+    def test_fixed_non_project_scope_preflights_and_only_writes_when_granted(self):
+        scope = 'personal:fixture'
+        self.configure(scope=scope)
+        for index, event in enumerate(('session-start', 'prompt', 'session-end'), 1):
+            with self.subTest(event=event):
+                denied, _ = self.hook(event)
+                self.success(denied); self.assertEqual(denied.stdout, '')
+                self.assertEqual((self.backend.scope_calls, self.backend.recent_calls, self.backend.posts), (index, 0, 0))
+        self.no_runtime_state()
+        self.backend.granted.add(scope)
+        allowed, _ = self.hook('prompt'); self.success(allowed); self.assertEqual(allowed.stdout, '')
+        self.assertEqual((self.backend.scope_calls, self.backend.recent_calls, self.backend.posts), (4, 0, 1))
+        self.no_runtime_state()
+
     def test_project_credential_and_endpoint_isolation(self):
         first, _ = self.hook(); self.success(first)
         self.configure(scope='project:other')

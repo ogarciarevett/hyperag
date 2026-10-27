@@ -114,14 +114,12 @@ async fn handle(event: &str, harness: Option<&str>, config: &crate::hook_setup::
         anyhow::ensure!(status.is_success(), "service answered {status}");
         Ok::<Value, anyhow::Error>(body)
     };
-    if scope.starts_with("project:") {
-        let grants = send(http.get(format!("{base}/v1/scopes"))).await?;
-        let grants: ScopeGrants = serde_json::from_value(grants)
-            .map_err(|_| anyhow::anyhow!("invalid scope grant response"))?;
-        if !grants.read.iter().any(|value| value == scope)
-            || !grants.write.iter().any(|value| value == scope) {
-            return Ok(String::new());
-        }
+    let grants = send(http.get(format!("{base}/v1/scopes"))).await?;
+    let grants: ScopeGrants = serde_json::from_value(grants)
+        .map_err(|_| anyhow::anyhow!("invalid scope grant response"))?;
+    if !grants.read.iter().any(|value| value == scope)
+        || !grants.write.iter().any(|value| value == scope) {
+        return Ok(String::new());
     }
     match event {
         "session-start" => {
