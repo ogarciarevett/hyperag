@@ -31,6 +31,9 @@ current=@CURRENT_PID@
 actual_run=subprocess.run
 actual_kill=os.kill
 armed=False
+late_race=@LATE_RACE@
+stale_checks=0
+live_start=None
 
 def fields(pid):
     try:return (Path('/proc')/str(pid)/'stat').read_text().rsplit(')',1)[1].split()
@@ -48,21 +51,26 @@ def kill(pid, signum):
     else:actual_kill(pid,signum)
 
 def metadata(command, **kwargs):
-    global armed
+    global armed,stale_checks,live_start
     if command[0]!='/bin/ps':return actual_run(command,**kwargs)
     pid=int(command[2]);field=command[-1];value=fields(pid)
     if value is None:return subprocess.CompletedProcess(command,1,stdout='')
-    if field=='stat=':text=value[0]
+    if pid==current and field=='stat=' and stale_checks==2:
+        text='S';stale_checks=1
+    elif pid==current and field=='lstart=' and stale_checks==1:
+        text=live_start;stale_checks=0
+    elif field=='stat=':text=value[0]
     elif field=='lstart=':text=value[19]
     elif field=='comm=':
         if pid==current and armed:
-            armed=False;actual_kill(pid,signal.SIGCONT)
+            armed=False;live_start=value[19];actual_kill(pid,signal.SIGCONT)
             deadline=time.monotonic()+15
             while (value:=fields(pid)) is not None and value[0]!='Z':
                 if time.monotonic()>deadline:raise TimeoutError('fixture service did not exit')
                 time.sleep(.01)
             Path(@RACE_PROOF@).write_text(json.dumps({'executable_metadata':'defunct'}))
             text='<defunct>'
+            if late_race:stale_checks=2
         else:text=str((Path('/proc')/str(pid)/'exe').resolve())
     else:raise AssertionError('unexpected metadata field')
     return subprocess.CompletedProcess(command,0,stdout=text)
@@ -70,6 +78,11 @@ def metadata(command, **kwargs):
 module.sys.platform='darwin'
 module.subprocess.run=metadata
 module.os.kill=kill
+if late_race:
+    spec=importlib.util.spec_from_file_location('switch',Path(@MODULE@).with_name('switch.py'))
+    switch=importlib.util.module_from_spec(spec);spec.loader.exec_module(switch)
+    switch.rollback=module
+    raise SystemExit(switch.main(sys.argv[1:]))
 raise SystemExit(module.main(sys.argv[1:]))
 '''
 
@@ -81,7 +94,10 @@ class ServiceRecoveryTest(unittest.TestCase):
     def test_macos_metadata_exit_race_restores_prior_service(self):
         self.assert_real_service_recovery(force_exit_race=True)
 
-    def assert_real_service_recovery(self, force_exit_race):
+    def test_forward_switch_tolerates_late_defunct_metadata(self):
+        self.assert_real_service_recovery(force_exit_race=True, forward=True)
+
+    def assert_real_service_recovery(self, force_exit_race, forward=False):
         current = Path(os.environ["HYPERAG_RECOVERY_CURRENT_BIN"]).resolve()
         old = Path(os.environ["HYPERAG_RECOVERY_OLD_BIN"]).resolve()
         self.assertNotEqual(rollback.binary_hash(current), rollback.binary_hash(old))
@@ -108,7 +124,7 @@ class ServiceRecoveryTest(unittest.TestCase):
                 argv = ["serve", "--host", "127.0.0.1", "--port", str(port)]
                 current_environment = dict(environment, HOME=str(root), HYPERAG_LEXICAL_SCORER="tantivy",
                                            HYPERAG_LEXICAL_INDEX_ROOT=str(root / "index"))
-                service = subprocess.Popen([str(current), *argv], env=current_environment, stdin=subprocess.DEVNULL,
+                service = subprocess.Popen([str(old if forward else current), *argv], env=environment if forward else current_environment, stdin=subprocess.DEVNULL,
                                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
                 hook = None
                 def healthy():
@@ -117,14 +133,14 @@ class ServiceRecoveryTest(unittest.TestCase):
                             return json.load(response).get("ok") is True
                     except OSError:
                         return False
-                def wait_for(predicate, timeout=40, message="isolated service recovery checkpoint timed out"):
+                def wait_for(predicate, timeout=40, message="isolated service recovery checkpoint timed out", check_failure=True):
                     deadline = time.monotonic() + timeout
                     while time.monotonic() < deadline:
-                        status_file = root / "rollback-status.json"
-                        if status_file.exists():
+                        status_file = root / ("switch-status.json" if forward else "rollback-status.json")
+                        if check_failure and status_file.exists():
                             state = json.loads(status_file.read_text())
                             if state.get("state") == "failed":
-                                self.fail("rollback failed: " + state.get("error_type", "unknown") + " phase=" + state.get("phase", "unknown"))
+                                self.fail(("switch" if forward else "rollback") + " failed: " + state.get("error_type", state.get("category", "unknown")) + " phase=" + state.get("phase", "unknown"))
                         if predicate():return
                         time.sleep(.05)
                     self.fail(message)
@@ -138,9 +154,30 @@ class ServiceRecoveryTest(unittest.TestCase):
                         config["current"]["start_ticks"] = "darwin:" + config["current"]["start_ticks"]
                         adapter = root / "darwin-metadata.py"
                         adapter.write_text(DARWIN_METADATA_ADAPTER.replace("@MODULE@", repr(str(DIRECTORY / "rollback.py")))
-                                           .replace("@CURRENT_PID@", str(service.pid)).replace("@RACE_PROOF@", repr(str(root / "exit-race.json"))))
+                                           .replace("@CURRENT_PID@", str(service.pid)).replace("@RACE_PROOF@", repr(str(root / "exit-race.json")))
+                                           .replace("@LATE_RACE@", repr(forward)))
                         command = [sys.executable, str(adapter)]
-                    path = root / "rollback.json";path.write_text(json.dumps(config));path.chmod(0o600)
+                    if forward:
+                        config["target"] = {"argv": [str(current), *argv], "sha256": rollback.binary_hash(current), "env": current_environment}
+                    path = root / ("switch.json" if forward else "rollback.json");path.write_text(json.dumps(config));path.chmod(0o600)
+                    if forward:
+                        result = subprocess.run([*command, str(path)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=40)
+                        status = json.loads((root / "switch-status.json").read_text())
+                        self.assertEqual(result.returncode, 0, "switch failed: " + status.get("error_type", status.get("category", "unknown")) + " phase=" + status.get("phase", "unknown"))
+                        self.assertEqual(status["state"], "succeeded")
+                        self.assertTrue(healthy())
+                        self.assertIsNone(rollback.identity(service.pid))
+                        target = json.loads((root / "rollback.json").read_text())["current"]
+                        self.assertEqual((rollback.identity(target["pid"])["sha256"], rollback.identity(target["pid"])["binary"]),
+                                         (rollback.binary_hash(current), str(current)))
+                        self.assertEqual((status['target_pid'], status['target_sha256']), (target['pid'], target['sha256']))
+                        self.assertEqual(json.loads((root / "exit-race.json").read_text())["executable_metadata"], "defunct")
+                        phases = [entry['phase'] if isinstance(entry, dict) else entry for entry in status['history']]
+                        required = ['stopping', 'stopped', 'starting', 'target_identity', 'health', 'complete']
+                        self.assertEqual([phase for phase in phases if phase in required], required)
+                        print(json.dumps({"test_port": port, "forward_switch": True, "health": True,
+                                          "late_defunct_race": True, "target_sha256": target["sha256"], "old_exited": True}))
+                        return
                     fixture = root / "fixture";fixture.mkdir()
                     credential = root / "credential.json"
                     credential.write_text(json.dumps({"token": "invalid-test-only", "read_scopes": ["project:fixture"],
@@ -190,13 +227,19 @@ time.sleep(60)
                     if hook is not None and hook.poll() is None:
                         os.killpg(hook.pid, signal.SIGKILL);hook.wait(timeout=2)
                     status_path = root / "rollback-status.json"
+                    if forward and (root / "rollback.json").exists():
+                        target = json.loads((root / "rollback.json").read_text())["current"]
+                        actual = rollback.identity(target["pid"])
+                        if actual and actual["sha256"] == rollback.binary_hash(current):
+                            os.killpg(target["pid"], signal.SIGTERM)
+                            wait_for(lambda: rollback.identity(target["pid"]) is None, timeout=15, check_failure=False)
                     if status_path.exists():
                         restored_pid = json.loads(status_path.read_text()).get("restored_pid")
                         if restored_pid:
                             actual = rollback.identity(restored_pid)
                             if actual and actual["sha256"] == rollback.binary_hash(old):
                                 os.killpg(restored_pid, signal.SIGTERM)
-                                wait_for(lambda: rollback.identity(restored_pid) is None, timeout=15)
+                                wait_for(lambda: rollback.identity(restored_pid) is None, timeout=15, check_failure=False)
                     if service.poll() is None:
                         os.killpg(service.pid, signal.SIGTERM)
                     service.wait(timeout=15)

@@ -63,6 +63,9 @@ def identity(pid):
         if not same_live_process():
             return None
         if not Path(executable).is_absolute():
+            final_state = metadata("stat")
+            if final_state is None or final_state.startswith("Z"):
+                return None
             raise ValueError("absolute process executable required")
         try:
             digest = binary_hash(executable)
@@ -96,7 +99,7 @@ def healthy(url):
         return False
 
 
-def write_status(directory, value):
+def write_status(directory, value, name="rollback-status.json"):
     with tempfile.NamedTemporaryFile(mode="w", dir=directory, delete=False) as file:
         temporary = Path(file.name)
         try:
@@ -104,31 +107,43 @@ def write_status(directory, value):
             json.dump(value, file)
             file.flush()
             os.fsync(file.fileno())
-            temporary.replace(directory / "rollback-status.json")
+            temporary.replace(directory / name)
         finally:
             temporary.unlink(missing_ok=True)
 
 
-def restore(config_path):
+def read_config(config_path):
     config_path = Path(config_path)
     info = config_path.lstat()
     if not stat.S_ISREG(info.st_mode) or stat.S_IMODE(info.st_mode) != 0o600 or info.st_uid != os.getuid():
         raise ValueError("private configuration required")
     config = json.loads(config_path.read_text())
-    current, old = config["current"], config["restore"]
     url = urllib.parse.urlsplit(config["health_url"])
     if url.scheme != "http" or url.hostname != "127.0.0.1" or not url.port or url.path != "/healthz":
         raise ValueError("loopback health endpoint required")
     if url.username or url.password or url.query or url.fragment:
         raise ValueError("invalid health endpoint")
-    if not old["argv"] or not Path(old["argv"][0]).is_absolute():
-        raise ValueError("absolute restore executable required")
-    if set(old["env"]) - set(SERVICE_VARIABLES) or not all(isinstance(v, str) for v in old["env"].values()):
+    return config
+
+
+def checked_launch(launch):
+    if not isinstance(launch["argv"], list) or not launch["argv"] or not all(isinstance(value, str) for value in launch["argv"]) or not Path(launch["argv"][0]).is_absolute():
+        raise ValueError("absolute launch executable required")
+    if set(launch["env"]) - set(SERVICE_VARIABLES) or not all(isinstance(v, str) for v in launch["env"].values()):
         raise ValueError("only named service variables are accepted")
-    environment = {name: old["env"][name] for name in SERVICE_VARIABLES if name in old["env"]}
+    if binary_hash(launch["argv"][0]) != launch["sha256"]:
+        raise ValueError("launch binary identity mismatch")
+    return {name: launch["env"][name] for name in SERVICE_VARIABLES if name in launch["env"]}
+
+
+def restore(config_path):
+    config_path = Path(config_path)
+    config = read_config(config_path)
+    current, old = config["current"], config["restore"]
+    environment = checked_launch(old)
     delay = float(config.get("restart_delay_seconds", 0))
-    if not 0 <= delay <= 30 or binary_hash(old["argv"][0]) != old["sha256"]:
-        raise ValueError("invalid restore build or delay")
+    if not 0 <= delay <= 30:
+        raise ValueError("invalid restore delay")
     state = {"state": "stopping", "started_at": time.time()}
     write_status(config_path.parent, state)
     actual_current = identity(current["pid"])
