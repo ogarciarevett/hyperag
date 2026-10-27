@@ -212,3 +212,5 @@ service; it never starts a harness or uses live profiles:
 # Python 3.11+ and Node 22.18+ (for the pinned Gemini sanitizer fixture).
 HYPERAG_BIN=target/release/hyperag python3 crates/hyperag/tests/hooks_install.py
 ```
+
+Host integrations can load the remote client from `hyperag/plugin`; see the [plugin contract](docs/plugin.md) and [example host](examples/plugin-host.ts).

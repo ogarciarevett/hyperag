@@ -10,7 +10,7 @@ const root = resolve(process.argv[2] ?? ".");
 const archive = resolve(process.argv[3]);
 const listing = spawnSync("tar", ["-tzf", archive], { encoding: "utf8" });
 assert.equal(listing.status, 0);
-for (const file of ["dist/index.js", "dist/index.d.ts", "crates/hyperag/migrations/0001_init.sql", "crates/hyperag/migrations/0002_settings.sql", "crates/hyperag/migrations/0003_memory_text_limit.sql", "crates/hyperag/migrations/0006_lexical_index_outbox.sql", "LICENSE", "NOTICE"])
+for (const file of ["dist/index.js", "dist/index.d.ts", "dist/plugin.js", "dist/plugin.d.ts", "docs/plugin.md", "examples/plugin-host.ts", "crates/hyperag/migrations/0001_init.sql", "crates/hyperag/migrations/0002_settings.sql", "crates/hyperag/migrations/0003_memory_text_limit.sql", "crates/hyperag/migrations/0006_lexical_index_outbox.sql", "LICENSE", "NOTICE"])
   assert.ok(listing.stdout.split("\n").includes(`package/${file}`), `missing package file: ${file}`);
 assert.ok(!listing.stdout.includes("package/eval/"));
 
@@ -25,8 +25,13 @@ assert.ok(sql.some((statement) => statement.toLowerCase().includes("create table
 const temp = await mkdtemp(join(tmpdir(), "hyperag-npm-consumer-"));
 try {
   await mkdir(join(temp, "node_modules"));
-  await symlink(root, join(temp, "node_modules/hyperag"), "dir");
-  await writeFile(join(temp, "consumer.mts"), 'import { Hyperag, createPostgresStore } from "hyperag";\nvoid Hyperag; void createPostgresStore;\n');
+  const unpack = spawnSync("tar", ["-xzf", archive, "-C", temp], { encoding: "utf8" });
+  assert.equal(unpack.status, 0, unpack.stderr);
+  await symlink(join(temp, "package"), join(temp, "node_modules/hyperag"), "dir");
+  await writeFile(join(temp, "consumer.mts"), 'import { Hyperag, createPostgresStore } from "hyperag";\nimport { loadPlugin } from "hyperag/plugin";\nvoid Hyperag; void createPostgresStore; void loadPlugin;\n');
+  await writeFile(join(temp, "consumer.mjs"), 'import { loadPlugin } from "hyperag/plugin";\nif (typeof loadPlugin !== "function") process.exit(1);\n');
+  const runtime = spawnSync(process.execPath, [join(temp, "consumer.mjs")], { encoding: "utf8" });
+  assert.equal(runtime.status, 0, runtime.stdout + runtime.stderr);
   const check = spawnSync(process.execPath, [join(root, "node_modules/typescript/bin/tsc"), "--ignoreConfig", "--noEmit", "--strict", "--skipLibCheck", "--module", "NodeNext", "--moduleResolution", "NodeNext", "--target", "ES2022", join(temp, "consumer.mts")], { encoding: "utf8" });
   assert.equal(check.status, 0, check.stdout + check.stderr);
 } finally {

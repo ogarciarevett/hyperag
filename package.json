@@ -1,6 +1,6 @@
 {
   "name": "hyperag",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "RAG and shared memory for single agents and groups of agents",
   "license": "Apache-2.0",
   "type": "module",
@@ -9,6 +9,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./plugin": {
+      "types": "./dist/plugin.d.ts",
+      "import": "./dist/plugin.js"
     }
   },
   "scripts": {
@@ -32,7 +36,9 @@
     "LICENSE",
     "NOTICE",
     "README.md",
-    "crates/hyperag/migrations"
+    "crates/hyperag/migrations",
+    "docs/plugin.md",
+    "examples/plugin-host.ts"
   ],
   "repository": {
     "type": "git",
