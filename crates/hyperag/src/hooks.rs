@@ -16,6 +16,12 @@ use serde_json::{Value, json};
 
 const PROMPT_MAX_CHARS: usize = 4_000;
 
+#[derive(serde::Deserialize)]
+struct ScopeGrants {
+    read: Vec<String>,
+    write: Vec<String>,
+}
+
 pub fn scope_for(cwd: &Path) -> String {
     scope_with_override(cwd, std::env::var("HYPERAG_SCOPE").ok().as_deref())
 }
@@ -98,6 +104,7 @@ async fn handle(event: &str, harness: Option<&str>, config: &crate::hook_setup::
     let base = std::env::var("HYPERAG_URL").unwrap_or_else(|_| config.url.clone());
     let token = std::env::var(&config.token_env).map_err(|_| anyhow::anyhow!("{} is not set", config.token_env))?;
     let http = reqwest::Client::builder().timeout(std::time::Duration::from_millis(config.timeout_ms)).build()?;
+    let token = token.as_str();
     let send = |req: reqwest::RequestBuilder| async move {
         let r = req.bearer_auth(&token).send().await?;
         let status = r.status();
@@ -105,6 +112,15 @@ async fn handle(event: &str, harness: Option<&str>, config: &crate::hook_setup::
         anyhow::ensure!(status.is_success(), "service answered {status}");
         Ok::<Value, anyhow::Error>(body)
     };
+    if scope.starts_with("project:") {
+        let grants = send(http.get(format!("{base}/v1/scopes"))).await?;
+        let grants: ScopeGrants = serde_json::from_value(grants)
+            .map_err(|_| anyhow::anyhow!("invalid scope grant response"))?;
+        // Eligibility is read-only: never create a grant or attempt a write for an unknown project.
+        if !grants.read.contains(&scope) || !grants.write.contains(&scope) {
+            return Ok(String::new());
+        }
+    }
     match event {
         "session-start" => {
             let url = format!("{base}/v1/recent?scope={}&limit=30&maxBytes=12000", crate::mcp::urlencode(&scope));

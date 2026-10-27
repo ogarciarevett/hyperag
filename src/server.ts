@@ -163,6 +163,7 @@ export function createHandler(hyperag: Hyperag, auth: ServiceAuth) {
       else await hyperag.revoke(who, str(b, "principal"), str(b, "scope"), perm(b));
       return { ok: true };
     }
+    if (resource === "scopes" && id === undefined && m === "GET") return hyperag.scopes(who);
     if (resource === "whoami" && m === "GET") return { principal: who };
     throw new HyperagError("not_found", "no such route");
   }

@@ -24,7 +24,7 @@ class Hooks(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory(prefix='hyperag-hooks-')
         self.home = Path(self.tmp.name)
-        self.env = {k: v for k, v in os.environ.items() if not k.startswith(('HYPERAG_', 'CLAUDE_', 'CODEX_', 'KIMI_', 'XDG_'))}
+        self.env = {name: value for name in ('PATH', 'TMPDIR', 'SystemRoot') if (value := os.getenv(name)) is not None}
         self.env.update(HOME=str(self.home), XDG_CONFIG_HOME=str(self.home / '.config'))
         for rel, _ in TARGETS.values():
             (self.home / rel).parent.mkdir(parents=True, exist_ok=True)
@@ -253,6 +253,34 @@ process.stdout.write(JSON.stringify(sanitizeEnvironment(env, {
         self.assertEqual(self.run_cli('hook', 'prompt', '--harness', 'cursor').returncode, 0)
         self.assertEqual(self.run_cli('hooks', 'uninstall').returncode, 0)
 
+    def test_ungranted_project_hooks_quietly_skip_without_post_or_grant_changes(self):
+        requests = []
+        grants = {'read': ['project:read-only'], 'write': []}
+        original_grants = json.loads(json.dumps(grants))
+        class Service(BaseHTTPRequestHandler):
+            def log_message(self, *_): pass
+            def do_GET(self):
+                requests.append(('GET', self.path, self.headers.get('Authorization')))
+                self.send_response(200); self.end_headers()
+                self.wfile.write(json.dumps(grants).encode())
+            def do_POST(self):
+                requests.append(('POST', self.path, self.headers.get('Authorization')))
+                self.send_response(403); self.end_headers(); self.wfile.write(b'{}')
+        server = ThreadingHTTPServer(('127.0.0.1', 0), Service)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        self.addCleanup(server.server_close); self.addCleanup(server.shutdown)
+        self.env.update(HYPERAG_URL=f'http://127.0.0.1:{server.server_port}', HYPERAG_TOKEN='synthetic-valid-hook-token')
+        for project in ('Unknown-Project', 'Read-Only'):
+            directory = self.home / project
+            directory.mkdir()
+            for event in ('session-start', 'prompt', 'session-end'):
+                with self.subTest(project=project, event=event):
+                    before = len(requests)
+                    result = self.run_cli('hook', event, '--harness', 'claude-code', input={'cwd': str(directory), 'session_id': 'fixture', 'prompt': 'synthetic input'})
+                    self.assertEqual((result.returncode, result.stdout, result.stderr), (0, '', ''))
+                    self.assertEqual(requests[before:], [('GET', '/v1/scopes', 'Bearer synthetic-valid-hook-token')])
+                    self.assertEqual(grants, original_grants)
+
     def test_native_events_reach_runtime(self):
         received = []
         authorization = []
@@ -260,6 +288,10 @@ process.stdout.write(JSON.stringify(sanitizeEnvironment(env, {
             def log_message(self, *_): pass
             def do_GET(self):
                 authorization.append(self.headers.get('Authorization'))
+                if self.path == '/v1/scopes':
+                    self.send_response(200); self.end_headers()
+                    self.wfile.write(b'{"read":["project:demo-repo"],"write":["project:demo-repo"]}')
+                    return
                 received.append(('session-start', self.path))
                 self.send_response(200); self.end_headers(); self.wfile.write(b'{"text":"remember synthetic context"}')
             def do_POST(self):

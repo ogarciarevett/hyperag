@@ -85,6 +85,14 @@ export class Hyperag {
     await this.config.store.revoke(principal, scope, permission, admin);
   }
 
+  async scopes(principal: string) {
+    const [read, write] = await Promise.all([
+      this.config.store.scopes(principal, "read"),
+      this.config.store.scopes(principal, "write"),
+    ]);
+    return { read, write };
+  }
+
   async ingest(principal: string, input: NewMemory): Promise<WriteResult> {
     validNew(input);
     await this.mustWrite(principal, input.scope);

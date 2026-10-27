@@ -29,10 +29,49 @@ Run the isolated regression suite with
 `python3 -I integrations/hooks/test_recovery.py`. It kills a simulated hook process
 group midway through recovery and verifies restoration still completes.
 
-`guard.scope_for(cwd)` derives a project scope from the common Git repository, so
-a linked worktree named `chief` still uses its repository's scope. Apply explicit
-scope overrides in the caller. Before invoking a hook, call
-`guard.check_scope(scope, credential, log)` with its read/write scope lists. An
-ungranted project returns false and logs only `skipped_ungranted`: skip the hook
-without a write, stderr, or recovery. Non-project overrides are configuration
-errors. Run `python3 -I integrations/hooks/test_guard.py` for these contracts.
+Run the production guard entrypoint with a private configuration file:
+
+```sh
+python3 integrations/hooks/guard.py --config /private/guard.json hook prompt --harness claude-code
+```
+
+The configuration supplies `binary`, `credential_file`, `active_marker`,
+`state_dir`, `url`, and `rollback_command` (an absolute executable and arguments).
+The mode-0600 credential file contains the token and its explicit `read_scopes`
+and `write_scopes`; it is never put in arguments or logs. `token_env` defaults to
+`HYPERAG_TOKEN` and may instead be `HYPERAG_HOOKS_TOKEN` to match hooks.toml.
+An absent active marker makes cached commands no-ops. The real entrypoint checks
+canonical project eligibility before invoking the hook. A missing grant writes
+only `skipped_ungranted`, with no child, write, stderr, trip or recovery. Eligible
+calls run with the dedicated token and record only timing/error metadata. Any
+actual error or rolling-cohort p95 above300ms removes the marker and dispatches
+detached recovery. Neither configuration nor installation grants any permissions.
+
+The Rust hook independently GETs authenticated `/v1/scopes` before recent or write
+requests. It checks current caller read/write grants and silently skips an
+ungranted project, including stale permissions that a local snapshot still lists.
+Both Rust and TypeScript services implement this read-only caller-scoped endpoint.
+`test_guard.py` drives the actual CLI through a positive write control then an
+ungranted call with zero writes, empty stderr, no trip, and unchanged grants.
+The binary hook contract tests and service smoke test cover the Rust entrypoint.
+
+`rollback.py /absolute/path/to/private-config.json` is the included Linux/macOS service
+restore command. Its mode-0600 config supplies `current` process identity from
+`rollback.identity(pid)`, `restore` (`argv`, binary `sha256`, and explicitly named
+service `env`), and a loopback `/healthz` URL. It verifies the current executable
+and start time before stopping it, then checks the restored executable hash and
+health before reporting success in `rollback-status.json`. It never loads a
+captured process environment or inherits caller credentials. An optional bounded
+`restart_delay_seconds` allows a holdoff between stopping and restoring.
+Linux checks the running executable through `/proc`; macOS uses only `ps` command
+path, start-time and process-state metadata plus the executable's disk hash. Other
+platforms fail closed. An interrupted attempt can resume after its old PID exits,
+provided the health endpoint is down; an already healthy unowned endpoint is
+never stopped or replaced. `test_rollback.py` checks these branches with mocks.
+
+Hosted Linux CI builds the pinned prior service, starts the current Tantivy writer
+on an ephemeral port and an owned database with models disabled, then dispatches
+this command. The regression kills the hook process group more than three seconds
+after stopping the service; recovery must still restore health and the prior
+binary identity. The RED variant shares the hook group and must fail. Neither
+variant contacts ports 7481/7482.
