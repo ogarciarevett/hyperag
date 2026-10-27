@@ -399,6 +399,10 @@ raise SystemExit(module.main(['--config',CONFIG,'arm']))
     def test_policy_warmup_thresholds_errors_and_global_quantile(self):
         spec = importlib.util.spec_from_file_location('native_guard_policy', GUARD)
         module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
+        calibration = json.loads((DIRECTORY.parents[1] / 'docs/evidence/hooks-guard-tail-2026-10-27.json').read_text())
+        self.assertEqual(module.TAIL_MARGIN_MS, calibration['selected_margin_ms'])
+        tail = next(record for record in calibration['records'] if record['fixture'] == 'guard_exit_tail')
+        self.assertEqual(module.TAIL_MARGIN_MS, math.ceil(2 * tail['max_ms'] / 10) * 10)
         row = lambda latency, warmup=False, error=None: {'latency_ms': latency, 'warmup': warmup, 'error': error}
         self.assertIsNone(module.evaluate([row(999, True)])['reason'])
         self.assertTrue(module.evaluate([row(1000.001, True)])['reason'])

@@ -31,8 +31,8 @@ _append, _input = _helpers._append, _helpers._input
 _recovery = _module('recovery')
 SKIPS = {'skipped_ungranted', 'disabled'}
 REPORTS = SKIPS | {'completed', 'enqueued', 'empty_prompt', 'error', 'cancelled'}
-# Conservative fixed ceiling for the hosted full-process tail p99; fixtures bound every tail.
-TAIL_MARGIN_MS = 100
+# Twice the hosted maximum tail (10.663 ms), rounded up to 10 ms; see docs/evidence/hooks-guard-tail-2026-10-27.json.
+TAIL_MARGIN_MS = 30
 
 
 def evaluate(rows):
