@@ -58,7 +58,7 @@ class LiveHooks(unittest.TestCase):
 
     def arm_diagnostics(self):
         diagnostics = {'marker_present': self.fixture.marker.exists()}
-        for name, fields in [('trip.json', ('category', 'recovery_pid', 'pending_recovery_pid', 'dispatch_error')),
+        for name, fields in [('trip.json', ('category', 'stage', 'operation', 'child_pid', 'duration_ms', 'recovery_pid', 'pending_recovery_pid', 'dispatch_error')),
                              ('recovery/status.json', ('state', 'pid', 'exit_code', 'error_type', 'phase')),
                              ('watchdog-ready.json', ('ready', 'pid', 'heartbeat'))]:
             try:
@@ -329,8 +329,8 @@ module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
 module.__file__=str(Path(__file__).resolve())
 original_check=module._check_inflight
 original_write=module._write
-def check(path):
-    original_check(path)
+def check(path, trace=None):
+    original_check(path, trace)
     try:value=json.loads(path.read_text())
     except FileNotFoundError:return
     value.update(watchdog_pid=os.getpid(),age=module._shared_time()-value['started'],
@@ -395,6 +395,22 @@ raise SystemExit(module.main())
         self.assertTrue(status['async_writes'])
         self.assertTrue(self.fixture.marker.exists())
         self.assertFalse((self.state / 'trip.json').exists())
+
+    def test_status_timeout_trace_records_real_child_pid_and_duration(self):
+        spec = importlib.util.spec_from_file_location('native_guard', GUARD)
+        module = importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+        config = module._context(self.config)
+        config['binary'] = sys.executable
+        trace = module._trace('watchdog', 'hook-writer-status')
+        with self.assertRaises(TimeoutError):
+            module._native(config, ['-c', 'import time;time.sleep(60)'], budget=.1, trace=trace)
+        module._trip(config, 'TimeoutError', trace)
+        self.recovered()
+        trip = self.read('trip.json')
+        self.assertEqual((trip['stage'], trip['operation']), ('watchdog', 'hook-writer-status'))
+        self.assertGreater(trip['child_pid'], 0)
+        self.assertGreaterEqual(trip['duration_ms'], 100)
+        self.assertLess(trip['duration_ms'], 2000)
 
     def test_native_stderr_remains_bounded(self):
         spec = importlib.util.spec_from_file_location('native_guard', GUARD)

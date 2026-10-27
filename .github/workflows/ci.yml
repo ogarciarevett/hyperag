@@ -125,8 +125,8 @@ jobs:
                   "age = _shared_time() - value['started']", "age = time.monotonic() - value['started']", 1),
               "test_bootstrap_retries_watchdog_lock_collision_with_parent_probe": original[:retry_start] + one_shot + original[retry_end:],
               "test_confirmed_recovery_survives_guard_kill_after_marker_unlink": original.replace(
-                  "def _trip(config, category):\n    directory = Path(config['state_dir'])\n",
-                  "def _trip(config, category):\n    directory = Path(config['state_dir'])\n    Path(config['active_marker']).unlink(missing_ok=True)\n", 1),
+                  "def _trip(config, category, trace=None):\n    directory = Path(config['state_dir'])\n",
+                  "def _trip(config, category, trace=None):\n    directory = Path(config['state_dir'])\n    Path(config['active_marker']).unlink(missing_ok=True)\n", 1),
           }
           for test, source in mutations.items():
               assert source != original

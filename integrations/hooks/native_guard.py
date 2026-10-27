@@ -129,7 +129,28 @@ def _context(path):
     return config
 
 
-def _trip(config, category):
+def _trace(stage, operation, **fields):
+    return {'stage': stage, 'operation': operation, 'child_pid': None,
+            'started_at': time.time(), '_started': time.monotonic(), **fields}
+
+
+def _step(trace, stage, operation):
+    for key in ('_duration_ms', 'foreground_pid'):
+        trace.pop(key, None)
+    if stage == 'watchdog':
+        trace.pop('agent', None);trace.pop('event', None)
+    trace.update(_trace(stage, operation))
+
+
+def _snapshot(trace):
+    value = {key: trace[key] for key in ('stage', 'operation', 'child_pid', 'started_at')}
+    value['duration_ms'] = round(trace.get('_duration_ms', (time.monotonic() - trace['_started']) * 1000), 3)
+    for key in ('agent', 'event', 'foreground_pid'):
+        if key in trace:value[key] = trace[key]
+    return value
+
+
+def _trip(config, category, trace=None):
     directory = Path(config['state_dir'])
     with _lock(directory / 'trip.lock') as lock:
         try:
@@ -142,7 +163,9 @@ def _trip(config, category):
             Path(config['active_marker']).unlink(missing_ok=True)
             return
         # The watcher retries this durable intent if the foreground process dies before dispatch.
-        value = {'category': previous.get('category', category), 'time': previous.get('time', time.time())}
+        details = _snapshot(trace or _trace('guard', category))
+        details.update({key: previous[key] for key in ('stage', 'operation', 'child_pid', 'started_at', 'duration_ms', 'agent', 'event', 'foreground_pid') if key in previous})
+        value = {**details, 'category': previous.get('category', category), 'time': previous.get('time', time.time())}
         pending = previous.get('pending_recovery_pid')
         if pending:
             acknowledged = _recovery.status_for(directory / 'recovery', pending)
@@ -170,8 +193,9 @@ def _trip(config, category):
         Path(config['active_marker']).unlink(missing_ok=True)
 
 
-def _native(config, args, raw=b'', report=False, budget=.25, forward=False):
+def _native(config, args, raw=b'', report=False, budget=.25, forward=False, trace=None):
     """Drain bounded streams while the process runs; report completion never relies on EOF."""
+    trace = trace if trace is not None else _trace('native', 'native_command')
     environment = {'PATH': os.defpath, **config.get('native_env', {}), 'HYPERAG_URL': config['url']}
     reader, writer = os.pipe() if report else (None, None)
     if report:
@@ -179,6 +203,7 @@ def _native(config, args, raw=b'', report=False, budget=.25, forward=False):
     child = subprocess.Popen([config['binary'], *args], env=environment, stdin=subprocess.PIPE,
                              stdout=subprocess.PIPE, stderr=subprocess.PIPE, close_fds=True,
                              pass_fds=(writer,) if report else ())
+    trace['child_pid'] = child.pid
     if writer is not None:
         os.close(writer)
     selector = selectors.DefaultSelector()
@@ -238,6 +263,7 @@ def _native(config, args, raw=b'', report=False, budget=.25, forward=False):
     finally:
         if child.poll() is None:
             child.kill();child.wait(timeout=1)
+        trace['_duration_ms'] = (time.monotonic() - trace['_started']) * 1000
         selector.close()
         for pipe in (child.stdin, child.stdout, child.stderr):
             pipe.close()
@@ -245,8 +271,8 @@ def _native(config, args, raw=b'', report=False, budget=.25, forward=False):
             os.close(reader)
 
 
-def _status(config):
-    code, output, stderr, _report = _native(config, ['hook-writer-status'])
+def _status(config, trace=None):
+    code, output, stderr, _report = _native(config, ['hook-writer-status'], trace=trace)
     if code or stderr:
         raise ValueError('writer_status_error')
     value = json.loads(output)
@@ -267,12 +293,14 @@ def _shared_time():
     return time.clock_gettime(time.CLOCK_MONOTONIC_RAW)
 
 
-def _check_inflight(path):
+def _check_inflight(path, trace=None):
     try:
         value = json.loads(path.read_text())
     except FileNotFoundError:
         return
     age = _shared_time() - value['started']
+    if trace is not None:
+        trace.update(foreground_pid=value['pid'], agent=value.get('agent'), event=value.get('event'))
     try:
         os.kill(value['pid'], 0)
     except ProcessLookupError:
@@ -303,22 +331,27 @@ def _watchdog(config):
                 time.sleep(.002)
         nonce = secrets.token_hex(16)
         lock.seek(0);lock.truncate();lock.write(json.dumps({'pid': os.getpid(), 'nonce': nonce}));lock.flush();os.fsync(lock.fileno())
+        trace = _trace('watchdog', 'loop')
         try:
             while Path(config['active_marker']).exists():
                 try:
                     if (directory / 'trip.json').exists():
-                        _trip(config, 'recovery_pending')
+                        _trip(config, 'recovery_pending', trace)
                         if not Path(config['active_marker']).exists():
                             return
+                    _step(trace, 'watchdog', 'reports')
                     _reports(config)
-                    _status(config)
+                    _step(trace, 'watchdog', 'hook-writer-status')
+                    _status(config, trace)
                     for path in directory.glob('inflight-*.json'):
-                        _check_inflight(path)
+                        _step(trace, 'watchdog', 'inflight_check')
+                        _check_inflight(path, trace)
+                    _step(trace, 'watchdog', 'heartbeat')
                     _write(directory / 'watchdog-ready.json', {'ready': True, 'pid': os.getpid(),
                            'fingerprint': config['_fingerprint'], 'nonce': nonce, 'heartbeat': _shared_time()})
                 except Exception as error:
                     category = str(error) if isinstance(error, ValueError) and str(error) in {'writer_mode_mismatch', 'writer_status_error', 'foreground_timeout', 'foreground_lost', 'invalid_foreground_clock', 'writer_failure', 'lost_queue', 'http401', 'http403', 'transport', 'backend', 'cancelled', 'drain_deadline', 'queue_full', 'ipc_rejected', 'enqueue_timeout', 'enqueue_io', 'startup', 'background_failure', 'ack_failure', 'writer_failure'} else type(error).__name__
-                    _trip(config, category)
+                    _trip(config, category, trace)
                     if not Path(config['active_marker']).exists():
                         return
                 time.sleep(.1)
@@ -326,7 +359,7 @@ def _watchdog(config):
             _reports(config)
 
 
-def arm(config, bootstrap=False):
+def arm(config, bootstrap=False, trace=None):
     directory = Path(config['state_dir'])
     deadline = time.monotonic() + (2 if bootstrap else .5)
     with _lock(directory / 'arm.lock') as startup:
@@ -343,6 +376,8 @@ def arm(config, bootstrap=False):
                 lock.seek(0)
                 try:owner = json.loads(lock.read() or '{}')
                 except ValueError:owner = {}
+                if trace is not None and live and owner.get('pid') == ready.get('pid'):
+                    trace['child_pid'] = owner.get('pid')
                 if live and ready.get('fingerprint') == config['_fingerprint'] and ready.get('nonce') == owner.get('nonce') and ready.get('pid') == owner.get('pid') and 0 <= _shared_time() - ready.get('heartbeat', 0) < .75:
                     return ready
             if not bootstrap:
@@ -353,9 +388,10 @@ def arm(config, bootstrap=False):
                 except BlockingIOError:
                     pass
             if owned and not spawned and not live:
-                subprocess.Popen([sys.executable, str(Path(__file__).resolve()), '--config', config['_path'], 'watchdog'],
+                watcher = subprocess.Popen([sys.executable, str(Path(__file__).resolve()), '--config', config['_path'], 'watchdog'],
                                  stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                                  close_fds=True, start_new_session=True, env={'PATH': os.defpath})
+                if trace is not None:trace['child_pid'] = watcher.pid
                 spawned = True
             if not Path(config['active_marker']).exists():
                 raise ValueError('activation_disabled')
@@ -396,7 +432,7 @@ def _reports(config):
     _write(directory / 'checkpoints.json', checkpoints)
 
 
-def _record(config, row):
+def _record(config, row, trace=None):
     directory = Path(config['state_dir'])
     with _lock(directory / 'calls.lock') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
@@ -411,7 +447,10 @@ def _record(config, row):
         _append(path, row)
         summary = evaluate([*rows, row])
     if summary['reason']:
-        _trip(config, summary['reason'])
+        if summary['reason'] != 'hook_error':
+            trace = _trace('hook_policy', summary['reason'], child_pid=(trace or {}).get('child_pid'),
+                           _started=STARTED, agent=row['agent'], event=row['event'])
+        _trip(config, summary['reason'], trace)
     return summary
 
 
@@ -425,6 +464,7 @@ def _hook(config, event, harness):
         return 0
     inflight = directory / ('inflight-' + str(os.getpid()) + '.json')
     report, error = {}, None
+    trace = _trace('hook', 'launcher_timestamp', agent=harness, event=event)
     try:
         epoch = os.getenv('HYPERAG_HOOK_STARTED_AT')
         if epoch is None:
@@ -433,12 +473,17 @@ def _hook(config, event, harness):
         if not math.isfinite(age) or not 0 <= age <= 5:raise ValueError('invalid launcher timestamp')
         STARTED = time.monotonic() - age
         shared_started = _shared_time() - age
-        arm(config)
+        _step(trace, 'hook', 'watchdog_ready')
+        arm(config, trace=trace)
+        _step(trace, 'hook', 'inflight_write')
         _write(inflight, {'pid': os.getpid(), 'started': shared_started, 'started_at': float(epoch),
                           'agent': harness, 'event': event}, durable=False)
+        _step(trace, 'hook', 'read_input')
         raw = _input(STARTED + 1)
+        _step(trace, 'hook', 'native_hook')
         code, _output, stderr, raw_report = _native(config, ['hook', event, '--harness', harness], raw,
-                                                   report=True, forward=True, budget=STARTED + 1 - time.monotonic())
+                                                   report=True, forward=True, budget=STARTED + 1 - time.monotonic(), trace=trace)
+        trace['operation'] = 'native_report'
         lines = raw_report.splitlines()
         if len(lines) != 1:
             raise ValueError('missing_or_multiple_native_report')
@@ -456,17 +501,23 @@ def _hook(config, event, harness):
         elif report['category'] not in SKIPS and report['category'] != ('completed' if event == 'session-start' else 'enqueued'):
             error = 'native_mode_mismatch'
     except Exception as exception:
+        trace.setdefault('_duration_ms', (time.monotonic() - trace['_started']) * 1000)
         error = type(exception).__name__
     latency = round((time.monotonic() - STARTED) * 1000 + TAIL_MARGIN_MS, 3)
     row = {'event': event, 'agent': harness, 'scope': report.get('scope'), 'cohort': 'controlled' if os.getenv('HYPERAG_HOOK_CHECK_COHORT') == 'controlled' else 'organic', 'latency_ms': latency, 'error': error}
+    monitor_trace = _trace('hook_monitor', 'record_call', agent=harness, event=event)
     try:
         if not error and report.get('category') in SKIPS | {'cancelled'}:
+            _step(monitor_trace, 'hook_monitor', 'record_skip')
             _append(directory / 'skips.jsonl', {'category': report['category']})
-            if latency > 1000:_trip(config, 'single_call_limit')
+            if latency > 1000:
+                policy_trace = _trace('hook_policy', 'single_call_limit', _started=STARTED,
+                                      child_pid=trace.get('child_pid'), agent=harness, event=event)
+                _trip(config, 'single_call_limit', policy_trace)
         else:
-            _record(config, row)
+            _record(config, row, trace)
     except Exception:
-        _trip(config, 'monitor_failure')
+        _trip(config, 'monitor_failure', monitor_trace)
     finally:
         inflight.unlink(missing_ok=True)
     if error:
@@ -486,8 +537,9 @@ def main(argv=None):
     if args.command == 'watchdog':
         _watchdog(config);return 0
     if args.command == 'arm':
-        try:print(json.dumps(arm(config, bootstrap=True)));return 0
-        except Exception:_trip(config, 'watchdog_startup');return 1
+        trace = _trace('watchdog_bootstrap', 'arm')
+        try:print(json.dumps(arm(config, bootstrap=True, trace=trace)));return 0
+        except Exception:_trip(config, 'watchdog_startup', trace);return 1
     if not args.event or not args.harness:
         parser.error('hook requires event and harness')
     return _hook(config, args.event, args.harness)
