@@ -189,7 +189,26 @@ the pooled cohort it requires **nearest-rank tail p99 ≤80ms** and **adjusted p
 ≥independently measured full-wall p95**; adjusted p95 must also stay below300ms.
 One isolated noisy wake-up may exceed the margin without breaking the p99 gate.
 A sustained overrun at the documented percentile fails; so does any observed
-p95 under-count even when p99 tails pass. Maxima are always reported. This is a
-statistical conservative-p95 contract, not a claim that a finite margin bounds
-arbitrary scheduler delays on every invocation. Real hook failures/stderr and
-hard1000ms enforcement remain unchanged. No activation is implied by calibration.
+p95 under-count even when p99 tails pass. Maxima are always reported. Passing
+these predicates establishes p95 coverage only for the observed paired cohorts;
+it is not a guarantee for future live calls or arbitrary scheduler delays. Real
+hook failures/stderr and hard1000ms enforcement remain unchanged. No activation
+is implied by calibration.
+
+The retained real-HOME controlled cohorts have independently timed parent calls
+paired by call index, agent and event, excluding warm-up. Values below are p95 ms;
+the80ms column is a shadow of the same calls, not a new80ms activation.
+
+| Controlled activation | Calls | Independent full wall | Guard30ms | Shadow80ms |
+|---|---:|---:|---:|---:|
+| 20261027T171704Z | 50 | 198.083 | 182.573 | 232.573 |
+| 20261027T212724Z | 50 | 87.678 | 104.348 | 154.348 |
+| 20261027T221607Z | 50 | 143.946 | 146.572 | 196.572 |
+
+The30ms sample under-counted the first cohort's p95; the80ms shadow covers all
+three observed controlled cohorts. Independent parent wall times were **not
+recorded for organic cohorts**. Their80ms projections do not establish organic
+p95 coverage. The evidence JSON records those missing values explicitly as null;
+no "never under-counts live latency" claim is made. The600-call hosted validation
+observed full-wall p95=73.982ms and adjusted p95=144.902ms; that result likewise
+applies to its measured fixture cohorts only.

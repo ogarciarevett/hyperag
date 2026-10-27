@@ -35,7 +35,17 @@
     267.534,
     266.158
   ],
-  "validation": "600 new hosted calls (300 read and300 prompt); p99 tail <= margin and adjusted p95 >= full-wall p95 per event and pooled; adjusted p95 <300ms; CI pending",
+  "validation": {
+    "source_head": "9bf8d97df936acaec0d5c541bcc68e6fb1ad547f",
+    "source_run": "https://github.com/ogarciarevett/hyperag/actions/runs/40594112021",
+    "calls": 600,
+    "tail_p99_ms": 9.6,
+    "tail_max_ms": 11.341,
+    "full_wall_p95_ms": 73.982,
+    "adjusted_p95_ms": 144.902,
+    "margin_ms": 80,
+    "result": "PASS: per-event and pooled p99 tail and paired p95 predicates; this demonstrates only these observed hosted cohorts"
+  },
   "historical_original_200_call_calibration": {
     "source_head": "b0961136de936864355f09b24ba1056c141860fc",
     "source_run": "https://github.com/ogarciarevett/hyperag/actions/runs/40468076938",
@@ -66,5 +76,70 @@
     ],
     "selected_margin_ms": 30,
     "formula": "ceil(2 * max_ms / 10) * 10"
+  },
+  "observed_mac_p95_comparison": {
+    "pairing": "Same-index controlled calls; matching agent/event; independent parent subprocess.run duration; warm-up excluded",
+    "paired_controlled_cohorts": [
+      {
+        "activation_id": "activation-20261027T171704Z",
+        "cohort": "controlled",
+        "calls": 50,
+        "independent_full_wall_p95_ms": 198.083,
+        "guard_30ms_p95_ms": 182.573,
+        "shadow_80ms_p95_ms": 232.573,
+        "guard_30ms_covers_observed_p95": false,
+        "shadow_80ms_covers_observed_p95": true
+      },
+      {
+        "activation_id": "activation-20261027T212724Z",
+        "cohort": "controlled",
+        "calls": 50,
+        "independent_full_wall_p95_ms": 87.678,
+        "guard_30ms_p95_ms": 104.348,
+        "shadow_80ms_p95_ms": 154.348,
+        "guard_30ms_covers_observed_p95": true,
+        "shadow_80ms_covers_observed_p95": true
+      },
+      {
+        "activation_id": "activation-20261027T221607Z",
+        "cohort": "controlled",
+        "calls": 50,
+        "independent_full_wall_p95_ms": 143.946,
+        "guard_30ms_p95_ms": 146.572,
+        "shadow_80ms_p95_ms": 196.572,
+        "guard_30ms_covers_observed_p95": true,
+        "shadow_80ms_covers_observed_p95": true
+      }
+    ],
+    "unpaired_organic_cohorts": [
+      {
+        "activation_id": "activation-20261027T171704Z",
+        "cohort": "organic",
+        "calls": 32,
+        "independent_full_wall_p95_ms": null,
+        "guard_30ms_p95_ms": 217.534,
+        "shadow_80ms_p95_ms": 267.534,
+        "coverage_claim": "not established: independent organic parent wall times were not recorded"
+      },
+      {
+        "activation_id": "activation-20261027T212724Z",
+        "cohort": "organic",
+        "calls": 5,
+        "independent_full_wall_p95_ms": null,
+        "guard_30ms_p95_ms": 216.158,
+        "shadow_80ms_p95_ms": 266.158,
+        "coverage_claim": "not established: independent organic parent wall times were not recorded"
+      },
+      {
+        "activation_id": "activation-20261027T221607Z",
+        "cohort": "organic",
+        "calls": 50,
+        "independent_full_wall_p95_ms": null,
+        "guard_30ms_p95_ms": 223.388,
+        "shadow_80ms_p95_ms": 273.388,
+        "coverage_claim": "not established: independent organic parent wall times were not recorded"
+      }
+    ],
+    "conclusion": "80ms shadow covers independent full-wall p95 in these three observed controlled cohorts only; no independent organic p95 coverage or guarantee for future scheduling delays"
   }
 }
