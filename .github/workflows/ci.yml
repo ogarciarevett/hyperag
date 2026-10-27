@@ -99,6 +99,8 @@ jobs:
           python-version: "3.12"
       - name: isolated harness hook contracts
         run: HYPERAG_BIN=target/release/hyperag python3 crates/hyperag/tests/hooks_install.py
+      - name: native hook read fast path
+        run: HYPERAG_BIN=target/release/hyperag python3 crates/hyperag/tests/hooks_fast_path.py
       - name: build pinned prior service for rollback identity proof
         run: |
           git fetch origin a42ad2c6e7ad137b6b113bcfb12978fd18ccebf5

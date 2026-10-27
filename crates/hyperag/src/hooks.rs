@@ -101,29 +101,29 @@ async fn handle(event: &str, harness: Option<&str>, config: &crate::hook_setup::
     let scope = std::env::var("HYPERAG_SCOPE").ok().filter(|s| !s.is_empty())
         .unwrap_or_else(|| if config.scope == "project" { scope_for(&cwd) } else { config.scope.clone() });
     let session = input["session_id"].as_str().or_else(|| input["conversation_id"].as_str()).unwrap_or("unknown").to_owned();
-    let base = std::env::var("HYPERAG_URL").unwrap_or_else(|_| config.url.clone());
-    let token = std::env::var(&config.token_env).map_err(|_| anyhow::anyhow!("{} is not set", config.token_env))?;
+    let base = std::env::var("HYPERAG_URL").unwrap_or_else(|_| config.url.clone()).trim_end_matches('/').to_owned();
+    let token = config.token()?;
     let http = reqwest::Client::builder().timeout(std::time::Duration::from_millis(config.timeout_ms)).build()?;
     let token = token.as_str();
+    let base = base.as_str();
+    let scope = scope.as_str();
     let send = |req: reqwest::RequestBuilder| async move {
-        let r = req.bearer_auth(&token).send().await?;
-        let status = r.status();
-        let body: Value = r.json().await.unwrap_or(Value::Null);
+        let response = req.bearer_auth(token).send().await?;
+        let status = response.status();
+        let body: Value = response.json().await.unwrap_or(Value::Null);
         anyhow::ensure!(status.is_success(), "service answered {status}");
         Ok::<Value, anyhow::Error>(body)
     };
-    if scope.starts_with("project:") {
-        let grants = send(http.get(format!("{base}/v1/scopes"))).await?;
-        let grants: ScopeGrants = serde_json::from_value(grants)
-            .map_err(|_| anyhow::anyhow!("invalid scope grant response"))?;
-        // Eligibility is read-only: never create a grant or attempt a write for an unknown project.
-        if !grants.read.contains(&scope) || !grants.write.contains(&scope) {
-            return Ok(String::new());
-        }
+    let grants = send(http.get(format!("{base}/v1/scopes"))).await?;
+    let grants: ScopeGrants = serde_json::from_value(grants)
+        .map_err(|_| anyhow::anyhow!("invalid scope grant response"))?;
+    if !grants.read.iter().any(|value| value == scope)
+        || !grants.write.iter().any(|value| value == scope) {
+        return Ok(String::new());
     }
     match event {
         "session-start" => {
-            let url = format!("{base}/v1/recent?scope={}&limit=30&maxBytes=12000", crate::mcp::urlencode(&scope));
+            let url = format!("{base}/v1/recent?scope={}&limit=30&maxBytes=12000", crate::mcp::urlencode(scope));
             let body = send(http.get(url)).await?;
             let text = body["text"].as_str().unwrap_or_default();
             Ok(if text.is_empty() { String::new() } else { format!("Hyperag memory, newest first (scope {scope}):\n{text}") })

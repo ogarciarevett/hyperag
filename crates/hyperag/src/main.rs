@@ -7,10 +7,17 @@ use hyperag::server::{App, TokenFile, models_view, router};
 use rmcp::ServiceExt;
 use rmcp::transport::streamable_http_server::{StreamableHttpServerConfig, StreamableHttpService, session::local::LocalSessionManager};
 
-#[tokio::main]
-async fn main() -> anyhow::Result<()> {
+fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt().with_env_filter(tracing_subscriber::EnvFilter::from_default_env()).with_writer(std::io::stderr).init();
-    match Cli::parse().command {
+    let command = Cli::parse().command;
+    let mut builder = if matches!(&command, Command::Hook { .. }) {
+        tokio::runtime::Builder::new_current_thread()
+    } else { tokio::runtime::Builder::new_multi_thread() };
+    builder.enable_all().build()?.block_on(run(command))
+}
+
+async fn run(command: Command) -> anyhow::Result<()> {
+    match command {
         Command::Serve { host, port } => {
             let file = std::env::var("HYPERAG_TOKENS_FILE").map_err(|_| anyhow::anyhow!("HYPERAG_TOKENS_FILE is required"))?;
             let tokens = TokenFile::open(file.into())?;

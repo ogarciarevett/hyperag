@@ -290,7 +290,7 @@ process.stdout.write(JSON.stringify(sanitizeEnvironment(env, {
                 authorization.append(self.headers.get('Authorization'))
                 if self.path == '/v1/scopes':
                     self.send_response(200); self.end_headers()
-                    self.wfile.write(b'{"read":["project:demo-repo"],"write":["project:demo-repo"]}')
+                    self.wfile.write(b'{"read":["project:demo-repo","test:hooks","override:scope"],"write":["project:demo-repo","test:hooks","override:scope"]}')
                     return
                 received.append(('session-start', self.path))
                 self.send_response(200); self.end_headers(); self.wfile.write(b'{"text":"remember synthetic context"}')
