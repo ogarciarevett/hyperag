@@ -103,6 +103,8 @@ jobs:
         run: HYPERAG_BIN=target/release/hyperag python3 crates/hyperag/tests/hooks_fast_path.py
       - name: native asynchronous hook queue and latency contracts
         run: HYPERAG_BIN=target/release/hyperag python3 crates/hyperag/tests/hooks_async.py
+      - name: native live guard and detached watchdog
+        run: HYPERAG_BIN=target/release/hyperag python3 crates/hyperag/tests/hooks_live.py
       - name: build pinned prior service for rollback identity proof
         run: |
           git fetch origin a42ad2c6e7ad137b6b113bcfb12978fd18ccebf5
