@@ -99,10 +99,16 @@ def forward(config_path):
         if interrupted:
             # This child is still ours; stop/reap it before shared rollback inspects the old PID.
             try:
-                if process is not None and process.poll() is None:
-                    process.terminate()
-                    process.wait(timeout=15)
-                rollback.restore(directory / "rollback.json")
+                try:
+                    if process is not None and process.poll() is None:
+                        process.terminate()
+                        try:
+                            process.wait(timeout=15)
+                        except subprocess.TimeoutExpired:
+                            process.kill()
+                            process.wait(timeout=5)
+                finally:
+                    rollback.restore(directory / "rollback.json")
                 state["recovery"] = "succeeded"
             except Exception as recovery_error:
                 state.update(recovery="failed", recovery_category=type(recovery_error).__name__)

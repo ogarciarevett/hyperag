@@ -34,13 +34,16 @@ armed=False
 late_race=@LATE_RACE@
 stale_checks=0
 live_start=None
+stubborn_target=@STUBBORN_TARGET@
+target_pid=None
+target_term_at=None
 
 def fields(pid):
     try:return (Path('/proc')/str(pid)/'stat').read_text().rsplit(')',1)[1].split()
     except FileNotFoundError:return None
 
 def kill(pid, signum):
-    global armed
+    global armed,target_term_at
     if pid==current and signum==signal.SIGTERM:
         actual_kill(pid,signal.SIGSTOP)
         deadline=time.monotonic()+5
@@ -48,7 +51,12 @@ def kill(pid, signum):
             if time.monotonic()>deadline:raise TimeoutError('fixture stop metadata')
             time.sleep(.01)
         actual_kill(pid,signum);armed=True
-    else:actual_kill(pid,signum)
+    else:
+        if pid==target_pid and signum==signal.SIGTERM:
+            actual_kill(pid,signal.SIGSTOP);target_term_at=time.monotonic()
+        if pid==target_pid and signum==signal.SIGKILL:
+            Path(@TARGET_PROOF@).write_text(json.dumps({'pid':pid,'sigkill':True,'stopped':fields(pid)[0]=='T','term_wait_seconds':time.monotonic()-target_term_at}))
+        actual_kill(pid,signum)
 
 def metadata(command, **kwargs):
     global armed,stale_checks,live_start
@@ -82,6 +90,16 @@ if late_race:
     spec=importlib.util.spec_from_file_location('switch',Path(@MODULE@).with_name('switch.py'))
     switch=importlib.util.module_from_spec(spec);spec.loader.exec_module(switch)
     switch.rollback=module
+    if stubborn_target:
+        actual_healthy=module.healthy
+        def healthy(url):
+            global target_pid
+            result=actual_healthy(url)
+            if result and target_pid is None:
+                target_pid=json.loads(Path(sys.argv[1]).with_name('switch-status.json').read_text())['target_pid']
+                raise RuntimeError('fixture target health failure')
+            return result
+        module.healthy=healthy
     raise SystemExit(switch.main(sys.argv[1:]))
 raise SystemExit(module.main(sys.argv[1:]))
 '''
@@ -97,7 +115,10 @@ class ServiceRecoveryTest(unittest.TestCase):
     def test_forward_switch_tolerates_late_defunct_metadata(self):
         self.assert_real_service_recovery(force_exit_race=True, forward=True)
 
-    def assert_real_service_recovery(self, force_exit_race, forward=False):
+    def test_forward_switch_restores_prior_when_target_cannot_handle_sigterm(self):
+        self.assert_real_service_recovery(force_exit_race=True, forward=True, stubborn_target=True)
+
+    def assert_real_service_recovery(self, force_exit_race, forward=False, stubborn_target=False):
         current = Path(os.environ["HYPERAG_RECOVERY_CURRENT_BIN"]).resolve()
         old = Path(os.environ["HYPERAG_RECOVERY_OLD_BIN"]).resolve()
         self.assertNotEqual(rollback.binary_hash(current), rollback.binary_hash(old))
@@ -155,14 +176,31 @@ class ServiceRecoveryTest(unittest.TestCase):
                         adapter = root / "darwin-metadata.py"
                         adapter.write_text(DARWIN_METADATA_ADAPTER.replace("@MODULE@", repr(str(DIRECTORY / "rollback.py")))
                                            .replace("@CURRENT_PID@", str(service.pid)).replace("@RACE_PROOF@", repr(str(root / "exit-race.json")))
-                                           .replace("@LATE_RACE@", repr(forward)))
+                                           .replace("@LATE_RACE@", repr(forward)).replace("@STUBBORN_TARGET@", repr(stubborn_target))
+                                           .replace("@TARGET_PROOF@", repr(str(root / "target-killed.json"))))
                         command = [sys.executable, str(adapter)]
                     if forward:
                         config["target"] = {"argv": [str(current), *argv], "sha256": rollback.binary_hash(current), "env": current_environment}
                     path = root / ("switch.json" if forward else "rollback.json");path.write_text(json.dumps(config));path.chmod(0o600)
                     if forward:
-                        result = subprocess.run([*command, str(path)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=40)
+                        result = subprocess.run([*command, str(path)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=70 if stubborn_target else 40)
                         status = json.loads((root / "switch-status.json").read_text())
+                        if stubborn_target:
+                            self.assertEqual(result.returncode, 1)
+                            self.assertEqual((status['state'], status['phase'], status['error_type'], status['recovery']),
+                                             ('failed', 'health', 'RuntimeError', 'succeeded'))
+                            proof = json.loads((root / 'target-killed.json').read_text())
+                            self.assertEqual((proof['sigkill'], proof['stopped']), (True, True))
+                            self.assertGreaterEqual(proof['term_wait_seconds'], 14.5)
+                            self.assertIsNone(rollback.identity(proof['pid']))
+                            restored = json.loads((root / 'rollback-status.json').read_text())
+                            self.assertEqual(restored['state'], 'succeeded')
+                            self.assertEqual(rollback.identity(restored['restored_pid'])['sha256'], rollback.binary_hash(old))
+                            self.assertEqual(rollback.identity(restored['restored_pid'])['binary'], str(old))
+                            self.assertIsNone(rollback.identity(service.pid))
+                            self.assertTrue(healthy())
+                            self.assertTrue(any(entry['phase'] == 'health' and entry['category'] == 'RuntimeError' for entry in status['history']))
+                            return
                         self.assertEqual(result.returncode, 0, "switch failed: " + status.get("error_type", status.get("category", "unknown")) + " phase=" + status.get("phase", "unknown"))
                         self.assertEqual(status["state"], "succeeded")
                         self.assertTrue(healthy())
@@ -231,7 +269,7 @@ time.sleep(60)
                         target = json.loads((root / "rollback.json").read_text())["current"]
                         actual = rollback.identity(target["pid"])
                         if actual and actual["sha256"] == rollback.binary_hash(current):
-                            os.killpg(target["pid"], signal.SIGTERM)
+                            os.killpg(target["pid"], signal.SIGKILL if stubborn_target else signal.SIGTERM)
                             wait_for(lambda: rollback.identity(target["pid"]) is None, timeout=15, check_failure=False)
                     if status_path.exists():
                         restored_pid = json.loads(status_path.read_text()).get("restored_pid")

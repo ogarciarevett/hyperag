@@ -112,6 +112,16 @@ def write_status(directory, value, name="rollback-status.json"):
             temporary.unlink(missing_ok=True)
 
 
+def report_status(directory, value):
+    try:
+        write_status(directory, value)
+    except Exception as error:
+        try:
+            sys.stderr.write("hyperag rollback status unavailable: " + type(error).__name__ + "\n")
+        except Exception:
+            pass
+
+
 def read_config(config_path):
     config_path = Path(config_path)
     info = config_path.lstat()
@@ -145,7 +155,7 @@ def restore(config_path):
     if not 0 <= delay <= 30:
         raise ValueError("invalid restore delay")
     state = {"state": "stopping", "started_at": time.time()}
-    write_status(config_path.parent, state)
+    report_status(config_path.parent, state)
     actual_current = identity(current["pid"])
     if actual_current is None:
         # A prior attempt may have stopped the service before its restarter was killed.
@@ -154,7 +164,7 @@ def restore(config_path):
     elif actual_current != current:
         state["identity_changed_keys"] = sorted(key for key in current.keys() | actual_current.keys()
                                                 if current.get(key) != actual_current.get(key))
-        write_status(config_path.parent, state)
+        report_status(config_path.parent, state)
         raise ValueError("current process identity changed")
     else:
         os.kill(current["pid"], signal.SIGTERM)
@@ -164,14 +174,14 @@ def restore(config_path):
             raise TimeoutError("current service did not stop")
         time.sleep(.05)
     state.update(state="stopped", stopped_at=time.time())
-    write_status(config_path.parent, state)
+    report_status(config_path.parent, state)
     # A configured holdoff also exercises recovery across harness deadlines in CI.
     time.sleep(delay)
     service = subprocess.Popen(old["argv"], env=environment, stdin=subprocess.DEVNULL,
                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                                start_new_session=True, close_fds=True)
     state.update(state="starting", restored_pid=service.pid)
-    write_status(config_path.parent, state)
+    report_status(config_path.parent, state)
     deadline = time.monotonic() + 35
     while time.monotonic() < deadline:
         if service.poll() is not None:
@@ -181,7 +191,7 @@ def restore(config_path):
             raise ValueError("restored process identity mismatch")
         if healthy(config["health_url"]) and service.poll() is None:
             state.update(state="succeeded", health=True, restored_sha256=actual["sha256"], completed_at=time.time())
-            write_status(config_path.parent, state)
+            report_status(config_path.parent, state)
             return
         time.sleep(.05)
     raise TimeoutError("restored service health timed out")
@@ -194,9 +204,12 @@ def main(arguments=None):
         restore(path)
     except Exception as error:
         status_path = path.parent / "rollback-status.json"
-        state = json.loads(status_path.read_text()) if status_path.exists() else {}
+        try:
+            state = json.loads(status_path.read_text()) if status_path.exists() else {}
+        except (OSError, ValueError):
+            state = {}
         state.update(phase=state.get("state", "config"), state="failed", error_type=type(error).__name__, completed_at=time.time())
-        write_status(path.parent, state)
+        report_status(path.parent, state)
         return 1
     return 0
 
