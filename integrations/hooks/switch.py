@@ -79,6 +79,10 @@ def forward(config_path):
             if state["phase"] != "health":
                 phase("health", "check_target_health")
             if rollback.healthy(config["health_url"]):
+                if process.poll() is not None:
+                    raise RuntimeError("target exited during health check")
+                if rollback.identity(process.pid) != actual:
+                    raise ValueError("target identity changed during health check")
                 state.update(state="succeeded", health=True, target_sha256=actual["sha256"], completed_at=time.time())
                 phase("complete", "target_healthy")
                 return state
@@ -88,21 +92,24 @@ def forward(config_path):
         state.update(state="failed", error_type=type(error).__name__)
         category = {"absolute process executable required": "invalid_executable_identity",
                     "process start marker changed": "process_start_changed"}.get(str(error), type(error).__name__)
-        phase(state.get("phase", "checking"), category)
+        try:
+            phase(state.get("phase", "checking"), category)
+        except Exception:
+            pass  # A reporting failure must never prevent failback.
         if interrupted:
             # This child is still ours; stop/reap it before shared rollback inspects the old PID.
             try:
                 if process is not None and process.poll() is None:
                     process.terminate()
                     process.wait(timeout=15)
-                if process is not None:
-                    restore["current"] = {"pid": process.pid}
-                    rollback.write_status(directory, restore, "rollback.json")
                 rollback.restore(directory / "rollback.json")
                 state["recovery"] = "succeeded"
             except Exception as recovery_error:
                 state.update(recovery="failed", recovery_category=type(recovery_error).__name__)
-            rollback.write_status(directory, state, "switch-status.json")
+            try:
+                rollback.write_status(directory, state, "switch-status.json")
+            except Exception:
+                pass
         raise
     finally:
         lock.close()
