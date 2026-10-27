@@ -1,5 +1,5 @@
 use crate::lexical_consumer::Consumer;
-use sqlx::PgPool;
+use sqlx::{PgPool, postgres::PgPoolOptions};
 use std::{
     sync::{
         Arc,
@@ -31,19 +31,23 @@ impl Worker {
         let flag = cancelled.clone();
         let (stop, mut stopped) = oneshot::channel();
         let (finished, done) = oneshot::channel();
+        let connect = (*pool.connect_options()).clone();
         std::thread::spawn(move || {
             let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build().expect("lexical writer runtime");
             runtime.block_on(async move {
+                let writer_pool = PgPoolOptions::new().max_connections(1).acquire_timeout(Duration::from_secs(3)).connect_lazy_with(connect);
                 while !flag.load(Ordering::Acquire) {
-                    let step = consumer.step(&pool).await;
+                    if pool.is_closed() { break; }
+                    let step = consumer.step(&writer_pool).await;
                     if let Some(hook) = &after_step { hook(); }
-                    if flag.load(Ordering::Acquire) { break; }
+                    if flag.load(Ordering::Acquire) || pool.is_closed() { break; }
                     if !matches!(step, Ok(true)) {
                         if let Err(error) = step { tracing::warn!(%error, "lexical index update failed; retaining SQL fallback"); }
                         tokio::select! { biased; _ = &mut stopped => break, _ = tokio::time::sleep(Duration::from_secs(1)) => () }
                     }
                 }
                 drop(consumer);
+                writer_pool.close().await;
                 let _ = finished.send(());
             });
         });
