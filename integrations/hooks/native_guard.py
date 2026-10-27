@@ -365,6 +365,7 @@ def _watchdog(config):
                     _reports(config)
                     if probe is None:
                         probe_trace = _trace('background_probe', 'hook-writer-status')
+                        _step(trace, 'watchdog', 'probe_start')
                         probe = executor.submit(_probe, config, probe_trace)
                     if probe.done():
                         trace = probe_trace
@@ -373,8 +374,10 @@ def _watchdog(config):
                         except Exception as error:
                             failures += 1
                             trace['consecutive_failures'] = failures
-                            _append(directory / 'probe-failures.jsonl',
-                                    {**_snapshot(trace), 'category': _category(error), 'time': time.time()})
+                            record = {**_snapshot(trace), 'category': _category(error), 'time': time.time()}
+                            trace = _trace('watchdog', 'probe_failure_log')
+                            _append(directory / 'probe-failures.jsonl', record)
+                            trace = probe_trace
                             # Valid status reporting a real delivery/drop error remains immediate.
                             if isinstance(error, WriterFailure) or failures >= BACKGROUND_PROBE_FAILURES:
                                 raise
