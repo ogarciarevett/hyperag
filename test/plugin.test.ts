@@ -4,11 +4,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Pool } from "pg";
 
-import { loadPlugin, PluginError } from "hyperag/plugin";
 import { createPostgresStore } from "../src/adapters/postgres";
 import { Hyperag } from "../src/core";
 import { createHandler, tokenHash } from "../src/server";
 import { freshDatabase } from "./helpers";
+
+// An explicit runtime URL avoids the source alias used by clean-checkout typechecking.
+const { loadPlugin, PluginError } = await import(new URL("../dist/plugin.js", import.meta.url).href) as typeof import("../src/plugin");
 
 const dir = await mkdtemp(join(tmpdir(), "hyperag-plugin-"));
 const tokenFile = join(dir, "agent.token");
