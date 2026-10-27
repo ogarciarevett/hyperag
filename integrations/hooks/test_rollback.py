@@ -41,11 +41,21 @@ class RollbackTest(unittest.TestCase):
         with patch.object(rollback.sys, 'platform', 'darwin'), patch.object(rollback.subprocess, 'run', side_effect=ps):
             self.assertIsNone(rollback.identity(123))
 
+    def test_macos_exit_after_last_start_snapshot_is_absent(self):
+        replies = iter([('stat=', 'S'), ('lstart=', 'start-a'), ('comm=', '<defunct>'),
+                        ('stat=', 'S'), ('lstart=', 'start-a'), ('stat=', 'Z')])
+        def ps(command, **kwargs):
+            field, value = next(replies)
+            self.assertEqual(command[-1], field)
+            return subprocess.CompletedProcess(command, 0, stdout=value)
+        with patch.object(rollback.sys, 'platform', 'darwin'), patch.object(rollback.subprocess, 'run', side_effect=ps):
+            self.assertIsNone(rollback.identity(123))
+
     def test_macos_live_invalid_executable_and_reused_pid_fail_closed(self):
         for final_start in ('start-a', 'start-b'):
             with self.subTest(final_start=final_start):
                 values = iter([('stat=', 'S'), ('lstart=', 'start-a'), ('comm=', '<defunct>'),
-                               ('stat=', 'S'), ('lstart=', final_start)])
+                               ('stat=', 'S'), ('lstart=', final_start)] + ([('stat=', 'S')] if final_start == 'start-a' else []))
                 def ps(command, **kwargs):
                     field, value = next(values)
                     self.assertEqual(command[-1], field)

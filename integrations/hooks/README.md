@@ -88,3 +88,16 @@ Native hook credentials and fresh uncached permission checks are documented in [
 
 Opt-in native asynchronous writes are documented in [ASYNC.md](ASYNC.md). That path
 requires separate guard/watchdog integration before any live activation.
+
+
+For a forward replacement, run `python3 integrations/hooks/switch.py /absolute/private/switch.json`.
+The owner-only configuration contains `current` (the verified prior identity), `restore` and
+`target` launch records (`argv`, binary `sha256`, named allowlisted `env`), and a loopback
+`health_url`. It writes the rollback record before stopping and after acquiring the new
+identity, then verifies health. Failure restores the prior service through the same helper.
+`switch-status.json` retains each phase/category and timestamps, without exception text,
+arguments or environment values. The switch uses `rollback.identity`, including the final
+Darwin defunct-state check; a still-live invalid executable or changed start marker fails.
+Hosted CI forces that late race on a real old-to-new switch, proves the unsafe mutant fails,
+and requires target identity and health on an isolated port. Updating these Python helpers
+does not require rebuilding an existing service binary. No live activation is implied.

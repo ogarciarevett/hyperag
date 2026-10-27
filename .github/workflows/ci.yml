@@ -47,6 +47,7 @@ jobs:
           python3 -I integrations/hooks/test_recovery.py
           python3 -I integrations/hooks/test_guard.py
           python3 -I integrations/hooks/test_rollback.py
+          python3 -I integrations/hooks/test_switch.py
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: node_modules/@huggingface/transformers/.cache
@@ -161,12 +162,29 @@ jobs:
               helper = copy / "rollback.py"
               check = "        if not same_live_process():\n            return None\n        if not Path(executable).is_absolute():"
               assert check in helper.read_text()
-              helper.write_text(helper.read_text().replace(check, "        if not Path(executable).is_absolute():", 1))
+              late_check = "            final_state = metadata(\"stat\")\n            if final_state is None or final_state.startswith(\"Z\"):\n                return None\n"
+              assert late_check in helper.read_text()
+              helper.write_text(helper.read_text().replace(late_check, "", 1).replace(check, "        if not Path(executable).is_absolute():", 1))
               result = subprocess.run([sys.executable, "-I", str(copy / "test_service_recovery.py"),
                                        "ServiceRecoveryTest.test_macos_metadata_exit_race_restores_prior_service"],
                                       capture_output=True, text=True)
               assert result.returncode != 0 and "rollback failed: ValueError phase=stopping" in result.stderr
               print("RED: actual service exit between Darwin state and executable metadata aborts restoration with ValueError")
+          PY
+          python3 -I - <<'PY'
+          import pathlib, shutil, subprocess, sys, tempfile
+          with tempfile.TemporaryDirectory() as temporary:
+              copy = pathlib.Path(temporary) / "hooks"
+              shutil.copytree("integrations/hooks", copy)
+              helper = copy / "rollback.py"
+              check = "            final_state = metadata(\"stat\")\n            if final_state is None or final_state.startswith(\"Z\"):\n                return None\n"
+              assert check in helper.read_text()
+              helper.write_text(helper.read_text().replace(check, "", 1))
+              result = subprocess.run([sys.executable, "-I", str(copy / "test_service_recovery.py"),
+                                       "ServiceRecoveryTest.test_forward_switch_tolerates_late_defunct_metadata"],
+                                      capture_output=True, text=True)
+              assert result.returncode != 0 and "switch failed: ValueError phase=stopping" in result.stderr
+              print("RED: late defunct metadata aborts the real old-to-new service switch with ValueError")
           PY
           python3 -I integrations/hooks/test_service_recovery.py
       - name: crate package includes its runtime assets

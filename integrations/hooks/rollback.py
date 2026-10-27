@@ -63,6 +63,9 @@ def identity(pid):
         if not same_live_process():
             return None
         if not Path(executable).is_absolute():
+            final_state = metadata("stat")
+            if final_state is None or final_state.startswith("Z"):
+                return None
             raise ValueError("absolute process executable required")
         try:
             digest = binary_hash(executable)
@@ -96,7 +99,7 @@ def healthy(url):
         return False
 
 
-def write_status(directory, value):
+def write_status(directory, value, name="rollback-status.json"):
     with tempfile.NamedTemporaryFile(mode="w", dir=directory, delete=False) as file:
         temporary = Path(file.name)
         try:
@@ -104,33 +107,55 @@ def write_status(directory, value):
             json.dump(value, file)
             file.flush()
             os.fsync(file.fileno())
-            temporary.replace(directory / "rollback-status.json")
+            temporary.replace(directory / name)
         finally:
             temporary.unlink(missing_ok=True)
 
 
-def restore(config_path):
+def report_status(directory, value):
+    try:
+        write_status(directory, value)
+    except Exception as error:
+        try:
+            sys.stderr.write("hyperag rollback status unavailable: " + type(error).__name__ + "\n")
+        except Exception:
+            pass
+
+
+def read_config(config_path):
     config_path = Path(config_path)
     info = config_path.lstat()
     if not stat.S_ISREG(info.st_mode) or stat.S_IMODE(info.st_mode) != 0o600 or info.st_uid != os.getuid():
         raise ValueError("private configuration required")
     config = json.loads(config_path.read_text())
-    current, old = config["current"], config["restore"]
     url = urllib.parse.urlsplit(config["health_url"])
     if url.scheme != "http" or url.hostname != "127.0.0.1" or not url.port or url.path != "/healthz":
         raise ValueError("loopback health endpoint required")
     if url.username or url.password or url.query or url.fragment:
         raise ValueError("invalid health endpoint")
-    if not old["argv"] or not Path(old["argv"][0]).is_absolute():
-        raise ValueError("absolute restore executable required")
-    if set(old["env"]) - set(SERVICE_VARIABLES) or not all(isinstance(v, str) for v in old["env"].values()):
+    return config
+
+
+def checked_launch(launch):
+    if not isinstance(launch["argv"], list) or not launch["argv"] or not all(isinstance(value, str) for value in launch["argv"]) or not Path(launch["argv"][0]).is_absolute():
+        raise ValueError("absolute launch executable required")
+    if set(launch["env"]) - set(SERVICE_VARIABLES) or not all(isinstance(v, str) for v in launch["env"].values()):
         raise ValueError("only named service variables are accepted")
-    environment = {name: old["env"][name] for name in SERVICE_VARIABLES if name in old["env"]}
+    if binary_hash(launch["argv"][0]) != launch["sha256"]:
+        raise ValueError("launch binary identity mismatch")
+    return {name: launch["env"][name] for name in SERVICE_VARIABLES if name in launch["env"]}
+
+
+def restore(config_path):
+    config_path = Path(config_path)
+    config = read_config(config_path)
+    current, old = config["current"], config["restore"]
+    environment = checked_launch(old)
     delay = float(config.get("restart_delay_seconds", 0))
-    if not 0 <= delay <= 30 or binary_hash(old["argv"][0]) != old["sha256"]:
-        raise ValueError("invalid restore build or delay")
+    if not 0 <= delay <= 30:
+        raise ValueError("invalid restore delay")
     state = {"state": "stopping", "started_at": time.time()}
-    write_status(config_path.parent, state)
+    report_status(config_path.parent, state)
     actual_current = identity(current["pid"])
     if actual_current is None:
         # A prior attempt may have stopped the service before its restarter was killed.
@@ -139,7 +164,7 @@ def restore(config_path):
     elif actual_current != current:
         state["identity_changed_keys"] = sorted(key for key in current.keys() | actual_current.keys()
                                                 if current.get(key) != actual_current.get(key))
-        write_status(config_path.parent, state)
+        report_status(config_path.parent, state)
         raise ValueError("current process identity changed")
     else:
         os.kill(current["pid"], signal.SIGTERM)
@@ -149,14 +174,14 @@ def restore(config_path):
             raise TimeoutError("current service did not stop")
         time.sleep(.05)
     state.update(state="stopped", stopped_at=time.time())
-    write_status(config_path.parent, state)
+    report_status(config_path.parent, state)
     # A configured holdoff also exercises recovery across harness deadlines in CI.
     time.sleep(delay)
     service = subprocess.Popen(old["argv"], env=environment, stdin=subprocess.DEVNULL,
                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                                start_new_session=True, close_fds=True)
     state.update(state="starting", restored_pid=service.pid)
-    write_status(config_path.parent, state)
+    report_status(config_path.parent, state)
     deadline = time.monotonic() + 35
     while time.monotonic() < deadline:
         if service.poll() is not None:
@@ -166,7 +191,7 @@ def restore(config_path):
             raise ValueError("restored process identity mismatch")
         if healthy(config["health_url"]) and service.poll() is None:
             state.update(state="succeeded", health=True, restored_sha256=actual["sha256"], completed_at=time.time())
-            write_status(config_path.parent, state)
+            report_status(config_path.parent, state)
             return
         time.sleep(.05)
     raise TimeoutError("restored service health timed out")
@@ -179,9 +204,12 @@ def main(arguments=None):
         restore(path)
     except Exception as error:
         status_path = path.parent / "rollback-status.json"
-        state = json.loads(status_path.read_text()) if status_path.exists() else {}
+        try:
+            state = json.loads(status_path.read_text()) if status_path.exists() else {}
+        except (OSError, ValueError):
+            state = {}
         state.update(phase=state.get("state", "config"), state="failed", error_type=type(error).__name__, completed_at=time.time())
-        write_status(path.parent, state)
+        report_status(path.parent, state)
         return 1
     return 0
 

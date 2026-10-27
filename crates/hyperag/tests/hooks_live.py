@@ -69,6 +69,22 @@ class LiveHooks(unittest.TestCase):
             except Exception as error:diagnostics[name] = {'metadata_error': type(error).__name__}
         return diagnostics
 
+    def call_diagnostics(self):
+        value = self.arm_diagnostics()
+        try:
+            rows = (self.state / 'calls.jsonl').read_text().splitlines()
+            last = json.loads(rows[-1]) if rows else {}
+            value['last_call'] = {key: last[key] for key in ('agent', 'event', 'cohort', 'error', 'latency_ms', 'tail_margin_ms', 'warmup') if key in last}
+            worker = self.fixture.status()
+            value['writer'] = {key: worker[key] for key in ('accepted', 'stored', 'failed', 'rejected', 'blocked', 'last_category', 'categories') if key in worker}
+            ledger = self.fixture.queue() / 'enqueue-errors.json'
+            if ledger.exists():
+                errors = json.loads(ledger.read_text())
+                value['enqueue_categories'] = errors.get('categories', {})
+        except Exception as error:
+            value['call_metadata_error'] = type(error).__name__
+        return value
+
     def arm(self):
         result = subprocess.run(self.command('arm'), env=self.fixture.environment,
                                 text=True, capture_output=True, timeout=4)
@@ -89,7 +105,12 @@ class LiveHooks(unittest.TestCase):
         environment['HYPERAG_HOOK_STARTED_AT'] = str(time.time())
         result = subprocess.run(self.command('hook', event, '--harness', 'claude-code'),
                                 env=environment, input=payload, text=True, capture_output=True, timeout=5)
-        return result, time.perf_counter() - started
+        elapsed = time.perf_counter() - started
+        if result.returncode or result.stderr:
+            print(json.dumps({'fixture': 'guard_failure', 'test': self._testMethodName,
+                              'returncode': result.returncode, 'stderr_present': bool(result.stderr),
+                              'metadata': self.call_diagnostics()}), flush=True)
+        return result, elapsed
 
     def wait(self, predicate, timeout=5):
         self.fixture.wait_for(predicate, timeout=timeout)
@@ -117,7 +138,8 @@ class LiveHooks(unittest.TestCase):
             samples = []
             for _ in range(100):
                 result, elapsed = self.call(event)
-                self.assertEqual((result.returncode, result.stderr), (0, ''))
+                diagnostic = json.dumps(self.call_diagnostics()) if result.returncode or result.stderr else ''
+                self.assertEqual((result.returncode, bool(result.stderr)), (0, False), diagnostic)
                 samples.append(elapsed * 1000)
                 row = json.loads((self.state / 'calls.jsonl').read_text().splitlines()[-1])
                 margin = row['tail_margin_ms']
