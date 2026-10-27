@@ -268,6 +268,7 @@ pub fn router(app: App) -> Router {
     Router::new()
         .route("/healthz", get(|| async { Json(json!({ "ok": true })) }))
         .route("/v1/whoami", get(|Who(who): Who| async move { Json(json!({ "principal": who })) }))
+        .route("/v1/scopes", get(scopes))
         .route("/v1/memories", post(ingest))
         .route("/v1/memories/batch", post(ingest_batch))
         .route("/v1/memories/{id}", axum::routing::patch(update).delete(delete))
@@ -289,6 +290,11 @@ pub fn router(app: App) -> Router {
 
 async fn no_route(Who(_): Who) -> ApiError {
     ApiError(Error::NotFound("no such route".into()))
+}
+
+async fn scopes(State(a): State<App>, Who(w): Who) -> R {
+    Ok(Json(json!({ "read": a.hyperag.store.scopes(&w, "read").await?,
+        "write": a.hyperag.store.scopes(&w, "write").await? })))
 }
 
 async fn ingest(State(a): State<App>, Who(w): Who, Body(b): Body<NewMemory>) -> R {

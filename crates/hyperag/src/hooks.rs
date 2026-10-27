@@ -7,8 +7,8 @@
 //! - `prompt`: stores the user's prompt (kind `prompt`) in the project's scope.
 //! - `session-end`: stores a marker that the session ended (kind `session`).
 //!
-//! The scope is `HYPERAG_SCOPE`, else `project:<name>` where name is the git root folder of the
-//! hook's `cwd` (or the folder itself), lowercased.
+//! The scope is `HYPERAG_SCOPE`, else `project:<name>` where name is the common git repository
+//! folder (so linked worktrees share a scope), or the current folder, lowercased.
 
 use std::path::Path;
 
@@ -16,15 +16,40 @@ use serde_json::{Value, json};
 
 const PROMPT_MAX_CHARS: usize = 4_000;
 
+#[derive(serde::Deserialize)]
+struct ScopeGrants {
+    read: Vec<String>,
+    write: Vec<String>,
+}
+
 pub fn scope_for(cwd: &Path) -> String {
-    if let Ok(s) = std::env::var("HYPERAG_SCOPE") {
-        if !s.is_empty() {
-            return s;
-        }
+    scope_with_override(cwd, std::env::var("HYPERAG_SCOPE").ok().as_deref())
+}
+
+fn scope_with_override(cwd: &Path, override_scope: Option<&str>) -> String {
+    if let Some(scope) = override_scope.filter(|scope| !scope.is_empty()) {
+        return scope.to_owned();
     }
     let root = cwd.ancestors().find(|d| d.join(".git").exists()).unwrap_or(cwd);
+    let common = common_repository(root);
+    let root = common.as_deref().unwrap_or(root);
     let name = root.file_name().map(|n| n.to_string_lossy().to_lowercase()).unwrap_or_else(|| "unknown".into());
     format!("project:{name}")
+}
+
+fn common_repository(root: &Path) -> Option<std::path::PathBuf> {
+    let marker = root.join(".git");
+    if !marker.is_file() { return None; }
+    let metadata = std::fs::read_to_string(marker).ok()?;
+    let gitdir = root.join(metadata.trim().strip_prefix("gitdir:")?.trim()).canonicalize().ok()?;
+    let common = match std::fs::read_to_string(gitdir.join("commondir")) {
+        Ok(relative) => gitdir.join(relative.trim()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => gitdir,
+        Err(_) => return None,
+    }.canonicalize().ok()?;
+    if common.file_name().is_some_and(|name| name == ".git") {
+        common.parent().map(Path::to_path_buf)
+    } else { None }
 }
 
 pub async fn run(event: &str) -> i32 {
@@ -79,6 +104,7 @@ async fn handle(event: &str, harness: Option<&str>, config: &crate::hook_setup::
     let base = std::env::var("HYPERAG_URL").unwrap_or_else(|_| config.url.clone());
     let token = std::env::var(&config.token_env).map_err(|_| anyhow::anyhow!("{} is not set", config.token_env))?;
     let http = reqwest::Client::builder().timeout(std::time::Duration::from_millis(config.timeout_ms)).build()?;
+    let token = token.as_str();
     let send = |req: reqwest::RequestBuilder| async move {
         let r = req.bearer_auth(&token).send().await?;
         let status = r.status();
@@ -86,6 +112,15 @@ async fn handle(event: &str, harness: Option<&str>, config: &crate::hook_setup::
         anyhow::ensure!(status.is_success(), "service answered {status}");
         Ok::<Value, anyhow::Error>(body)
     };
+    if scope.starts_with("project:") {
+        let grants = send(http.get(format!("{base}/v1/scopes"))).await?;
+        let grants: ScopeGrants = serde_json::from_value(grants)
+            .map_err(|_| anyhow::anyhow!("invalid scope grant response"))?;
+        // Eligibility is read-only: never create a grant or attempt a write for an unknown project.
+        if !grants.read.contains(&scope) || !grants.write.contains(&scope) {
+            return Ok(String::new());
+        }
+    }
     match event {
         "session-start" => {
             let url = format!("{base}/v1/recent?scope={}&limit=30&maxBytes=12000", crate::mcp::urlencode(&scope));
@@ -121,8 +156,44 @@ mod tests {
         let nested = dir.join("Repo-X").join("src").join("deep");
         std::fs::create_dir_all(&nested).unwrap();
         std::fs::create_dir_all(dir.join("Repo-X").join(".git")).unwrap();
-        assert_eq!(scope_for(&nested), "project:repo-x");
-        assert_eq!(scope_for(&dir), format!("project:{}", dir.file_name().unwrap().to_string_lossy().to_lowercase()));
+        assert_eq!(scope_with_override(&nested, None), "project:repo-x");
+        assert_eq!(scope_with_override(&dir, None), format!("project:{}", dir.file_name().unwrap().to_string_lossy().to_lowercase()));
         std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn linked_worktree_uses_common_repository_scope_and_explicit_override() {
+        let fixture = tempfile::tempdir().unwrap();
+        let repository = fixture.path().join("Coordination");
+        let worktree = fixture.path().join("chief");
+        let git = |args: &[&str]| {
+            let output = std::process::Command::new("git")
+                .env_remove("GIT_DIR").env_remove("GIT_WORK_TREE").env_remove("GIT_COMMON_DIR")
+                .args(["-c", "core.hooksPath=/dev/null", "-c", "commit.gpgSign=false"])
+                .args(args).output().unwrap();
+            assert!(output.status.success(), "fixture git command failed");
+        };
+        git(&["init", repository.to_str().unwrap()]);
+        git(&["-C", repository.to_str().unwrap(), "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "commit", "--allow-empty", "-m", "fixture"]);
+        git(&["-C", repository.to_str().unwrap(), "worktree", "add", "-b", "chief", worktree.to_str().unwrap()]);
+        let nested = worktree.join("src");
+        std::fs::create_dir(&nested).unwrap();
+        assert_eq!(scope_with_override(&repository, None), "project:coordination");
+        assert_eq!(scope_with_override(&nested, None), "project:coordination");
+        assert_eq!(scope_with_override(&nested, Some("")), "project:coordination");
+        assert_eq!(scope_with_override(&nested, Some("project:explicit")), "project:explicit");
+        std::fs::write(worktree.join(".git"), "gitdir: ../Coordination/.git/worktrees/chief\n").unwrap();
+        assert_eq!(scope_with_override(&nested, None), "project:coordination");
+    }
+
+    #[test]
+    fn custom_git_directory_falls_back_to_worktree_name() {
+        let fixture = tempfile::tempdir().unwrap();
+        let worktree = fixture.path().join("Repo-X");
+        let metadata = fixture.path().join("custom-metadata");
+        std::fs::create_dir(&worktree).unwrap();
+        std::fs::create_dir(&metadata).unwrap();
+        std::fs::write(worktree.join(".git"), "gitdir: ../custom-metadata\n").unwrap();
+        assert_eq!(scope_with_override(&worktree, None), "project:repo-x");
     }
 }

@@ -42,6 +42,11 @@ jobs:
       - run: python3 -I eval/public/benchmark_charts.py --check
       - run: python3 -I scripts/test_install.py
       - run: python3 -I scripts/test_homebrew_formula.py
+      - name: recovery survives harness hook termination
+        run: |
+          python3 -I integrations/hooks/test_recovery.py
+          python3 -I integrations/hooks/test_guard.py
+          python3 -I integrations/hooks/test_rollback.py
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: node_modules/@huggingface/transformers/.cache
@@ -94,6 +99,28 @@ jobs:
           python-version: "3.12"
       - name: isolated harness hook contracts
         run: HYPERAG_BIN=target/release/hyperag python3 crates/hyperag/tests/hooks_install.py
+      - name: build pinned prior service for rollback identity proof
+        run: |
+          git fetch origin a42ad2c6e7ad137b6b113bcfb12978fd18ccebf5
+          git worktree add --detach /tmp/hyperag-rollback-prior a42ad2c6e7ad137b6b113bcfb12978fd18ccebf5
+          cargo build --release --locked -p hyperag --manifest-path /tmp/hyperag-rollback-prior/Cargo.toml --target-dir /tmp/hyperag-rollback-target
+      - name: service rollback RED/GREEN across the harness deadline
+        env:
+          HYPERAG_RECOVERY_CURRENT_BIN: target/release/hyperag
+          HYPERAG_RECOVERY_OLD_BIN: /tmp/hyperag-rollback-target/release/hyperag
+        run: |
+          python3 -I - <<'PY'
+          import pathlib, shutil, subprocess, sys, tempfile
+          with tempfile.TemporaryDirectory() as temporary:
+              copy = pathlib.Path(temporary) / "hooks"
+              shutil.copytree("integrations/hooks", copy)
+              helper = copy / "recovery.py"
+              helper.write_text(helper.read_text().replace("start_new_session=True", "start_new_session=False"))
+              result = subprocess.run([sys.executable, "-I", str(copy / "test_service_recovery.py")], capture_output=True, text=True)
+              assert result.returncode != 0 and "prior service not restored after hook timeout" in result.stderr
+              print("RED: shared hook process group cannot restore the prior service after termination")
+          PY
+          python3 -I integrations/hooks/test_service_recovery.py
       - name: crate package includes its runtime assets
         run: |
           cargo package --list --locked --manifest-path crates/hyperag/Cargo.toml > /tmp/crate-files.txt

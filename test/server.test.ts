@@ -41,6 +41,27 @@ test("identity comes from the token, never from the body", async () => {
   expect(r.status).toBe(403);
 });
 
+test("scopes returns only the authenticated caller's current read and write grants", async () => {
+  expect((await call(null, "GET", "/v1/scopes")).status).toBe(401);
+  expect((await call("forged", "GET", "/v1/scopes")).status).toBe(401);
+  expect(await (await call("ann-token", "GET", "/v1/scopes")).json()).toEqual({ read: [], write: [] });
+  const readScope = uniq("scope_read");
+  const writeScope = uniq("scope_write");
+  const foreignScope = uniq("scope_foreign");
+  for (const [principal, scope, permission] of [
+    ["ann", readScope, "read"], ["ann", writeScope, "write"], ["ben", foreignScope, "read"],
+  ])
+    expect((await call("root-token", "POST", "/v1/grants", { principal, scope, permission })).status).toBe(200);
+  const response = await call("ann-token", "GET", "/v1/scopes?principal=ben");
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual({ read: [readScope], write: [writeScope] });
+  expect((await call("ann-token", "GET", "/v1/scopes/ben")).status).toBe(404);
+  expect((await call("ann-token", "POST", "/v1/scopes", { principal: "ben" })).status).toBe(404);
+  expect((await call("root-token", "DELETE", "/v1/grants", { principal: "ann", scope: writeScope, permission: "write" })).status).toBe(200);
+  expect(await (await call("ann-token", "GET", "/v1/scopes")).json()).toEqual({ read: [readScope], write: [] });
+  expect((await call("root-token", "DELETE", "/v1/grants", { principal: "ann", scope: readScope, permission: "read" })).status).toBe(200);
+});
+
 test("grant, write, read, revoke through the service", async () => {
   for (const [p, perm] of [["ann", "write"], ["ann", "read"], ["ben", "read"]])
     expect((await call("root-token", "POST", "/v1/grants", { principal: p, scope, permission: perm })).status).toBe(200);
