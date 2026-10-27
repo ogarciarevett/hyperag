@@ -25,6 +25,10 @@ class Backend:
         self.delay = 0
         self.recent_status = 200
         self.read_started = threading.Event()
+        self.hold_next_grant = False
+        self.grant_captured = threading.Event()
+        self.release_grant = threading.Event()
+        self.grant_observed_ms = []
         backend = self
         class Handler(BaseHTTPRequestHandler):
             def log_message(self, *_): pass
@@ -39,6 +43,11 @@ class Backend:
                 if self.path == '/v1/scopes':
                     backend.scope_calls += 1
                     scopes = sorted(backend.granted) if token == 'fixture-owner' else []
+                    backend.grant_observed_ms.append(time.time() * 1000)
+                    if backend.hold_next_grant:
+                        backend.hold_next_grant = False
+                        backend.grant_captured.set()
+                        backend.release_grant.wait(1.2)
                     self.reply(200, {'read': scopes, 'write': scopes})
                 else:
                     backend.recent_calls += 1; backend.read_started.set()
@@ -97,18 +106,18 @@ class FastPath(unittest.TestCase):
                           'recent_requests': self.backend.recent_calls, 'posts': self.backend.posts}))
         self.assertLess(p95, 300)
         self.assertEqual((self.backend.scope_calls, self.backend.recent_calls, self.backend.posts), (1, 21, 0))
-        caches = list((self.home / '.hyperag-hooks').glob('*/scope-*.json'))
+        caches = list((self.home / '.hyperag-hooks').glob('*/scope-[0-9a-f]*.json'))
         self.assertEqual(len(caches), 1)
         for path in caches:
             self.assertEqual(path.stat().st_mode & 0o777, 0o600)
             text = path.read_text()
             self.assertNotIn('fixture-owner', text); self.assertNotIn('synthetic context', text)
-            self.assertEqual(set(json.loads(text)), {'scope', 'eligible', 'expires_ms'})
+            self.assertEqual(set(json.loads(text)), {'scope', 'eligible', 'expires_ms', 'generation'})
         self.assertEqual(caches[0].parent.stat().st_mode & 0o777, 0o700)
 
     def test_contended_atomic_cache_replacement_falls_back_to_authoritative_get(self):
         warm, _ = self.hook(); self.success(warm)
-        cache = next((self.home / '.hyperag-hooks').glob('*/scope-*.json'))
+        cache = next((self.home / '.hyperag-hooks').glob('*/scope-[0-9a-f]*.json'))
         cached = cache.read_text()
         stop = threading.Event()
         replacements = []
@@ -132,6 +141,71 @@ class FastPath(unittest.TestCase):
             finally:
                 stop.set(); writer.join(timeout=2)
                 self.assertFalse(writer.is_alive())
+
+    def held_grant_process(self):
+        self.backend.hold_next_grant = True
+        process = subprocess.Popen([BIN, 'hook', 'session-start', '--harness', 'claude-code'], env=self.env,
+                                   stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        process.stdin.write(b'{}'); process.stdin.close(); process.stdin = None
+        self.assertTrue(self.backend.grant_captured.wait(2))
+        return process
+
+    def test_older_allow_response_cannot_replace_newer_deny(self):
+        old = self.held_grant_process()
+        try:
+            self.backend.granted.clear()
+            denied, _ = self.hook(); self.success(denied); self.assertEqual(denied.stdout, '')
+            cache = next((self.home / '.hyperag-hooks').glob('*/scope-[0-9a-f]*.json'))
+            latest = json.loads(cache.read_text()); self.assertFalse(latest['eligible'])
+            self.assertLessEqual(latest['expires_ms'], self.backend.grant_observed_ms[-1] + 5002)
+            self.backend.release_grant.set()
+            out, err = old.communicate(timeout=3)
+            self.assertEqual((old.returncode, out, err), (0, b'', b''))
+            self.assertEqual(json.loads(cache.read_text()), latest)
+            cached, _ = self.hook(); self.success(cached); self.assertEqual(cached.stdout, '')
+            self.assertEqual((self.backend.scope_calls, self.backend.recent_calls, self.backend.posts), (2, 0, 0))
+        finally:
+            self.backend.release_grant.set()
+            if old.poll() is None:old.kill(); old.wait()
+            old.stdout.close(); old.stderr.close()
+
+    def test_older_allow_cannot_publish_after_a_deny_that_could_not_cache(self):
+        old = self.held_grant_process()
+        try:
+            root = next((self.home / '.hyperag-hooks').glob('*/grant-generation.json')).parent
+            with (root / 'scopes.lock').open('a') as lock:
+                fcntl.flock(lock, fcntl.LOCK_EX)
+                self.backend.granted.clear()
+                denied, _ = self.hook(); self.success(denied); self.assertEqual(denied.stdout, '')
+                self.assertEqual(list(root.glob('scope-[0-9a-f]*.json')), [])
+            self.backend.release_grant.set()
+            out, err = old.communicate(timeout=3)
+            self.assertEqual((old.returncode, out, err), (0, b'', b''))
+            self.assertEqual(list(root.glob('scope-[0-9a-f]*.json')), [])
+            fresh, _ = self.hook(); self.success(fresh); self.assertEqual(fresh.stdout, '')
+            cache = next(root.glob('scope-[0-9a-f]*.json'))
+            self.assertFalse(json.loads(cache.read_text())['eligible'])
+            self.assertEqual((self.backend.scope_calls, self.backend.recent_calls, self.backend.posts), (3, 0, 0))
+        finally:
+            self.backend.release_grant.set()
+            if old.poll() is None:old.kill(); old.wait()
+            old.stdout.close(); old.stderr.close()
+
+    def test_cache_ttl_starts_before_delayed_grant_response(self):
+        process = self.held_grant_process()
+        try:
+            observed = self.backend.grant_observed_ms[0]
+            time.sleep(.35)
+            self.backend.release_grant.set()
+            out, err = process.communicate(timeout=3)
+            self.assertEqual((process.returncode, err), (0, b'')); self.assertIn(b'synthetic context', out)
+            cache = next((self.home / '.hyperag-hooks').glob('*/scope-[0-9a-f]*.json'))
+            self.assertLessEqual(json.loads(cache.read_text())['expires_ms'], observed + 5002)
+            self.assertEqual(self.backend.posts, 0)
+        finally:
+            self.backend.release_grant.set()
+            if process.poll() is None:process.kill(); process.wait()
+            process.stdout.close(); process.stderr.close()
 
     def test_negative_cache_expires_after_five_seconds(self):
         self.backend.granted.clear()

@@ -124,12 +124,14 @@ async fn handle(event: &str, harness: Option<&str>, config: &crate::hook_setup::
         #[cfg(not(unix))]
         let cached: Option<bool> = None;
         let eligible = if let Some(eligible) = cached { eligible } else {
+            #[cfg(unix)]
+            let request = if event == "session-start" { Some(crate::hook_context::begin_scope_request(base, token).await?) } else { None };
             let grants = send(http.get(format!("{base}/v1/scopes"))).await?;
             let grants: ScopeGrants = serde_json::from_value(grants)
                 .map_err(|_| anyhow::anyhow!("invalid scope grant response"))?;
             let eligible = grants.read.iter().any(|value| value == scope) && grants.write.iter().any(|value| value == scope);
             #[cfg(unix)]
-            if event == "session-start" { crate::hook_context::cache_scope(base, token, scope, eligible)?; }
+            let eligible = if let Some(request) = request { crate::hook_context::cache_scope(base, token, scope, eligible, request).await? } else { eligible };
             eligible
         };
         if !eligible { return Ok(String::new()); }

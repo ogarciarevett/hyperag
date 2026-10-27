@@ -19,6 +19,12 @@ struct ScopeCache {
     scope: String,
     eligible: bool,
     expires_ms: u128,
+    generation: u64,
+}
+
+pub(crate) struct ScopeRequest {
+    started_ms: u128,
+    generation: u64,
 }
 
 pub(crate) fn owner() -> u32 {
@@ -181,14 +187,77 @@ pub(crate) fn cached_scope(base: &str, token: &str, scope: &str) -> Result<Optio
         .map(|value| value.eligible))
 }
 
-pub(crate) fn cache_scope(base: &str, token: &str, scope: &str, eligible: bool) -> Result<()> {
+async fn generation_lock(root: &Path) -> Result<File> {
+    let file = lock(&root.join("scope-generation.lock"))?;
+    let deadline = tokio::time::Instant::now() + std::time::Duration::from_millis(100);
+    loop {
+        if file.try_lock().is_ok() {
+            return Ok(file);
+        }
+        ensure!(
+            tokio::time::Instant::now() < deadline,
+            "hook scope generation unavailable"
+        );
+        tokio::time::sleep(std::time::Duration::from_millis(1)).await;
+    }
+}
+
+pub(crate) async fn begin_scope_request(base: &str, token: &str) -> Result<ScopeRequest> {
+    let started_ms = now_ms()?;
+    let root = root(base, token)?;
+    let _generation = generation_lock(&root).await?;
+    let path = root.join("grant-generation.json");
+    let previous: u64 = json_file(&path)?.unwrap_or(0);
+    let generation = previous
+        .checked_add(1)
+        .ok_or_else(|| anyhow!("hook scope generation exhausted"))?;
+    save(&root, &path, &generation)?;
+    Ok(ScopeRequest {
+        started_ms,
+        generation,
+    })
+}
+
+pub(crate) async fn cache_scope(
+    base: &str,
+    token: &str,
+    scope: &str,
+    eligible: bool,
+    request: ScopeRequest,
+) -> Result<bool> {
     ensure!(scope.len() <= 1_024, "hook project scope too long");
     let root = root(base, token)?;
     let path = cache_path(&root, scope);
     let admission = lock(&root.join("scopes.lock"))?;
-    // A contended cache is optional: use the fresh permission result without waiting.
-    if admission.try_lock().is_err() {
-        return Ok(());
+    let can_publish = admission.try_lock().is_ok();
+    // Allocation never takes the cache lock. Hold the generation lock through
+    // publication so a newer request cannot appear between the fence and save.
+    let _generation = generation_lock(&root).await?;
+    let latest: u64 = json_file(&root.join("grant-generation.json"))?.unwrap_or(0);
+    ensure!(
+        latest >= request.generation,
+        "invalid hook scope generation"
+    );
+    let now = now_ms()?;
+    let expires_ms = request.started_ms + CACHE_MS;
+    let previous: Option<ScopeCache> = if can_publish { json_file(&path)? } else { None };
+    if latest > request.generation
+        || previous
+            .as_ref()
+            .is_some_and(|value| value.generation >= request.generation)
+        || request.started_ms > now
+        || expires_ms <= now
+    {
+        return Ok(previous.is_some_and(|value| {
+            value.eligible
+                && value.scope == scope
+                && value.expires_ms > now
+                && value.expires_ms <= now + CACHE_MS
+        }));
+    }
+    // A contended cache is optional; the ordered fresh response can be used uncached.
+    if !can_publish {
+        return Ok(eligible);
     }
     let mut cached = 0;
     for entry in fs::read_dir(&root)? {
@@ -210,7 +279,7 @@ pub(crate) fn cache_scope(base: &str, token: &str, scope: &str, eligible: bool) 
         }
     }
     if cached >= 64 && !path.exists() {
-        return Ok(());
+        return Ok(eligible);
     }
     save(
         &root,
@@ -218,9 +287,11 @@ pub(crate) fn cache_scope(base: &str, token: &str, scope: &str, eligible: bool) 
         &ScopeCache {
             scope: scope.into(),
             eligible,
-            expires_ms: now_ms()? + CACHE_MS,
+            expires_ms,
+            generation: request.generation,
         },
-    )
+    )?;
+    Ok(eligible)
 }
 pub(crate) fn invalidate(root: &Path, scope: &str) -> Result<()> {
     let path = cache_path(root, scope);
