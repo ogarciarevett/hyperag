@@ -41,9 +41,9 @@ class SwitchTest(unittest.TestCase):
                 self.assertEqual(argv[0], current['binary'])
                 return prior_process
             with patch.object(switch.rollback, 'write_status', side_effect=write), \
-                    patch.object(switch.rollback, 'identity', side_effect=[current, None, None, None, restored]), \
+                    patch.object(switch.rollback, 'identity', side_effect=[current, None, restored]), \
                     patch.object(switch.rollback, 'healthy', side_effect=[False, True]), \
-                    patch.object(switch.os, 'kill'), patch.object(switch.subprocess, 'Popen', side_effect=spawn) as start, \
+                    patch.object(switch.rollback, 'wait_exited'), patch.object(switch.os, 'kill'), patch.object(switch.subprocess, 'Popen', side_effect=spawn) as start, \
                     patch.object(switch.rollback.sys.stderr, 'write') as log:
                 with self.assertRaises(OSError):switch.forward(path)
             self.assertEqual(start.call_count, 2)
@@ -57,9 +57,9 @@ class SwitchTest(unittest.TestCase):
             root = Path(temporary);path, current, target = self.config(root)
             process = Mock(pid=target['pid'])
             process.poll.side_effect = [None, 0, 0]
-            with patch.object(switch.rollback, 'identity', side_effect=[current, None, target]), \
+            with patch.object(switch.rollback, 'identity', side_effect=[current, target]), \
                     patch.object(switch.rollback, 'healthy', return_value=True), \
-                    patch.object(switch.rollback, 'restore') as restore, patch.object(switch.os, 'kill'), \
+                    patch.object(switch.rollback, 'restore') as restore, patch.object(switch.rollback, 'wait_exited'), patch.object(switch.os, 'kill'), \
                     patch.object(switch.subprocess, 'Popen', return_value=process):
                 with self.assertRaises(RuntimeError):switch.forward(path)
             restore.assert_called_once_with(root / 'rollback.json')

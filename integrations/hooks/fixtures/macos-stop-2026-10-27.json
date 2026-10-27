@@ -1,0 +1,73 @@
+{
+  "trial_port": 7482,
+  "interval_ms": 50,
+  "outcome": "completed",
+  "events": [
+    {
+      "at_ms": 565.22,
+      "phase": "baseline",
+      "field": "stat",
+      "state": "SNs"
+    },
+    {
+      "at_ms": 568.214,
+      "phase": "baseline",
+      "field": "lstart",
+      "state": "present"
+    },
+    {
+      "at_ms": 570.869,
+      "phase": "baseline",
+      "field": "comm",
+      "state": "absolute"
+    },
+    {
+      "at_ms": 573.199,
+      "phase": "baseline",
+      "field": "stat",
+      "state": "SNs"
+    },
+    {
+      "at_ms": 577.362,
+      "phase": "baseline",
+      "field": "lstart",
+      "state": "present"
+    },
+    {
+      "at_ms": 597.266,
+      "phase": "baseline",
+      "field": "stat",
+      "state": "SNs"
+    },
+    {
+      "at_ms": 600.896,
+      "phase": "baseline",
+      "field": "lstart",
+      "state": "present"
+    },
+    {
+      "at_ms": 2.779,
+      "phase": "after_sigterm",
+      "field": "stat",
+      "state": "Z"
+    },
+    {
+      "at_ms": 2.854,
+      "phase": "after_sigterm",
+      "field": "identity",
+      "state": "absent_or_zombie"
+    },
+    {
+      "at_ms": 6.099,
+      "phase": "after_sigterm",
+      "field": "stat",
+      "state": "absent"
+    },
+    {
+      "at_ms": 6.124,
+      "phase": "after_sigterm",
+      "field": "identity",
+      "state": "gone"
+    }
+  ]
+}
