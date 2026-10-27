@@ -372,6 +372,75 @@ raise SystemExit(module.main())
         print(json.dumps({'fixture':'different_process_clock_origins', 'calls':5,
                           'max_full_wall_ms':round(max(latencies),3), 'trips':0}), flush=True)
 
+    def probe_driver(self, failed_calls):
+        driver = self.fixture.home / 'probe-guard.py'
+        driver.write_text('MODULE=' + repr(str(GUARD)) + '\nFAILED=' + repr(failed_calls) + '\n' + r'''import importlib.util,subprocess,sys
+from pathlib import Path
+spec=importlib.util.spec_from_file_location('native_guard',MODULE)
+module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+module.__file__=str(Path(__file__).resolve())
+original=subprocess.Popen
+attempts=0
+def spawn(command,*args,**kwargs):
+    global attempts
+    if command[1:]==['hook-writer-status']:
+        attempts+=1
+        if attempts in FAILED:
+            command=[sys.executable,'-c','import time;time.sleep(60)']
+    return original(command,*args,**kwargs)
+subprocess.Popen=spawn
+raise SystemExit(module.main())
+''')
+        return lambda *args: [sys.executable, str(driver), '--config', str(self.config), *args]
+
+    def probe_failures(self):
+        path = self.state / 'probe-failures.jsonl'
+        return [json.loads(line) for line in path.read_text().splitlines()] if path.exists() else []
+
+    def test_isolated_probe_timeouts_reset_and_do_not_block_fast_hooks(self):
+        with patch.object(self, 'command', side_effect=self.probe_driver((1, 3))):
+            self.arm()
+            time.sleep(.85)  # Longer than heartbeat freshness; the probe is still running.
+            result, elapsed = self.call('session-start')
+            self.assertEqual((result.returncode, result.stderr), (0, ''), json.dumps(self.call_diagnostics()))
+            self.assertLess(elapsed, .3)
+            self.wait(lambda: len(self.probe_failures()) == 2, timeout=8)
+            self.wait(lambda: self.read('watchdog-ready.json').get('probe_failures') == 0)
+        failures = self.probe_failures()
+        self.assertEqual([value['consecutive_failures'] for value in failures], [1, 1])
+        for value in failures:
+            self.assertEqual((value['stage'], value['operation'], value['category']),
+                             ('background_probe', 'hook-writer-status', 'TimeoutError'))
+            self.assertGreater(value['child_pid'], 0)
+            self.assertGreaterEqual(value['duration_ms'], 2000)
+        self.assertTrue(self.fixture.marker.exists())
+        self.assertFalse((self.state / 'trip.json').exists())
+
+    def test_three_consecutive_probe_timeouts_trip_with_stage(self):
+        with patch.object(self, 'command', side_effect=self.probe_driver((1, 2, 3))):
+            self.arm()
+            self.wait(self.restored.exists, timeout=10)
+            self.recovered()
+        failures = self.probe_failures()
+        self.assertEqual([value['consecutive_failures'] for value in failures], [1, 2, 3])
+        trip = self.read('trip.json')
+        self.assertEqual((trip['stage'], trip['operation'], trip['category'], trip['consecutive_failures']),
+                         ('background_probe', 'hook-writer-status', 'TimeoutError', 3))
+        self.assertEqual(trip['child_pid'], failures[-1]['child_pid'])
+        self.assertGreaterEqual(trip['duration_ms'], 2000)
+
+    def test_real_hook_error_trips_while_first_probe_is_pending(self):
+        with patch.object(self, 'command', side_effect=self.probe_driver((1, 2, 3))):
+            self.arm()
+            self.fixture.backend.tokens.clear()
+            result, elapsed = self.call('session-start')
+            self.assertTrue(result.stderr)
+            self.assertLess(elapsed, 1)
+            self.recovered()
+        trip = self.read('trip.json')
+        self.assertEqual((trip['category'], trip['stage']), ('hook_error', 'hook'))
+        self.assertFalse(self.probe_failures())
+
     def test_completed_native_status_survives_late_supervisor_wakeup(self):
         spec = importlib.util.spec_from_file_location('native_guard', GUARD)
         module = importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
