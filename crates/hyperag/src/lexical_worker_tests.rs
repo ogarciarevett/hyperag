@@ -4,7 +4,7 @@ use super::*;
 async fn stopping_pending_work_releases_snapshot_and_root() -> anyhow::Result<()> {
     crate::lexical_read::tests::isolated(
         "lexical_worker::tests::stopping_pending_work_releases_snapshot_and_root",
-        |store| async move {
+        |store: crate::store::Store| async move {
             let mut tx = store.begin_write().await?;
             sqlx::raw_sql(
                 "insert into memories(id,scope,kind,created_by,current_version)
