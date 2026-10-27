@@ -584,6 +584,10 @@ def _hook(config, event, harness):
             pass
         elif report['category'] not in SKIPS and report['category'] != ('completed' if event == 'session-start' else 'enqueued'):
             error = 'native_mode_mismatch'
+        if event == 'prompt' and not error and report['category'] not in SKIPS | {'cancelled'} and time.monotonic() >= deadline:
+            # A completed child can be collected after a scheduler pause; preserve its
+            # successful completion, but account for the missed foreground budget.
+            report['category'] = 'budget_skip'
     except BudgetSkip:
         report['category'] = 'budget_skip'
     except Exception as exception:
