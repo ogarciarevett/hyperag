@@ -125,6 +125,56 @@ class LiveHooks(unittest.TestCase):
         self.assertFalse(self.fixture.marker.exists())
         self.assertTrue(self.read('trip.json').get('category'))
 
+    def test_prompt_budget_skip_is_quiet_measured_and_does_no_write(self):
+        self.fixture.backend.scope_delay = .7
+        self.arm()
+        result, elapsed = self.call()
+        self.assertEqual((result.returncode, result.stdout, result.stderr), (0, '', ''), json.dumps(self.call_diagnostics()))
+        row = json.loads((self.state / 'calls.jsonl').read_text().splitlines()[-1])
+        self.assertEqual(row['category'], 'budget_skip')
+        self.assertIsNone(row['error'])
+        self.assertLessEqual(row['latency_ms'], 250)
+        self.assertGreaterEqual(row['wall_ms'], row['latency_ms'])
+        self.assertLess(elapsed, .7, 'prompt waited for the slow scopes GET')
+        self.wait(lambda: self.read('summary.json').get('budget_skips') == 1)
+        self.assertFalse(self.read('trip.json'))
+        self.assertTrue(self.fixture.marker.exists())
+        self.assertEqual(json.loads((self.state / 'skips.jsonl').read_text().splitlines()[-1]), {'category': 'budget_skip'})
+        self.assertFalse(any(method == 'POST' for method, _ in self.fixture.backend.requests))
+
+    def test_native_prompt_budget_reports_the_slow_stage_without_stderr(self):
+        self.fixture.backend.scope_delay = .7
+        self.fixture.environment['HYPERAG_HOOK_STARTED_AT'] = str(time.time())
+        frame = self.report_call()
+        self.assertEqual(frame['category'], 'budget_skip')
+        self.assertEqual(frame['stage'], 'scopes_get')
+        self.assertGreater(frame['steps_ms']['scopes_get'], 50)
+        self.assertFalse(any(method == 'POST' for method, _ in self.fixture.backend.requests))
+
+    def test_stderr_before_prompt_budget_still_raises(self):
+        spec = importlib.util.spec_from_file_location('budget_guard', GUARD)
+        module = importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+        config = {'binary': sys.executable, 'url': self.fixture.backend.url, 'native_env': {'HOME': str(self.fixture.home)}}
+        with self.assertRaises(TimeoutError):
+            module._native(config, ['-c', 'import os,time;os.write(2,b"error");time.sleep(5)'], budget=.2, prompt_budget=True)
+
+    def test_prompt_breakdown_has_no_search_or_recent_and_writer_is_detached(self):
+        self.arm()
+        result, _ = self.call()
+        self.assertEqual((result.returncode, result.stderr), (0, ''), json.dumps(self.call_diagnostics()))
+        row = json.loads((self.state / 'calls.jsonl').read_text().splitlines()[-1])
+        self.assertEqual(row['category'], 'enqueued')
+        for step in ('process_start', 'scopes_get', 'writer_enqueue', 'native_total'):
+            self.assertGreaterEqual(row['steps_ms'][step], 0)
+        self.assertNotIn('recent_get', row['steps_ms'])
+        self.assertEqual(len(row['machine_load']), 3)
+        self.wait(lambda: self.fixture.status().get('stored') == 1)
+        status = self.fixture.status()
+        self.assertEqual(status['delivery_count'], 1)
+        self.assertGreaterEqual(status['delivery_last_ms'], 350)
+        self.assertEqual(status['delivery_total_ms'], status['delivery_last_ms'])
+        self.assertEqual(set(self.fixture.backend.requests), {('GET', '/v1/scopes'), ('POST', '/v1/memories')})
+
     def test_slow_async_write_returns_fast_with_file_credential_only(self):
         self.arm()
         result, elapsed = self.call()
@@ -649,7 +699,7 @@ raise SystemExit(result)
             self.assertNotIn(self.fixture.token.encode(), raw)
             self.assertNotIn(b'private-session-fixture', raw); self.assertNotIn(b'private-prompt-fixture', raw)
             frame = json.loads(raw)
-            self.assertEqual(set(frame), {'category', 'scope'})
+            self.assertEqual(set(frame), {'category', 'scope', 'steps_ms', 'stage'})
             self.assertEqual(frame['scope'], 'project:fixture')
             return frame
         finally:

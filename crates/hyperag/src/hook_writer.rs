@@ -59,6 +59,10 @@ enum Category {
 struct State {
     pid: u32,
     updated_ms: u128,
+    delivery_count: u64,
+    delivery_total_ms: u64,
+    delivery_max_ms: u64,
+    delivery_last_ms: u64,
     accepted: u64,
     stored: u64,
     failed: u64,
@@ -500,6 +504,7 @@ async fn writes(
             })?;
             continue;
         }
+        let started = std::time::Instant::now();
         let result = http
             .post(format!("{}/v1/memories", base.trim_end_matches('/')))
             .bearer_auth(&token)
@@ -514,7 +519,12 @@ async fn writes(
             Ok(_) => Some(Category::Backend),
             Err(_) => Some(Category::Transport),
         };
+        let elapsed = started.elapsed().as_millis().min(u64::MAX as u128) as u64;
         change(&root, &shared, |state| {
+            state.delivery_count += 1;
+            state.delivery_last_ms = elapsed;
+            state.delivery_total_ms = state.delivery_total_ms.saturating_add(elapsed);
+            state.delivery_max_ms = state.delivery_max_ms.max(elapsed);
             if let Some(category) = failure {
                 state.failed += 1;
                 state.blocked = true;

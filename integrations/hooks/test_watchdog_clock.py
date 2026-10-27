@@ -13,6 +13,35 @@ spec.loader.exec_module(guard)
 
 
 class WatchdogClockTest(unittest.TestCase):
+    def test_budget_skip_is_counted_with_cap_but_hard_rule_uses_uncapped_wall(self):
+        with tempfile.TemporaryDirectory() as name:
+            directory = Path(name)
+            config = {'state_dir': name}
+            with patch.object(guard.time, 'monotonic', return_value=guard.STARTED + .544174), patch.object(guard, '_trip') as trip:
+                summary = guard._record(config, {'agent': 'claude-code', 'event': 'prompt', 'category': 'budget_skip', 'error': None})
+                trip.assert_not_called()
+            row = json.loads((directory / 'calls.jsonl').read_text())
+            self.assertEqual(row['latency_ms'], 250)
+            self.assertEqual(row['wall_ms'], 574.174)
+            self.assertEqual((summary['calls'], summary['budget_skips'], summary['errors']), (0, 1, 0))
+            measured = [{**row, 'warmup': False} for _ in range(20)]
+            result = guard.evaluate(measured)
+            self.assertEqual((result['calls'], result['p95_ms'], result['reason']), (20, 250, None))
+            self.assertEqual(guard.evaluate([{**row, 'wall_ms': 1000.001}])['reason'], 'single_call_limit')
+            self.assertEqual(guard.evaluate([{**row, 'error': 'native_hook_error'}])['reason'], 'hook_error')
+            for value in (float('nan'), -1, True):
+                with self.assertRaises(ValueError):guard.evaluate([{**row, 'wall_ms': value}])
+
+    def test_error_budget_row_cannot_hide_latency_and_capped_rows_still_trip_p95(self):
+        with tempfile.TemporaryDirectory() as name:
+            with patch.object(guard.time, 'monotonic', return_value=guard.STARTED + .4), patch.object(guard, '_trip') as trip:
+                guard._record({'state_dir': name}, {'agent': 'claude-code', 'event': 'prompt', 'category': 'budget_skip', 'error': 'stderr'})
+                trip.assert_called_once()
+            row = json.loads((Path(name) / 'calls.jsonl').read_text())
+            self.assertEqual(row['latency_ms'], 430)
+        rows = [{'latency_ms': 250, 'wall_ms': 260, 'category': 'budget_skip'} for _ in range(18)]
+        self.assertEqual(guard.evaluate(rows + [{'latency_ms': 301}] * 2)['reason'], 'p95_limit')
+
     def test_delivery_failure_precedes_simultaneous_mode_mismatch(self):
         for counters in ({'categories': {'http401': 1}}, {'failed': 1}, {'blocked': True},
                          {'rejected': 1}, {'enqueue_errors': {'rejected': 1}},

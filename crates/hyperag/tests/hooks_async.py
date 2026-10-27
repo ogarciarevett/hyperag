@@ -32,6 +32,7 @@ class Backend:
         self.maximum_active = 0
         self.post_delay = .4
         self.recent_delay = 0
+        self.scope_delay = 0
         self.gate = None
         self.started = threading.Event()
         backend = self
@@ -61,6 +62,7 @@ class Backend:
                 if not self.authorized():
                     return self.reply(401, {})
                 if route == "/v1/scopes":
+                    time.sleep(backend.scope_delay)
                     with backend.lock:
                         backend.scope_gets += 1
                         grants = dict(backend.grants)
