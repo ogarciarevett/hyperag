@@ -136,3 +136,14 @@ Hosted tests force a successful status child to exit, pause its supervisor past
 250 ms, and require a successful result; a separate running child must still time
 out. The slow-fsync fixture now retains stage timings and category-only metadata
 on failure so a generic recovery message no longer destroys the diagnosis.
+
+
+Every native-guard `trip.json` now includes `stage`, `operation`, `child_pid`,
+`started_at` (wall time), and measured `duration_ms`, alongside category and
+recovery metadata. A filesystem/policy operation with no child records a null PID;
+that is distinct from missing tracing. Hook trips also include agent/event names.
+Tracing is in memory on successful calls; only the existing trip path persists it.
+No input, returned memory, token, environment, arguments or raw exception text is
+recorded. Retry dispatch preserves the first failure's trace. Watchdog reporting,
+status CLI, foreground checks and heartbeat each have distinct operation names.
+This tracing-only change leaves all budgets, retry counts and hook policy intact.
