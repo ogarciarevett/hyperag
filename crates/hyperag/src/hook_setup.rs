@@ -18,6 +18,8 @@ pub struct Config {
     pub token_file: Option<PathBuf>,
     pub scope: String,
     pub timeout_ms: u64,
+    pub async_writes: bool,
+    pub async_active_marker: Option<PathBuf>,
     pub events: BTreeMap<String, bool>,
     pub harnesses: BTreeMap<String, Harness>,
 }
@@ -32,7 +34,7 @@ impl Default for Harness {
 }
 impl Default for Config {
     fn default() -> Self {
-        Self { url: "http://127.0.0.1:7480".into(), token_env: "HYPERAG_TOKEN".into(), token_file: None, scope: "project".into(), timeout_ms: 1500, events: BTreeMap::new(), harnesses: BTreeMap::new() }
+        Self { url: "http://127.0.0.1:7480".into(), token_env: "HYPERAG_TOKEN".into(), token_file: None, scope: "project".into(), timeout_ms: 1500, async_writes: false, async_active_marker: None, events: BTreeMap::new(), harnesses: BTreeMap::new() }
     }
 }
 pub fn home() -> Result<PathBuf> {
@@ -59,7 +61,9 @@ impl Config {
             Err(e) => return Err(e.into()),
         };
         ensure!((100..=2000).contains(&config.timeout_ms), "timeout_ms must be 100..2000");
+        ensure!(!config.async_writes || config.token_file.is_some(), "async writes require a dedicated token_file");
         ensure!(config.token_file.as_ref().is_none_or(|path| path.is_absolute()), "token_file must be absolute");
+        ensure!(config.async_active_marker.as_ref().is_none_or(|path| path.is_absolute()), "async_active_marker must be absolute");
         ensure!(!config.token_env.is_empty() && config.token_env.chars().all(|c| c.is_ascii_alphanumeric() || c == '_'), "token_env must name an environment variable");
         ensure!(!config.scope.is_empty(), "scope must be project or a fixed scope");
         for event in config.events.keys().chain(config.harnesses.values().flat_map(|h| h.events.iter())) {

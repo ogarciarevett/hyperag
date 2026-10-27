@@ -10,7 +10,8 @@ use rmcp::transport::streamable_http_server::{StreamableHttpServerConfig, Stream
 fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt().with_env_filter(tracing_subscriber::EnvFilter::from_default_env()).with_writer(std::io::stderr).init();
     let command = Cli::parse().command;
-    let mut builder = if matches!(&command, Command::Hook { .. }) {
+    // Hooks do no model work: avoid constructing a thread pool for every prompt.
+    let mut builder = if matches!(&command, Command::Hook { .. } | Command::HookWriter { .. } | Command::HookWriterStatus) {
         tokio::runtime::Builder::new_current_thread()
     } else { tokio::runtime::Builder::new_multi_thread() };
     builder.enable_all().build()?.block_on(run(command))
@@ -51,6 +52,23 @@ async fn run(command: Command) -> anyhow::Result<()> {
             cleanup?;
         }
         Command::Hook { event, harness } => std::process::exit(hyperag::hooks::run_for(&event, harness.as_deref()).await),
+        Command::HookWriter { root } => {
+            #[cfg(unix)]
+            if hyperag::hook_writer::run(&root).await.is_err() { std::process::exit(1); }
+            #[cfg(not(unix))]
+            { let _ = root; anyhow::bail!("asynchronous hooks require Unix"); }
+        }
+        Command::HookWriterStatus => {
+            #[cfg(unix)]
+            {
+                let config = hyperag::hook_setup::Config::load(&hyperag::hook_setup::home()?)?;
+                let token = config.token()?;
+                let base = std::env::var("HYPERAG_URL").unwrap_or(config.url);
+                println!("{}", hyperag::hook_writer::inspect(&base, &token)?);
+            }
+            #[cfg(not(unix))]
+            anyhow::bail!("asynchronous hooks require Unix");
+        }
         Command::Hooks { action } => hyperag::hook_setup::run(&action)?,
         Command::Token { principal, file } => {
             let mut bytes = [0u8; 32];

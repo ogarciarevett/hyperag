@@ -17,6 +17,8 @@ pub mod hooks;
 pub mod hook_setup;
 #[cfg(unix)]
 mod hook_credentials;
+#[cfg(unix)]
+pub mod hook_writer;
 pub mod mcp;
 pub mod models;
 pub mod portable;
