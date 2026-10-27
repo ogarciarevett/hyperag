@@ -2,11 +2,12 @@
 //! principal is trusted as given; the HTTP service and the MCP server are the trust boundary that
 //! verify it. Scopes a principal may read or write always come from the grants table.
 
-use std::collections::{BTreeMap, HashMap};
-use std::sync::Arc;
+use std::collections::{BTreeMap, HashMap, VecDeque};
+use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use tokio::sync::RwLock;
 
 use crate::graph::Graph;
@@ -81,6 +82,41 @@ fn apply_rerank_scores(items: &mut [RetrievedItem], scores: &[f32]) {
     for (item, score) in items[..count].iter_mut().zip(scores) { item.rerank_score = Some(*score); }
     // Unscored rows must retain fused order, including when all scored logits are negative.
     items[..count].sort_by(|a, b| b.rerank_score.unwrap_or(0.0).total_cmp(&a.rerank_score.unwrap_or(0.0)));
+}
+
+pub const DEFAULT_RERANK_CACHE_SIZE: usize = 256;
+
+/// Stable key over the re-ranker model id, query text, and ordered `(id, version)` pairs.
+pub fn rerank_cache_key(model_id: &str, query: &str, candidates: &[(String, i32)]) -> String {
+    let key = serde_json::to_string(&(model_id, query, candidates)).expect("serialisable");
+    hex::encode(Sha256::digest(key.as_bytes()))
+}
+
+pub fn parse_rerank_cache(configured: Option<&str>) -> Result<usize> {
+    match configured.map(str::trim).filter(|v| !v.is_empty()) {
+        None | Some("0" | "false" | "off" | "none") => Ok(0),
+        Some("true" | "on") => Ok(DEFAULT_RERANK_CACHE_SIZE),
+        Some(v) => v.parse::<usize>().ok().filter(|&n| (1..=65_536).contains(&n))
+            .ok_or_else(|| Error::InvalidInput("HYPERAG_RERANK_CACHE must be false, true or an integer from 0 to 65536".into())),
+    }
+}
+
+#[allow(dead_code)]
+#[derive(Clone, Debug)]
+struct RerankCacheEntry { key: String, candidates: Vec<(String, i32)>, scores: Vec<f32> }
+
+/// Bounded LRU cache of cross-encoder scores, off when capacity is zero.
+#[derive(Debug, Default)]
+pub struct RerankCache { capacity: usize, entries: Mutex<VecDeque<RerankCacheEntry>> }
+
+impl RerankCache {
+    pub fn new(capacity: usize) -> Self { Self { capacity, entries: Mutex::new(VecDeque::new()) } }
+    pub fn capacity(&self) -> usize { self.capacity }
+    pub fn len(&self) -> usize { self.entries.lock().expect("rerank cache lock").len() }
+    pub fn is_empty(&self) -> bool { self.len() == 0 }
+    pub fn invalidate(&self, _id: &str, _current_version: Option<i32>) {}
+    pub fn get(&self, _model_id: &str, _query: &str, _candidates: &[(String, i32)]) -> Option<Vec<f32>> { None }
+    pub fn put(&self, _model_id: &str, _query: &str, _candidates: Vec<(String, i32)>, _scores: Vec<f32>) {}
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -200,17 +236,20 @@ pub struct Config {
     pub min_rerank_score: f32,
     /// Least best cosine similarity for evidence when no re-ranker runs.
     pub min_vector_score: f64,
+    /// Bounded LRU size for cross-encoder scores; `None` reads `HYPERAG_RERANK_CACHE` or settings (default off).
+    pub rerank_cache: Option<usize>,
 }
 
 impl Config {
     pub fn new(store: Store) -> Self {
-        Config { store, graph: None, embedder: None, reranker: None, admins: vec![], rrf_k: 60.0, min_rerank_score: 0.0, min_vector_score: 0.82 }
+        Config { store, graph: None, embedder: None, reranker: None, admins: vec![], rrf_k: 60.0, min_rerank_score: 0.0, min_vector_score: 0.82, rerank_cache: None }
     }
 }
 
 pub struct Hyperag {
     pub store: Store,
     pub graph: Option<Graph>,
+    pub rerank_cache: RerankCache,
     models: RwLock<Models>,
     admins: Vec<String>,
     rrf_k: f64,
@@ -323,9 +362,21 @@ impl Hyperag {
         if let Some(g) = &config.graph {
             g.ensure_schema().await?;
         }
+        let cache_size = match config.rerank_cache {
+            Some(0) => 0,
+            Some(size) => parse_rerank_cache(Some(&size.to_string()))?,
+            None => {
+                let raw = match std::env::var("HYPERAG_RERANK_CACHE").ok().filter(|v| !v.is_empty()) {
+                    Some(v) => Some(v),
+                    None => config.store.setting("rerank_cache").await?,
+                };
+                parse_rerank_cache(raw.as_deref())?
+            }
+        };
         Ok(Hyperag {
             store: config.store,
             graph: config.graph,
+            rerank_cache: RerankCache::new(cache_size),
             models: RwLock::new(Models { embedder: config.embedder.map(Arc::new), reranker: config.reranker.map(Arc::new), space }),
             admins: config.admins,
             rrf_k: config.rrf_k,
@@ -441,6 +492,9 @@ impl Hyperag {
         let kind = input.kind.clone().unwrap_or_else(|| "document".into());
         let create = CreateInput { id: &id, scope: &input.scope, kind: &kind, supersedes: &input.supersedes, idempotency_key: &input.idempotency_key, version };
         let result = self.store.create(principal, &create, &hash, vector.as_ref()).await?;
+        for old in &input.supersedes {
+            self.rerank_cache.invalidate(old, None);
+        }
         // Graph writes are MERGEs, so they also run on a replay: a retry repairs a graph write that
         // failed. A replay of a memory deleted since then writes nothing.
         let live = result.created || self.store.scope_of(std::slice::from_ref(&result.id)).await?.contains_key(&result.id);
@@ -461,13 +515,17 @@ impl Hyperag {
         let vector = Self::vectors_of(&models, std::slice::from_ref(&input.text)).await?.and_then(|mut v| v.pop());
         let version = VersionInput { text: input.text, source: input.source, valid_from: input.valid_from, valid_to: input.valid_to, metadata: input.metadata };
         let hash = version_hash(&scope, &version);
-        self.store.update(principal, id, &version, input.expected_version, &input.idempotency_key, &hash, vector.as_ref()).await
+        let result = self.store.update(principal, id, &version, input.expected_version, &input.idempotency_key, &hash, vector.as_ref()).await?;
+        self.rerank_cache.invalidate(id, Some(result.version));
+        Ok(result)
     }
 
     /// The fact stops ranking and its validity ends now; its history stays explainable.
     pub async fn invalidate(&self, principal: &str, id: &str, reason: &str) -> Result<()> {
         self.writable_scope_of(principal, id).await?;
-        self.store.invalidate(id, reason, principal).await
+        self.store.invalidate(id, reason, principal).await?;
+        self.rerank_cache.invalidate(id, None);
+        Ok(())
     }
 
     /// Text, vectors and graph node go; a content-free tombstone stays. Deleting an already deleted
@@ -483,6 +541,7 @@ impl Hyperag {
         }
         self.writable_scope_of(principal, id).await?;
         self.store.delete(id, reason, principal).await?;
+        self.rerank_cache.invalidate(id, None);
         if let Some(g) = &self.graph {
             g.delete_memory(id).await?;
         }
@@ -646,7 +705,18 @@ impl Hyperag {
         if let (true, Some(r)) = (rerank && !items.is_empty(), &models.reranker) {
             let cap = std::env::var("HYPERAG_RERANK_CANDIDATES").ok();
             let docs = rerank_input(&items, options.rerank_candidates, cap.as_deref())?;
-            match timed(&mut timings, Stage::Rerank, r.rerank(query, &docs)).await {
+            let candidates: Vec<(String, i32)> = items.iter().take(docs.len()).map(|i| (i.memory.id.clone(), i.memory.version)).collect();
+            let model_id = if r.spec.is_empty() { r.name.as_str() } else { r.spec.as_str() };
+            let scored = timed(&mut timings, Stage::Rerank, async {
+                if let Some(scores) = self.rerank_cache.get(model_id, query, &candidates) {
+                    return Ok(scores);
+                }
+                let scores = r.rerank(query, &docs).await?;
+                self.rerank_cache.put(model_id, query, candidates, scores.clone());
+                Ok(scores)
+            })
+            .await;
+            match scored {
                 Ok(scores) => {
                     apply_rerank_scores(&mut items, &scores);
                     reranked = true;
@@ -957,4 +1027,112 @@ mod profiling_tests {
         assert_eq!(t.rerank,0.0);
     }
 
+}
+
+#[cfg(test)]
+mod rerank_cache_tests {
+    use super::*;
+    use sqlx::postgres::{PgConnectOptions, PgPoolOptions};
+    use std::str::FromStr;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    #[test]
+    fn rerank_cache_defaults_off_and_validates_setting() {
+        for off in [None, Some(""), Some("0"), Some("false"), Some("off"), Some("none")] {
+            assert_eq!(parse_rerank_cache(off).unwrap(), 0);
+        }
+        for on in [Some("true"), Some("on")] { assert_eq!(parse_rerank_cache(on).unwrap(), DEFAULT_RERANK_CACHE_SIZE); }
+        assert_eq!(parse_rerank_cache(Some("16")).unwrap(), 16);
+        for bad in ["-1", "65537", "invalid"] { assert!(matches!(parse_rerank_cache(Some(bad)), Err(Error::InvalidInput(_)))); }
+        let disabled = RerankCache::default();
+        assert_eq!(disabled.capacity(), 0);
+        disabled.put("m", "q", vec![("a".into(), 1)], vec![1.0]);
+        assert!(disabled.get("m", "q", &[("a".into(), 1)]).is_none());
+    }
+
+    #[test]
+    fn rerank_cache_key_hashes_model_query_and_candidate_versions() {
+        let base = rerank_cache_key("model-a", "query-1", &[("doc-1".into(), 1), ("doc-2".into(), 2)]);
+        assert_eq!(base.len(), 64);
+        assert_eq!(base, rerank_cache_key("model-a", "query-1", &[("doc-1".into(), 1), ("doc-2".into(), 2)]));
+        assert_ne!(base, rerank_cache_key("model-b", "query-1", &[("doc-1".into(), 1), ("doc-2".into(), 2)]));
+        assert_ne!(base, rerank_cache_key("model-a", "query-2", &[("doc-1".into(), 1), ("doc-2".into(), 2)]));
+        assert_ne!(base, rerank_cache_key("model-a", "query-1", &[("doc-1".into(), 2), ("doc-2".into(), 2)]));
+        assert_ne!(base, rerank_cache_key("model-a", "query-1", &[("doc-2".into(), 2), ("doc-1".into(), 1)]));
+    }
+
+    #[test]
+    fn rerank_cache_hit_miss_invalidation_and_lru_bound() {
+        let cache = RerankCache::new(2);
+        let c1 = vec![("a".to_owned(), 1), ("b".to_owned(), 1)];
+        let c2 = vec![("b".to_owned(), 1), ("c".to_owned(), 1)];
+        let c3 = vec![("c".to_owned(), 1), ("d".to_owned(), 1)];
+        assert!(cache.get("m1", "q1", &c1).is_none());
+        cache.put("m1", "q1", c1.clone(), vec![0.2, 0.9]);
+        assert_eq!(cache.get("m1", "q1", &c1), Some(vec![0.2, 0.9]));
+        assert!(cache.get("m1", "q2", &c1).is_none());
+        assert!(cache.get("m2", "q1", &c1).is_none());
+        cache.put("m1", "q2", c2.clone(), vec![0.8, 0.1]);
+        assert_eq!(cache.len(), 2);
+        // Touch q1 so q2 becomes least-recently-used before inserting q3.
+        assert_eq!(cache.get("m1", "q1", &c1), Some(vec![0.2, 0.9]));
+        cache.put("m1", "q3", c3.clone(), vec![0.4, 0.5]);
+        assert_eq!((cache.len(), cache.get("m1", "q1", &c1), cache.get("m1", "q2", &c2), cache.get("m1", "q3", &c3)), (2, Some(vec![0.2, 0.9]), None, Some(vec![0.4, 0.5])));
+        // A candidate version change invalidates entries referencing the older version.
+        assert!(cache.get("m1", "q1", &[("a".into(), 2), ("b".into(), 1)]).is_none());
+        assert!(cache.get("m1", "q1", &c1).is_none());
+        assert_eq!(cache.get("m1", "q3", &c3), Some(vec![0.4, 0.5]));
+        cache.invalidate("c", Some(2));
+        assert!(cache.get("m1", "q3", &c3).is_none());
+    }
+
+    #[tokio::test]
+    async fn retrieve_uses_rerank_cache_when_enabled_and_invalidates_on_version_change() {
+        let url = std::env::var("HYPERAG_PG_URL").unwrap_or_else(|_| "postgres://hyperag:fake-test-only@127.0.0.1:55432/hyperag".into());
+        let opts = PgConnectOptions::from_str(&url).unwrap();
+        let admin = PgPoolOptions::new().max_connections(1).connect_with(opts.clone()).await.unwrap();
+        let name = format!("rcache_{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos());
+        sqlx::raw_sql(sqlx::AssertSqlSafe(format!("create database {name}"))).execute(&admin).await.unwrap();
+        let pool = PgPoolOptions::new().max_connections(2).connect_with(opts.database(&name)).await.unwrap();
+        let calls = Arc::new(AtomicUsize::new(0));
+        let make_reranker = |counter: Arc<AtomicUsize>| Reranker::custom("fixture-reranker", "hf:fixture/reranker", move |_q, docs| {
+            counter.fetch_add(1, Ordering::SeqCst);
+            Ok(docs.iter().enumerate().map(|(idx, text)| if text.contains("winner") { 5.0 } else { 1.0 - idx as f32 * 0.1 }).collect())
+        });
+        let mut off_cfg = Config::new(Store::new(pool.clone()));
+        off_cfg.reranker = Some(make_reranker(calls.clone()));
+        let off = Hyperag::init(off_cfg).await.unwrap();
+        off.store.grant("u", "s", "read", "admin").await.unwrap();
+        off.store.grant("u", "s", "write", "admin").await.unwrap();
+        let m1 = off.ingest("u", NewMemory { scope: "s".into(), source: "test".into(), text: "alpha distract passage".into(), id: Some("m1".into()), kind: None, supersedes: vec![], valid_from: None, valid_to: None, metadata: None, idempotency_key: None }).await.unwrap();
+        let _m2 = off.ingest("u", NewMemory { scope: "s".into(), source: "test".into(), text: "alpha beta winner passage".into(), id: Some("m2".into()), kind: None, supersedes: vec![], valid_from: None, valid_to: None, metadata: None, idempotency_key: None }).await.unwrap();
+        let ropts = RetrieveOptions::default();
+        off.retrieve("u", "alpha", &ropts).await.unwrap();
+        off.retrieve("u", "alpha", &ropts).await.unwrap();
+        assert_eq!(calls.load(Ordering::SeqCst), 2);
+
+        calls.store(0, Ordering::SeqCst);
+        off.store.set_setting("rerank_cache", "2").await.unwrap();
+        let mut on_cfg = Config::new(Store::new(pool.clone()));
+        on_cfg.reranker = Some(make_reranker(calls.clone()));
+        let on = Hyperag::init(on_cfg).await.unwrap();
+        assert_eq!(on.rerank_cache.capacity(), 2);
+        let r1 = on.retrieve("u", "alpha", &ropts).await.unwrap();
+        let r2 = on.retrieve("u", "alpha", &ropts).await.unwrap();
+        assert_eq!((calls.load(Ordering::SeqCst), &r1.items[0].memory.id, r1.items[0].rerank_score), (1, &r2.items[0].memory.id, Some(5.0)));
+        on.retrieve("u", "alpha passage", &ropts).await.unwrap();
+        on.retrieve("u", "alpha", &ropts).await.unwrap();
+        on.retrieve("u", "passage alpha", &ropts).await.unwrap();
+        on.retrieve("u", "alpha", &ropts).await.unwrap();
+        on.retrieve("u", "alpha passage", &ropts).await.unwrap();
+        assert_eq!(calls.load(Ordering::SeqCst), 4);
+        on.update("u", &m1.id, MemoryUpdate { text: "alpha updated passage".into(), source: "test".into(), expected_version: 1, valid_from: None, valid_to: None, metadata: None, idempotency_key: None }).await.unwrap();
+        on.retrieve("u", "alpha passage", &ropts).await.unwrap();
+        assert_eq!(calls.load(Ordering::SeqCst), 5);
+        drop(off);
+        drop(on);
+        pool.close().await;
+        sqlx::raw_sql(sqlx::AssertSqlSafe(format!("drop database {name} with (force)"))).execute(&admin).await.unwrap();
+        admin.close().await;
+    }
 }

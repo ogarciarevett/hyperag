@@ -24,5 +24,5 @@ pub mod store;
 pub mod temporal;
 pub mod types;
 
-pub use crate::core::{Config, Hyperag, RetrieveOptions};
+pub use crate::core::{Config, Hyperag, RerankCache, RetrieveOptions, parse_rerank_cache, rerank_cache_key};
 pub use crate::types::{Error, Memory, MemoryUpdate, NewMemory, WriteResult};
