@@ -31,12 +31,11 @@ async fn stopping_pending_work_releases_snapshot_and_root() -> anyhow::Result<()
             seed_two_pages(&store).await?;
             let scratch = tempfile::tempdir()?;
             let root = scratch.path().join("index");
-            let mut consumer = Consumer::open(&root)?;
-            assert!(consumer.step(&store.pool).await?);
-            assert!(!root.join("CURRENT").exists());
+            let consumer = Consumer::open(&root)?;
             let (entered, release, hook) = pause_first_step();
             let writer = Worker::start_with(consumer, store.pool.clone(), Duration::from_secs(5), Some(hook));
             tokio::task::spawn_blocking(move || entered.wait()).await?;
+            assert!(!root.join("CURRENT").exists());
             let releasing = tokio::task::spawn_blocking(move || release.wait());
             writer.close().await?;
             releasing.await?;
