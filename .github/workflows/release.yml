@@ -113,7 +113,7 @@ jobs:
           bun-version: 1.4.3
       # Dependencies are locked in bun.lock (no package-lock.json), and prepack runs bun.
       - run: bun install --frozen-lockfile
-      - run: npm run build
+      - run: bun run build
       - env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: npm publish --provenance --access public
