@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { identityHash, type PostgresStore, versionHash } from "./adapters/postgres.js";
 import { spaceId } from "./adapters/postgres.js";
 import { buildContext, type Context } from "./context.js";
@@ -55,7 +56,84 @@ export type HyperagConfig = Readonly<{
   minVectorScore?: number;
   /** Principals allowed to grant and revoke. */
   admins?: readonly string[];
+  /** Bounded LRU size for cross-encoder scores; default false (0, off). */
+  rerankCache?: boolean | number | string;
 }>;
+
+export const DEFAULT_RERANK_CACHE_SIZE = 256;
+export const MAX_RERANK_CACHE_BYTES = 8 * 1024 * 1024;
+
+export function rerankCacheKey(
+  modelId: string,
+  query: string,
+  candidates: readonly (readonly [string, number])[],
+): string {
+  return createHash("sha256").update(JSON.stringify([modelId, query, candidates])).digest("hex");
+}
+
+export function parseRerankCache(value?: boolean | number | string | null): number {
+  if (value === undefined || value === null || value === false || value === 0) return 0;
+  if (value === true) return DEFAULT_RERANK_CACHE_SIZE;
+  if (typeof value === "number") {
+    if (Number.isInteger(value) && value >= 1 && value <= 65_536) return value;
+    throw new HyperagError("invalid_input", "HYPERAG_RERANK_CACHE must be false, true or an integer from 0 to 65536");
+  }
+  const trimmed = value.trim();
+  if (trimmed === "" || ["0", "false", "off", "none"].includes(trimmed)) return 0;
+  if (["true", "on"].includes(trimmed)) return DEFAULT_RERANK_CACHE_SIZE;
+  const parsed = Number(trimmed);
+  if (/^\d+$/u.test(trimmed) && Number.isInteger(parsed) && parsed >= 1 && parsed <= 65_536) return parsed;
+  throw new HyperagError("invalid_input", "HYPERAG_RERANK_CACHE must be false, true or an integer from 0 to 65536");
+}
+
+export class RerankCache {
+  readonly capacity: number;
+  private readonly entries = new Map<string, { candidates: readonly (readonly [string, number])[]; scores: readonly number[]; bytes: number }>();
+  constructor(capacity: boolean | number | string = 0) { this.capacity = parseRerankCache(capacity); }
+  get size(): number { return this.entries.size; }
+  get retainedBytes(): number {
+    let bytes = 0;
+    for (const entry of this.entries.values()) bytes += entry.bytes;
+    return bytes;
+  }
+
+  invalidate(id: string, currentVersion?: number): void {
+    if (this.capacity === 0) return;
+    for (const [k, entry] of this.entries)
+      if (entry.candidates.some(([cid, ver]) => cid === id && (currentVersion === undefined || ver !== currentVersion)))
+        this.entries.delete(k);
+  }
+
+  get(modelId: string, query: string, candidates: readonly (readonly [string, number])[]): number[] | undefined {
+    if (this.capacity === 0) return undefined;
+    for (const [id, ver] of candidates) this.invalidate(id, ver);
+    const key = rerankCacheKey(modelId, query, candidates);
+    const hit = this.entries.get(key);
+    if (hit === undefined) return undefined;
+    this.entries.delete(key);
+    this.entries.set(key, hit);
+    return [...hit.scores];
+  }
+
+  put(modelId: string, query: string, candidates: readonly (readonly [string, number])[], scores: readonly number[]): void {
+    if (this.capacity === 0) return;
+    // Account for UTF-16 IDs, tuple/array slots, score doubles, and the fixed digest/entry.
+    let bytes = 256 + scores.length * 8 + candidates.length * 64;
+    for (const [id] of candidates) bytes += id.length * 2;
+    if (bytes > MAX_RERANK_CACHE_BYTES) return;
+    for (const [id, ver] of candidates) this.invalidate(id, ver);
+    const key = rerankCacheKey(modelId, query, candidates);
+    this.entries.delete(key);
+    let retained = this.retainedBytes;
+    while (this.entries.size >= this.capacity || retained + bytes > MAX_RERANK_CACHE_BYTES) {
+      const oldest = this.entries.keys().next().value;
+      if (oldest === undefined) break;
+      retained -= this.entries.get(oldest)!.bytes;
+      this.entries.delete(oldest);
+    }
+    this.entries.set(key, { candidates: candidates.map(([id, v]) => [id, v] as const), scores: [...scores], bytes });
+  }
+}
 
 /**
  * THE HYPERAG CORE. Every call names the acting principal. Inside one process the principal is
@@ -64,8 +142,11 @@ export type HyperagConfig = Readonly<{
  */
 export class Hyperag {
   private space: string | null = null;
+  readonly rerankCache: RerankCache;
 
-  constructor(private readonly config: HyperagConfig) {}
+  constructor(private readonly config: HyperagConfig) {
+    this.rerankCache = new RerankCache(config.rerankCache);
+  }
 
   /** Applies the schema, registers the embedding space and the graph constraint. Idempotent. */
   async init(): Promise<void> {
@@ -120,6 +201,7 @@ export class Hyperag {
       versionHash(input.scope, input),
       vector,
     );
+    for (const old of supersedes) this.rerankCache.invalidate(old);
     // Graph writes are MERGEs, so they also run on a replay: a retry repairs a graph write that failed.
     // A replay of a memory deleted since then writes nothing.
     const live = result.created || (await this.config.store.scopeOf([result.id])).has(result.id);
@@ -138,13 +220,16 @@ export class Hyperag {
     validDates(input);
     const scope = await this.writableScopeOf(principal, id);
     const vector = (await this.vectorsOf([input.text]))?.[0] ?? null;
-    return this.config.store.update(principal, id, input, versionHash(scope, input), vector);
+    const result = await this.config.store.update(principal, id, input, versionHash(scope, input), vector);
+    this.rerankCache.invalidate(id, result.version);
+    return result;
   }
 
   /** The fact stops ranking and its validity ends now; its history stays explainable. */
   async invalidate(principal: string, id: string, reason: string): Promise<void> {
     await this.writableScopeOf(principal, id);
     await this.config.store.invalidate(id, reason, principal);
+    this.rerankCache.invalidate(id);
   }
 
   /**
@@ -160,6 +245,7 @@ export class Hyperag {
     }
     await this.writableScopeOf(principal, id);
     await this.config.store.delete(id, reason, principal);
+    this.rerankCache.invalidate(id);
     await this.config.graph?.deleteMemory(id);
   }
 
@@ -251,7 +337,12 @@ export class Hyperag {
     let reranked = false;
     if (on.rerank && this.config.reranker && items.length > 0) {
       try {
-        const scores = await this.config.reranker.rerank(query, items.map((i) => i.memory.text));
+        const candidates = items.map((i) => [i.memory.id, i.memory.version] as const);
+        let scores = this.rerankCache.get(this.config.reranker.name, query, candidates);
+        if (scores === undefined) {
+          scores = await this.config.reranker.rerank(query, items.map((i) => i.memory.text));
+          this.rerankCache.put(this.config.reranker.name, query, candidates, scores);
+        }
         items = items
           .map((item, index) => ({ ...item, rerankScore: scores[index] ?? Number.NEGATIVE_INFINITY }))
           .sort((a, b) => (b.rerankScore ?? 0) - (a.rerankScore ?? 0));

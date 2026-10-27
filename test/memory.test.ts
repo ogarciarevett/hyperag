@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 
+import { DEFAULT_RERANK_CACHE_SIZE, MAX_RERANK_CACHE_BYTES, RerankCache, parseRerankCache, rerankCacheKey } from "../src/core";
 import { HyperagError } from "../src/types";
 import { createNeo4jGraph } from "../src/adapters/neo4j";
 import { freshDatabase, NEO4J, open, uniq } from "./helpers";
@@ -259,5 +260,94 @@ describe("valid time", () => {
     const after = await a.hyperag.retrieve("alice", "deploy freeze window policy", { asOf: "2026-09-01T00:00:00Z" });
     expect(before.items.some((i) => i.memory.source === "policy")).toBe(true);
     expect(after.items.some((i) => i.memory.source === "policy")).toBe(false);
+  });
+});
+
+describe("rerank cache", () => {
+  test("key hashes model, query and candidate versions, with hit, miss, invalidation and LRU bound", () => {
+    expect([parseRerankCache(undefined), parseRerankCache("off"), parseRerankCache("true"), parseRerankCache("4")]).toEqual([0, 0, DEFAULT_RERANK_CACHE_SIZE, 4]);
+    expect(() => parseRerankCache("bogus")).toThrow(HyperagError);
+    const k1 = rerankCacheKey("bge-reranker-base", "deploy freeze", [["m_1", 1], ["m_2", 3]]);
+    expect(k1).toHaveLength(64);
+    expect(rerankCacheKey("bge-reranker-base", "deploy freeze", [["m_1", 1], ["m_2", 3]])).toBe(k1);
+    for (const [m, q, v] of [["other-model", "deploy freeze", 3], ["bge-reranker-base", "other query", 3], ["bge-reranker-base", "deploy freeze", 4]] as const)
+      expect(rerankCacheKey(m, q, [["m_1", 1], ["m_2", v]])).not.toBe(k1);
+
+    const cache = new RerankCache(2);
+    const c12: [string, number][] = [["m_1", 1], ["m_2", 1]];
+    const c23: [string, number][] = [["m_2", 1], ["m_3", 1]];
+    const c34: [string, number][] = [["m_3", 1], ["m_4", 1]];
+    expect(cache.get("m", "q1", c12)).toBeUndefined();
+    cache.put("m", "q1", c12, [0.9, 0.1]);
+    cache.put("m", "q2", c23, [0.8, 0.2]);
+    expect(cache.get("m", "q1", c12)).toEqual([0.9, 0.1]);
+    cache.put("m", "q3", c34, [0.7, 0.3]);
+    expect([cache.get("m", "q2", c23), cache.get("m", "q1", c12)]).toEqual([undefined, [0.9, 0.1]]);
+    expect(cache.get("m", "q1", [["m_1", 2], ["m_2", 1]])).toBeUndefined();
+    expect(cache.get("m", "q1", c12)).toBeUndefined();
+    cache.invalidate("m_1", 2);
+    expect([cache.get("m", "q1", c12), cache.get("m", "q3", c34)]).toEqual([undefined, [0.7, 0.3]]);
+  });
+
+  test("rejects oversized IDs, candidate arrays and scores, and evicts by total bytes", () => {
+    const cache = new RerankCache(10);
+    const small: [string, number][] = [["small", 1]];
+    cache.put("m", "small", small, [1]);
+    const before = cache.retainedBytes;
+    cache.put("m", "large-id", [["界".repeat(MAX_RERANK_CACHE_BYTES / 2), 1]], [1]);
+    cache.put("m", "many-ids", Array.from({ length: MAX_RERANK_CACHE_BYTES / 64 + 1 }, () => ["", 1] as const), []);
+    cache.put("m", "many-scores", [], new Array<number>(MAX_RERANK_CACHE_BYTES / 8 + 1).fill(1));
+    expect([cache.size, cache.retainedBytes]).toEqual([1, before]);
+    expect(cache.get("m", "small", small)).toEqual([1]);
+    cache.invalidate("small");
+    expect(cache.retainedBytes).toBe(0);
+
+    const candidates: [string, number][] = [["界".repeat(Math.floor(MAX_RERANK_CACHE_BYTES / 6)), 1]];
+    cache.put("m", "q1", candidates, [1]);
+    cache.put("m", "q2", candidates, [2]);
+    expect(cache.get("m", "q1", candidates)).toEqual([1]);
+    cache.put("m", "q3", candidates, [3]);
+    expect(cache.size).toBe(2); // Entry count permits ten; bytes permit only two.
+    expect(cache.retainedBytes).toBeLessThanOrEqual(MAX_RERANK_CACHE_BYTES);
+    expect(cache.get("m", "q2", candidates)).toBeUndefined();
+    expect(cache.get("m", "q1", candidates)).toEqual([1]);
+    expect(cache.get("m", "q3", candidates)).toEqual([3]);
+    cache.put("m", "q3", candidates, [4]);
+    expect(cache.size).toBe(2);
+    expect(cache.retainedBytes).toBeLessThanOrEqual(MAX_RERANK_CACHE_BYTES);
+    cache.invalidate(candidates[0]![0], 2);
+    expect([cache.size, cache.retainedBytes]).toEqual([0, 0]);
+    cache.put("m", "small", small, [1]);
+    expect(cache.get("m", "small", small)).toEqual([1]);
+  });
+
+  test("retrieve uses rerank cache only when enabled and invalidates on candidate version change", async () => {
+    const scope = uniq("rcache");
+    const reader = uniq("reader");
+    let calls = 0;
+    const reranker = {
+      name: "counting-reranker",
+      rerank: async (_q: string, ps: readonly string[]) => (calls += 1, ps.map((p) => (p.includes("preferential") ? 0.95 : 0.1))),
+    };
+    const off = await open(db.url, { reranker });
+    const on = await open(db.url, { reranker, rerankCache: 2 });
+    try {
+      for (const perm of ["read", "write"] as const) await on.hyperag.grant("admin", reader, scope, perm);
+      const m1 = await on.hyperag.ingest(reader, { scope, source: "s1", text: "Rerank cache alpha candidate document." });
+      await on.hyperag.ingest(reader, { scope, source: "s2", text: "Rerank cache preferential beta candidate document." });
+      await off.hyperag.retrieve(reader, "rerank cache candidate document");
+      await off.hyperag.retrieve(reader, "rerank cache candidate document");
+      expect(calls).toBe(2);
+      calls = 0;
+      const r1 = await on.hyperag.retrieve(reader, "rerank cache candidate document");
+      const r2 = await on.hyperag.retrieve(reader, "rerank cache candidate document");
+      expect([calls, r1.items.map((i) => i.memory.id)]).toEqual([1, r2.items.map((i) => i.memory.id)]);
+      await on.hyperag.update(reader, m1.id, { text: "Rerank cache alpha candidate document updated.", source: "s1", expectedVersion: 1 });
+      await on.hyperag.retrieve(reader, "rerank cache candidate document");
+      expect(calls).toBe(2);
+    } finally {
+      await off.close();
+      await on.close();
+    }
   });
 });

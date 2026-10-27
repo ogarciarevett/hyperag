@@ -314,8 +314,15 @@ pub struct Embedder {
     http: reqwest::Client,
 }
 
+type CustomRerank = dyn Fn(&str, &[String]) -> Result<Vec<f32>> + Send + Sync;
+
+enum RerankBackend {
+    Local(Arc<Mutex<TextRerank>>),
+    Custom(Arc<CustomRerank>),
+}
+
 pub struct Reranker {
-    model: Arc<Mutex<TextRerank>>,
+    model: RerankBackend,
     pub name: String,
     pub spec: String,
 }
@@ -650,7 +657,7 @@ impl Reranker {
             let model = TextRerank::try_new_from_user_defined(UserDefinedRerankingModel::new(files.onnx, files.tokenizer), RerankInitOptionsUserDefined::default().with_intra_threads(threads()).with_execution_providers(providers))
                 .map_err(|e| Error::Dependency(format!("re-ranker load failed: {e}")))?;
             return Ok(Some(Reranker {
-                model: Arc::new(Mutex::new(model)),
+                model: RerankBackend::Local(Arc::new(Mutex::new(model))),
                 name: format!("{repo}@{}#{dtype}", &revision[..revision.len().min(7)]),
                 spec: spec.to_owned(),
             }));
@@ -664,10 +671,18 @@ impl Reranker {
             .map_err(|e| Error::Dependency(format!("re-ranker load failed: {e}")))?;
         let revision = snapshot_of(&info.model_code).unwrap_or_else(|| "unknown".into());
         Ok(Some(Reranker {
-            model: Arc::new(Mutex::new(loaded)),
+            model: RerankBackend::Local(Arc::new(Mutex::new(loaded))),
             name: format!("{}@{}#fastembed-7.0.1", info.model_code, &revision[..revision.len().min(7)]),
             spec: spec.to_owned(),
         }))
+    }
+
+    pub fn custom(
+        name: impl Into<String>,
+        spec: impl Into<String>,
+        scorer: impl Fn(&str, &[String]) -> Result<Vec<f32>> + Send + Sync + 'static,
+    ) -> Reranker {
+        Reranker { model: RerankBackend::Custom(Arc::new(scorer)), name: name.into(), spec: spec.into() }
     }
 
     /// One score per document, in the documents' order; higher is more relevant.
@@ -675,7 +690,10 @@ impl Reranker {
         if documents.is_empty() {
             return Ok(vec![]);
         }
-        let model = self.model.clone();
+        let model = match &self.model {
+            RerankBackend::Custom(scorer) => return scorer(query, documents),
+            RerankBackend::Local(model) => model.clone(),
+        };
         let (q, docs) = (query.to_owned(), documents.to_vec());
         let results = tokio::task::spawn_blocking(move || {
             let refs: Vec<&str> = docs.iter().map(String::as_str).collect();

@@ -32,6 +32,7 @@ export async function hyperagFromEnv(env = process.env): Promise<{ hyperag: Hype
     admins: (env.HYPERAG_ADMINS ?? "").split(",").filter(Boolean),
     embedder: embedder === "none" ? null : createLocalEmbedder(),
     reranker: reranker === "local" ? createLocalReranker() : null,
+    rerankCache: env.HYPERAG_RERANK_CACHE,
     graph: env.HYPERAG_NEO4J_URL
       ? createNeo4jGraph({
           baseUrl: env.HYPERAG_NEO4J_URL,
