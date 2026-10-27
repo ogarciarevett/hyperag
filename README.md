@@ -4,6 +4,20 @@
   <img alt="Hyperag" src="assets/brand/logo/lockup-color.svg" width="420">
 </picture>
 
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/brand/readme/hero-dark.svg">
+    <source media="(prefers-color-scheme: light)" srcset="assets/brand/readme/hero-light.svg">
+    <img src="assets/brand/readme/hero-light.svg" alt="Hyperag — shared memory and retrieval for AI agents" width="880">
+  </picture>
+</p>
+
+<p align="center">
+  <a href="https://github.com/ogarciarevett/hyperag/releases/latest"><img src="https://img.shields.io/github/v/release/ogarciarevett/hyperag" alt="Latest release"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue.svg" alt="Apache-2.0"></a>
+  <a href="https://github.com/ogarciarevett/hyperag/actions/workflows/ci.yml"><img src="https://github.com/ogarciarevett/hyperag/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+</p>
+
 Shared memory and retrieval for agents, with permissions, version history and cited context.
 
 ## Install
@@ -20,15 +34,17 @@ Or with the standalone installer:
 curl -fsSL https://raw.githubusercontent.com/ogarciarevett/hyperag/main/scripts/install.sh | sh
 ```
 
+[![Deploy on Railway](https://railway.com/button.svg)](<TEMPLATE_URL>)
+
+*Railway template link pending: `<TEMPLATE_URL>` is a placeholder. [Hosting configuration](docs/cloud.md).*
+
 Verify:
 
 ```sh
 ~/.local/bin/hyperag --version
 ```
 
-The installer downloads a prebuilt binary and checks its SHA-256. [Windows, Homebrew, source and package options](docs/install.md). The first public release is prepared; release assets must exist before the installer can download them.
-
-[![CI](https://github.com/ogarciarevett/hyperag/actions/workflows/ci.yml/badge.svg)](https://github.com/ogarciarevett/hyperag/actions/workflows/ci.yml) [![Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+The installer downloads a prebuilt binary and checks its SHA-256. [Windows, Homebrew, source and package options](docs/install.md). [Release binaries and checksums](https://github.com/ogarciarevett/hyperag/releases/latest) are available for macOS, Linux and Windows.
 
 ## Run a local stack
 

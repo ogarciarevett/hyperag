@@ -1,13 +1,13 @@
 # Hosting Hyperag (cloud)
 
-Hyperag runs the same way on a server as on a laptop: one service, Postgres with pgvector, and Neo4j. A hosted copy serves every agent of a team, each with its own token. This page describes the Railway layout. It is a plan in this repository: nothing is deployed, and a hosted deployment has a monthly cost that its owner approves first.
+Hyperag runs the same way on a server as on a laptop: one service, Postgres with pgvector, and Neo4j. A hosted copy serves every agent of a team, each with its own token. This page describes the source blueprint for a Railway template. It has not been deployed or validated against a Railway project. A hosted deployment has a monthly cost.
 
 ## Layout
 
 | Service | Image | Network | Volume |
 | --- | --- | --- | --- |
 | `hyperag` | built from this repository's `Dockerfile` | private, plus one public HTTPS domain for agents | `/data`: model cache and tokens file |
-| `postgres` | `pgvector/pgvector:pg18` (pinned digest, as in `docker-compose.yml`) | private only | `/var/lib/postgresql/data` |
+| `postgres` | `pgvector/pgvector:pg18` (pinned digest, as in `docker-compose.yml`) | private only | `/var/lib/postgresql` |
 | `neo4j` | `neo4j:5.26.28-community` (pinned digest) | private only | `/data` |
 
 - The graph is on, as in the default template. Hyperag reaches Postgres and Neo4j by their private domain names, so neither database is exposed to the internet.
@@ -16,39 +16,38 @@ Hyperag runs the same way on a server as on a laptop: one service, Postgres with
 
 ## Tokens: one per principal
 
-Each agent or person is a principal with its own token. The service keeps only the SHA-256 of each token, in `/data/config/tokens.json`, and re-reads the file when it changes, so no restart is needed. Make a token from a shell inside the service:
+Each agent or person is a principal with its own token. The service keeps only the SHA-256 of each token, in `/data/config/tokens.json`, and re-reads the file when it changes, so no restart is needed. The first start creates an empty registry. In the Railway dashboard, open the Hyperag service’s [Console tab](https://railway.com/changelog/2026-05-29-cli-volumes) container shell and issue the first admin token:
 
 ```sh
-railway ssh --service hyperag -- hyperag token alice --file /data/config/tokens.json   # prints the token once
+hyperag token admin --file /data/config/tokens.json
 ```
+
+The command generates a fresh secret and prints it once: keep it private and use it as a bearer token. `HYPERAG_ADMINS=admin` names the principal, not the token. Issue separate agent tokens with `hyperag token alice --file /data/config/tokens.json`. No plaintext token belongs in the template or repository.
 
 What a principal may read or write comes from grants that an admin (`HYPERAG_ADMINS`) makes with `POST /v1/grants`. Revoking a grant takes effect on the next call.
 
-## Configuration as code
+## Template source
 
-`.railway/railway.ts` declares the three services, their volumes and their variables. It uses Railway's infrastructure-as-code format. Secrets are not in the file: `preserve()` keeps values set in Railway. Set these in Railway right after the first apply (each one redeploys its service):
+[`.railway/railway.ts`](../.railway/railway.ts) declares the three services, their pinned sources, volumes, healthcheck and environment variables using Railway’s IaC helpers. It is a blueprint for the [template composer](https://docs.railway.com/templates/create), not a command to provision a project.
 
-- `POSTGRES_PASSWORD` on `postgres`
-- `NEO4J_PASSWORD` on `neo4j` (Neo4j's login and Hyperag's both read it, so they cannot drift apart)
-- `HYPERAG_ADMINS` on `hyperag`
+The database password values use Railway’s template-only `${{secret(64, "abcdef0123456789")}}` function. The composer generates a different password for every deployment; these expressions are not passwords and do not generate values during ordinary IaC apply. Enter them as generated template variables, or replace them in the composer with required user-supplied secrets. Do not paste the unresolved functions into an existing service’s variables.
 
-From a project linked with `railway link`, review the plan before applying it:
+- `POSTGRES_PASSWORD` is generated on `postgres`; Hyperag’s connection URL references that value. Hex characters keep the URL safe without escaping.
+- `NEO4J_PASSWORD` is generated on `neo4j`; both `NEO4J_AUTH` and Hyperag’s login reference it, so they cannot drift.
+- `HYPERAG_ADMINS=admin` is a non-secret principal name. Tokens are generated in the container console as described above.
+- Postgres 18 keeps `PGDATA=/var/lib/postgresql/18/docker` below its volume root. Neo4j explicitly listens on IPv6 for Railway’s private network.
 
-```sh
-railway config plan    # shows what would be created; changes nothing
-railway config apply   # only after the plan is reviewed
-```
+## Template composer settings
 
-## Owner steps, in order
+An authorized template maintainer can copy this blueprint into Railway’s [template editor](https://railway.com/workspace/templates), without a CLI:
 
-The owner's local setup script (kept outside the repository) runs steps 1 to 4, and stops before anything that costs money unless you type `yes`:
+1. Add `hyperag` from `ogarciarevett/hyperag` on `main`, using the root `Dockerfile`; add `postgres` and `neo4j` from the exact image references in the blueprint.
+2. Copy each service’s variables, including the generated password expressions and cross-service references. Attach the three volumes at the paths and sizes declared in the blueprint. `RAILWAY_RUN_UID=0` lets Hyperag write its Railway volume; the Docker image otherwise defaults to uid 10001.
+3. Enable **HTTP public networking only on `hyperag`**, target port `7480`. This supplies `RAILWAY_PUBLIC_DOMAIN` for `HYPERAG_MCP_ALLOWED_HOSTS`. Give neither database a public domain or TCP proxy.
+4. Set Hyperag’s healthcheck path to `/healthz` and timeout to `600` seconds for the initial model download. Keep a single Hyperag replica.
+5. Review the generated variables, sources, volume paths, networking and cost before deploying. Create and share the template URL through the dashboard; replace the README placeholder only once that URL is available.
 
-1. `railway link`: pick or create the project.
-2. `railway config plan`: read the plan.
-3. `railway config apply`: creates the three services (paid from here on).
-4. Set `POSTGRES_PASSWORD` on `postgres` and `NEO4J_PASSWORD` on `neo4j`, then `HYPERAG_ADMINS` on `hyperag`, in that order. Each change redeploys its service. Until then the first deploys of `postgres` and `neo4j` fail without a password, and `hyperag` cannot reach them. The script generates the passwords and never prints them, then creates a private template.
-5. Add a public domain to `hyperag` in the dashboard. Until then `HYPERAG_MCP_ALLOWED_HOSTS` is empty and `/mcp` accepts only local hosts.
-6. Make the first token: `railway ssh --service hyperag -- hyperag token admin --file /data/config/tokens.json`.
+The repository does not create an account, token, project or template. A template URL is still pending; the README’s `<TEMPLATE_URL>` is deliberately a placeholder, not a working deployment link.
 
 ## Cost (estimate, not measured)
 
@@ -63,16 +62,12 @@ From Railway's prices on 2026-10-24 (memory about $10 per GB per month, vCPU abo
 
 Heavier use raises the CPU line. The Hobby plan allows volumes up to 5 GB each, which fits this layout.
 
-## One-click template
-
-A Railway template made from this layout gives a "Deploy on Railway" button. The template is made from a project with `railway templates create`. It is published only when the repository is public. Until then the README shows no live button.
-
 ## Backups and moving
 
 `hyperag export --out memory.jsonl` (run inside the service, or anywhere with `HYPERAG_PG_URL` and `HYPERAG_NEO4J_URL`) writes everything to one file, and `hyperag import` loads it into another stack, local or hosted, with the models chosen there ([export and import](export.md)).
 
 ## Limits
 
-- `railway config plan` has not run against a project. The file uses the helpers in Railway's IaC reference. The composed values use Railway's `${{service.VARIABLE}}` variable syntax, which the reference does not show inside IaC; the first plan must confirm they resolve. The healthcheck timeout allows for the first model download.
+- Source validation does not prove a live Railway deployment. The template composer must resolve generated and reference variables, attach volumes and configure the public domain. Database readiness, private DNS, model download and authenticated HTTP/MCP must be checked on a fresh deployment before describing it as verified.
 - One Hyperag replica: the model files and tokens live on one volume. More replicas need shared token storage.
 - Neo4j Community is GPL-3.0 and runs as its own service, unmodified.
