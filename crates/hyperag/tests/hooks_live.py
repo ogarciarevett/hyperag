@@ -316,6 +316,62 @@ raise SystemExit(module.main(['--config',CONFIG,'arm']))
         self.assertTrue(self.fixture.marker.exists())
         self.assertFalse((self.state / 'trip.json').exists())
 
+    def test_fast_call_with_separate_process_monotonic_origins_never_trips(self):
+        driver = self.fixture.home / 'separate-clock-guard.py'
+        observed = self.fixture.home / 'watchdog-observed-call.json'
+        driver.write_text('MODULE=' + repr(str(GUARD)) + '\nOBSERVED=' + repr(str(observed)) + '\n' + r'''import importlib.util,json,os,sys,time
+from pathlib import Path
+original_clock=time.monotonic
+time.monotonic=lambda:original_clock()+(60000 if 'watchdog' in sys.argv else -60000)
+spec=importlib.util.spec_from_file_location('native_guard',MODULE)
+module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+# Bootstrap must spawn this instrumented watchdog as an independent process.
+module.__file__=str(Path(__file__).resolve())
+original_check=module._check_inflight
+original_write=module._write
+def check(path):
+    original_check(path)
+    try:value=json.loads(path.read_text())
+    except FileNotFoundError:return
+    value.update(watchdog_pid=os.getpid(),age=module._shared_time()-value['started'],
+                 different_origin=abs(time.monotonic()-module._shared_time())>1000)
+    Path(OBSERVED).write_text(json.dumps(value))
+def write(path,value,*args,**kwargs):
+    original_write(path,value,*args,**kwargs)
+    if path.name.startswith('inflight-'):
+        deadline=module._shared_time()+.5
+        while not Path(OBSERVED).exists():
+            if (path.parent/'trip.json').exists():break
+            if module._shared_time()>deadline:raise TimeoutError('watchdog observation gate')
+            time.sleep(.001)
+module._check_inflight=check
+module._write=write
+raise SystemExit(module.main())
+''')
+        command = lambda *args: [sys.executable, str(driver), '--config', str(self.config), *args]
+        latencies = []
+        with patch.object(self, 'command', side_effect=command):
+            watchdog = self.arm()
+            for _ in range(5):
+                observed.unlink(missing_ok=True)
+                result, elapsed = self.call('session-start')
+                self.assertEqual((result.returncode, result.stderr), (0, ''), json.dumps(self.call_diagnostics()))
+                self.assertLess(elapsed, 1)
+                self.assertTrue(observed.exists(), json.dumps(self.call_diagnostics()))
+                value = json.loads(observed.read_text())
+                self.assertEqual(value['watchdog_pid'], watchdog)
+                self.assertNotEqual(value['pid'], watchdog)
+                self.assertTrue(value['different_origin'])
+                self.assertTrue(0 <= value['age'] < 1)
+                self.assertLess(abs(time.time()-value['started_at']), 1)
+                latencies.append(elapsed*1000)
+        time.sleep(.2)
+        self.assertTrue(self.fixture.marker.exists(), json.dumps(self.call_diagnostics()))
+        self.assertFalse((self.state / 'trip.json').exists())
+        self.assertFalse(list(self.state.glob('inflight-*.json')))
+        print(json.dumps({'fixture':'different_process_clock_origins', 'calls':5,
+                          'max_full_wall_ms':round(max(latencies),3), 'trips':0}), flush=True)
+
     def test_successful_foreground_does_not_wait_for_fsync(self):
         self.arm()
         driver = self.fixture.home / 'slow-fsync.py'

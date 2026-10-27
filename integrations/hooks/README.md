@@ -111,3 +111,17 @@ extends teardown with a clearly synthetic 100 ms non-zombie/invalid-path window 
 services, proves legacy executable polling fails, and requires successful forward switch
 and failback with binary identity and health on isolated ports. Updating these Python helpers
 does not require rebuilding an existing service binary. No live activation is implied.
+
+
+The native guard uses `clock_gettime(CLOCK_MONOTONIC_RAW)` for cross-process
+watchdog heartbeats and in-flight call timestamps. Python 3.9 on macOS gives
+`time.monotonic()` a process-relative origin; it remains suitable for deadlines
+inside one process, but must not be compared with another process's timestamps.
+In-flight markers record PID, shared-clock start, wall-clock start for diagnosis,
+and agent/event names only. Before a timeout, the watchdog probes PID liveness
+and rechecks that the marker still exists. Removed completion markers are ignored;
+a disappeared PID with a remaining marker is `foreground_lost`, not a timeout.
+The 1 s deadline and 30 ms latency margin are unchanged. Hosted tests run real
+native calls and a detached watchdog with deliberately different process-local
+monotonic origins, plus marker-removal and dead-PID regressions. No activation
+or service rebuild is implied by this Python-only repair.

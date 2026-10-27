@@ -257,6 +257,32 @@ def _status(config):
     return value
 
 
+def _shared_time():
+    # Python 3.9 on macOS gives time.monotonic() a different origin in each process.
+    return time.clock_gettime(time.CLOCK_MONOTONIC_RAW)
+
+
+def _check_inflight(path):
+    try:
+        value = json.loads(path.read_text())
+    except FileNotFoundError:
+        return
+    age = _shared_time() - value['started']
+    try:
+        os.kill(value['pid'], 0)
+    except ProcessLookupError:
+        if path.exists():
+            raise ValueError('foreground_lost')
+        return
+    # Foreground cleanup may have removed the marker since we read it or probed the PID.
+    if not path.exists():
+        return
+    if not math.isfinite(age) or age < 0:
+        raise ValueError('invalid_foreground_clock')
+    if age > 1:
+        raise ValueError('foreground_timeout')
+
+
 def _watchdog(config):
     directory = Path(config['state_dir'])
     with _lock(directory / 'watchdog.lock') as lock:
@@ -282,18 +308,11 @@ def _watchdog(config):
                     _reports(config)
                     _status(config)
                     for path in directory.glob('inflight-*.json'):
-                        try:value = json.loads(path.read_text())
-                        except FileNotFoundError:continue
-                        if time.monotonic() - value['started'] > 1:
-                            raise ValueError('foreground_timeout')
-                        try:
-                            os.kill(value['pid'], 0)
-                        except ProcessLookupError:
-                            raise ValueError('foreground_lost')
+                        _check_inflight(path)
                     _write(directory / 'watchdog-ready.json', {'ready': True, 'pid': os.getpid(),
-                           'fingerprint': config['_fingerprint'], 'nonce': nonce, 'heartbeat': time.monotonic()})
+                           'fingerprint': config['_fingerprint'], 'nonce': nonce, 'heartbeat': _shared_time()})
                 except Exception as error:
-                    category = str(error) if isinstance(error, ValueError) and str(error) in {'writer_mode_mismatch', 'writer_status_error', 'foreground_timeout', 'foreground_lost', 'writer_failure', 'lost_queue', 'http401', 'http403', 'transport', 'backend', 'cancelled', 'drain_deadline', 'queue_full', 'ipc_rejected', 'enqueue_timeout', 'enqueue_io', 'startup', 'background_failure', 'ack_failure', 'writer_failure'} else type(error).__name__
+                    category = str(error) if isinstance(error, ValueError) and str(error) in {'writer_mode_mismatch', 'writer_status_error', 'foreground_timeout', 'foreground_lost', 'invalid_foreground_clock', 'writer_failure', 'lost_queue', 'http401', 'http403', 'transport', 'backend', 'cancelled', 'drain_deadline', 'queue_full', 'ipc_rejected', 'enqueue_timeout', 'enqueue_io', 'startup', 'background_failure', 'ack_failure', 'writer_failure'} else type(error).__name__
                     _trip(config, category)
                     if not Path(config['active_marker']).exists():
                         return
@@ -319,7 +338,7 @@ def arm(config, bootstrap=False):
                 lock.seek(0)
                 try:owner = json.loads(lock.read() or '{}')
                 except ValueError:owner = {}
-                if live and ready.get('fingerprint') == config['_fingerprint'] and ready.get('nonce') == owner.get('nonce') and ready.get('pid') == owner.get('pid') and time.monotonic() - ready.get('heartbeat', 0) < .75:
+                if live and ready.get('fingerprint') == config['_fingerprint'] and ready.get('nonce') == owner.get('nonce') and ready.get('pid') == owner.get('pid') and 0 <= _shared_time() - ready.get('heartbeat', 0) < .75:
                     return ready
             if not bootstrap:
                 raise ValueError('watchdog_lost_or_stale')
@@ -408,8 +427,10 @@ def _hook(config, event, harness):
         age = time.time() - float(epoch)
         if not math.isfinite(age) or not 0 <= age <= 5:raise ValueError('invalid launcher timestamp')
         STARTED = time.monotonic() - age
+        shared_started = _shared_time() - age
         arm(config)
-        _write(inflight, {'pid': os.getpid(), 'started': STARTED}, durable=False)
+        _write(inflight, {'pid': os.getpid(), 'started': shared_started, 'started_at': float(epoch),
+                          'agent': harness, 'event': event}, durable=False)
         raw = _input(STARTED + 1)
         code, _output, stderr, raw_report = _native(config, ['hook', event, '--harness', harness], raw,
                                                    report=True, forward=True, budget=STARTED + 1 - time.monotonic())
