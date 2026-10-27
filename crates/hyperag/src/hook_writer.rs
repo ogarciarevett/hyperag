@@ -357,11 +357,11 @@ pub async fn skipped_scope(base: &str, token: &str) -> Result<()> {
     enqueue_error(&root(base, token)?, Category::SkippedUngranted).await
 }
 
-pub async fn enqueue(base: &str, token: &str, body: Value, marker: Option<&Path>) -> Result<()> {
+pub async fn enqueue(base: &str, token: &str, body: Value, marker: Option<&Path>) -> Result<bool> {
     let root = root(base, token)?;
     if marker.is_some_and(|path| !path.exists()) {
         enqueue_error(&root, Category::Cancelled).await?;
-        return Ok(());
+        return Ok(false);
     }
     let bytes = serde_json::to_vec(&body)?;
     if bytes.is_empty() || bytes.len() > BYTES {
@@ -393,7 +393,7 @@ pub async fn enqueue(base: &str, token: &str, body: Value, marker: Option<&Path>
     })
     .await;
     let error = match result {
-        Ok(Ok(())) => return Ok(()),
+        Ok(Ok(())) => return Ok(true),
         Ok(Err(error)) => error,
         Err(_) => {
             category = Category::EnqueueTimeout;

@@ -103,6 +103,35 @@ jobs:
         run: HYPERAG_BIN=target/release/hyperag python3 crates/hyperag/tests/hooks_fast_path.py
       - name: native asynchronous hook queue and latency contracts
         run: HYPERAG_BIN=target/release/hyperag python3 crates/hyperag/tests/hooks_async.py
+      - name: live guard recovery handoff and bootstrap RED proofs
+        env:
+          HYPERAG_BIN: target/release/hyperag
+        run: |
+          python3 - <<'PY'
+          import os, pathlib, shutil, subprocess, sys, tempfile
+          original = pathlib.Path("integrations/hooks/native_guard.py").read_text()
+          retry_start = original.index("        deadline = time.monotonic() + 1", original.index("def _watchdog"))
+          retry_end = original.index("        nonce = secrets.token_hex", retry_start)
+          one_shot = "        try:\n            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)\n        except BlockingIOError:\n            return\n"
+          mutations = {
+              "test_bootstrap_retries_watchdog_lock_collision_with_parent_probe": original[:retry_start] + one_shot + original[retry_end:],
+              "test_confirmed_recovery_survives_guard_kill_after_marker_unlink": original.replace(
+                  "def _trip(config, category):\n    directory = Path(config['state_dir'])\n",
+                  "def _trip(config, category):\n    directory = Path(config['state_dir'])\n    Path(config['active_marker']).unlink(missing_ok=True)\n", 1),
+          }
+          for test, source in mutations.items():
+              assert source != original
+              with tempfile.TemporaryDirectory() as temporary:
+                  support = pathlib.Path(temporary) / "hooks"
+                  shutil.copytree("integrations/hooks", support)
+                  (support / "native_guard.py").write_text(source)
+                  os.environ["HYPERAG_HOOK_GUARD"] = str(support / "native_guard.py")
+                  result = subprocess.run([sys.executable, "crates/hyperag/tests/hooks_live.py", "LiveHooks." + test], capture_output=True, text=True)
+                  assert result.returncode != 0 and "AssertionError" in result.stderr, result.stderr
+                  print("RED: " + test)
+          PY
+      - name: native live guard and detached watchdog
+        run: HYPERAG_BIN=target/release/hyperag python3 crates/hyperag/tests/hooks_live.py
       - name: build pinned prior service for rollback identity proof
         run: |
           git fetch origin a42ad2c6e7ad137b6b113bcfb12978fd18ccebf5

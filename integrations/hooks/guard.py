@@ -155,6 +155,11 @@ def main(argv=None):
     args = parser.parse_args(argv)
     try:
         config = json.loads(args.config.read_text())
+        if config.get('native_watchdog'):
+            import importlib.util
+            spec = importlib.util.spec_from_file_location('native_guard', Path(__file__).with_name('native_guard.py'))
+            module = importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+            return module.main(argv)
         return run_hook(config, args.event, args.harness)
     except Exception as exception:
         sys.stderr.write('hyperag guard unavailable: ' + type(exception).__name__ + '\n')

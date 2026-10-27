@@ -1,0 +1,31 @@
+{
+  "source_head": "b0961136de936864355f09b24ba1056c141860fc",
+  "source_run": "https://github.com/ogarciarevett/hyperag/actions/runs/40468076938",
+  "records": [
+    {
+      "fixture": "full_native_guard_wall",
+      "event": "session-start",
+      "calls": 100,
+      "p50_ms": 64.509,
+      "p95_ms": 67.67,
+      "errors": 0
+    },
+    {
+      "fixture": "full_native_guard_wall",
+      "event": "prompt",
+      "calls": 100,
+      "p50_ms": 65.791,
+      "p95_ms": 76.817,
+      "errors": 0
+    },
+    {
+      "fixture": "guard_exit_tail",
+      "calls": 200,
+      "p99_ms": 10.249,
+      "max_ms": 10.663,
+      "fixed_margin_ms": 100
+    }
+  ],
+  "selected_margin_ms": 30,
+  "formula": "ceil(2 * max_ms / 10) * 10"
+}

@@ -2,6 +2,7 @@
 """Run a trusted local recovery command outside a harness hook's process group."""
 import fcntl
 import json
+import math
 import os
 from pathlib import Path
 import subprocess
@@ -51,6 +52,28 @@ def status_for(state_dir: Path, worker_pid: int):
     except (FileNotFoundError, json.JSONDecodeError):
         return None
     return value if isinstance(value, dict) and value.get("pid") == worker_pid else None
+
+
+def dispatch_confirmed(command: list[str], state_dir: Path, timeout=1.0) -> int:
+    """Confirm this detached attempt published status, never another worker's status.
+
+    Confirmation is not restoration success. A suppressed single-flight contender
+    remains unconfirmed; timeout leaves its worker untouched for the caller's watch.
+    """
+    if isinstance(timeout, bool) or not isinstance(timeout, (int, float)) or not math.isfinite(timeout) or timeout < 0:
+        raise ValueError("confirmation timeout must be finite and nonnegative")
+    pid = dispatch(command, state_dir)
+    deadline = time.monotonic() + timeout
+    while True:
+        status = status_for(state_dir, pid)
+        if status is not None and status.get("state") in {"running", "succeeded", "failed"}:
+            return pid
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            error = TimeoutError("recovery acknowledgement timed out")
+            error.worker_pid = pid
+            raise error
+        time.sleep(min(.01, remaining))
 
 
 def _worker(command, directory):

@@ -64,7 +64,11 @@ async fn run(command: Command) -> anyhow::Result<()> {
                 let config = hyperag::hook_setup::Config::load(&hyperag::hook_setup::home()?)?;
                 let token = config.token()?;
                 let base = std::env::var("HYPERAG_URL").unwrap_or(config.url);
-                println!("{}", hyperag::hook_writer::inspect(&base, &token)?);
+                let mut status = hyperag::hook_writer::inspect(&base, &token)?;
+                status["async_writes"] = serde_json::json!(config.async_writes);
+                status["token_file"] = serde_json::json!(config.token_file.is_some());
+                status["async_active_marker"] = serde_json::json!(config.async_active_marker);
+                println!("{status}");
             }
             #[cfg(not(unix))]
             anyhow::bail!("asynchronous hooks require Unix");

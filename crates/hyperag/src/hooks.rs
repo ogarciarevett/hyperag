@@ -58,23 +58,35 @@ pub async fn run(event: &str) -> i32 {
 
 pub async fn run_for(event: &str, harness: Option<&str>) -> i32 {
     use std::io::Write;
+    let mut report = json!({"category": "completed"});
+    let report_pipe = report_pipe();
     let result: anyhow::Result<String> = async {
+        if let Err(error) = &report_pipe { anyhow::bail!("hook report unavailable: {error}"); }
         let config = crate::hook_setup::Config::load(&crate::hook_setup::home()?)?;
         if let Some(name) = harness {
             anyhow::ensure!(crate::hook_setup::HARNESSES.contains(&name), "unknown harness");
         }
         anyhow::ensure!(crate::hook_setup::EVENTS.contains(&event), "unknown common hook event");
-        if !config.enabled(harness.unwrap_or(""), event) { return Ok(String::new()); }
-        tokio::time::timeout(std::time::Duration::from_millis(config.timeout_ms), handle(event, harness, &config)).await
+        if !config.enabled(harness.unwrap_or(""), event) {
+            report["category"] = json!("disabled");
+            return Ok(String::new());
+        }
+        tokio::time::timeout(std::time::Duration::from_millis(config.timeout_ms), handle(event, harness, &config, &mut report)).await
             .map_err(|_| anyhow::anyhow!("hook timed out"))?
     }.await;
     let out = match result {
         Ok(text) => text,
         Err(e) => {
+            report["category"] = json!("error");
             let _ = writeln!(std::io::stderr(), "hyperag hook {event}: {e}");
             String::new()
         }
     };
+    if let Ok(Some(mut pipe)) = report_pipe {
+        if writeln!(pipe, "{report}").is_err() {
+            let _ = writeln!(std::io::stderr(), "hyperag hook report failed");
+        }
+    }
     let output = match harness {
         Some("cursor") if event == "session-start" && !out.is_empty() => json!({"additional_context": out}).to_string(),
         Some("gemini") if event == "session-start" && !out.is_empty() => json!({"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": out}}).to_string(),
@@ -86,7 +98,28 @@ pub async fn run_for(event: &str, harness: Option<&str>) -> i32 {
     0
 }
 
-async fn handle(event: &str, harness: Option<&str>, config: &crate::hook_setup::Config) -> anyhow::Result<String> {
+// Optional private pipe keeps category-only supervision out of harness stdout/stderr.
+fn report_pipe() -> anyhow::Result<Option<std::fs::File>> {
+    let Some(value) = std::env::var_os("HYPERAG_HOOK_REPORT_FD") else { return Ok(None); };
+    #[cfg(unix)]
+    {
+        use std::os::{fd::FromRawFd, unix::fs::{FileTypeExt, MetadataExt}};
+        let descriptor: i32 = value.to_str().ok_or_else(|| anyhow::anyhow!("invalid report descriptor"))?.parse()?;
+        anyhow::ensure!(descriptor >= 3, "invalid report descriptor");
+        // Validate before adopting the explicitly transferred descriptor.
+        let metadata = std::fs::metadata(format!("/dev/fd/{descriptor}"))?;
+        anyhow::ensure!(metadata.file_type().is_fifo() && metadata.uid() == crate::hook_credentials::owner(), "invalid report pipe");
+        // Cloning sets close-on-exec; dropping the original prevents writer inheritance.
+        let original = unsafe { std::fs::File::from_raw_fd(descriptor) };
+        let metadata = original.metadata()?;
+        anyhow::ensure!(metadata.file_type().is_fifo() && metadata.uid() == crate::hook_credentials::owner(), "invalid report pipe");
+        return Ok(Some(original.try_clone()?));
+    }
+    #[cfg(not(unix))]
+    { let _ = value; anyhow::bail!("hook reporting requires Unix") }
+}
+
+async fn handle(event: &str, harness: Option<&str>, config: &crate::hook_setup::Config, report: &mut Value) -> anyhow::Result<String> {
     use tokio::io::AsyncReadExt;
     let mut raw = String::new();
     // Bounded input and an outer deadline also protect malformed/incomplete stdin.
@@ -100,6 +133,8 @@ async fn handle(event: &str, harness: Option<&str>, config: &crate::hook_setup::
     };
     let scope = std::env::var("HYPERAG_SCOPE").ok().filter(|s| !s.is_empty())
         .unwrap_or_else(|| if config.scope == "project" { scope_for(&cwd) } else { config.scope.clone() });
+    anyhow::ensure!(scope.len() <= 1024, "hook scope too long");
+    report["scope"] = json!(scope);
     let session = input["session_id"].as_str().or_else(|| input["conversation_id"].as_str()).unwrap_or("unknown").to_owned();
     let base = std::env::var("HYPERAG_URL").unwrap_or_else(|_| config.url.clone()).trim_end_matches('/').to_owned();
     let token = config.token()?;
@@ -121,6 +156,7 @@ async fn handle(event: &str, harness: Option<&str>, config: &crate::hook_setup::
         || !grants.write.iter().any(|value| value == scope) {
         #[cfg(unix)]
         if config.async_writes { crate::hook_writer::skipped_scope(base, token).await?; }
+        report["category"] = json!("skipped_ungranted");
         return Ok(String::new());
     }
     match event {
@@ -133,11 +169,14 @@ async fn handle(event: &str, harness: Option<&str>, config: &crate::hook_setup::
         "prompt" => {
             let prompt: String = input["prompt"].as_str().unwrap_or_default().chars().take(PROMPT_MAX_CHARS).collect();
             if prompt.trim().is_empty() {
+                report["category"] = json!("empty_prompt");
                 return Ok(String::new());
             }
             let body = json!({ "scope": scope, "kind": "prompt", "source": format!("session {session}"), "text": prompt });
             if config.async_writes {
-                return enqueue_write(base, token, body, config).await;
+                let accepted = enqueue_write(base, token, body, config).await?;
+                report["category"] = json!(if accepted { "enqueued" } else { "cancelled" });
+                return Ok(String::new());
             }
             send(http.post(format!("{base}/v1/memories")).json(&body)).await?;
             Ok(String::new())
@@ -147,7 +186,9 @@ async fn handle(event: &str, harness: Option<&str>, config: &crate::hook_setup::
             let text = format!("Session {session} ended ({reason}).");
             let body = json!({ "scope": scope, "kind": "session", "source": format!("session {session}"), "text": text });
             if config.async_writes {
-                return enqueue_write(base, token, body, config).await;
+                let accepted = enqueue_write(base, token, body, config).await?;
+                report["category"] = json!(if accepted { "enqueued" } else { "cancelled" });
+                return Ok(String::new());
             }
             send(http.post(format!("{base}/v1/memories")).json(&body)).await?;
             Ok(String::new())
@@ -156,11 +197,10 @@ async fn handle(event: &str, harness: Option<&str>, config: &crate::hook_setup::
     }
 }
 
-async fn enqueue_write(base: &str, token: &str, body: Value, config: &crate::hook_setup::Config) -> anyhow::Result<String> {
+async fn enqueue_write(base: &str, token: &str, body: Value, config: &crate::hook_setup::Config) -> anyhow::Result<bool> {
     #[cfg(unix)]
     {
-        crate::hook_writer::enqueue(base, token, body, config.async_active_marker.as_deref()).await?;
-        Ok(String::new())
+        crate::hook_writer::enqueue(base, token, body, config.async_active_marker.as_deref()).await
     }
     #[cfg(not(unix))]
     { let _ = (base, token, body, config); anyhow::bail!("asynchronous hooks require Unix") }

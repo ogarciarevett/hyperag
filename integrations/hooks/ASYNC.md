@@ -16,7 +16,7 @@ Use the central installer's native `hyperag hook` commands. The native path read
 
 ## Fresh project permission checks
 
-Every native call for a derived project fetches `/v1/scopes` with that credential before reading or enqueuing. No grant decisions, expiry timestamps, generations or invalidation files are cached. A missing read or write grant produces a category-only `skipped_ungranted` record: no memory write, stderr or error trip. A grant revocation or regrant is observed on the next call without waiting for a TTL. The server independently authorizes every read and background write; revocation after an enqueue can therefore still reject its delivery, which is recorded as a background failure. Hooks never create or widen grants.
+Every native call for a configured, overridden or derived scope fetches `/v1/scopes` with that credential before reading or enqueuing. No grant decisions, expiry timestamps, generations or invalidation files are cached. A missing read or write grant produces a category-only `skipped_ungranted` record: no memory write, stderr or error trip. A grant revocation or regrant is observed on the next call without waiting for a TTL. The server independently authorizes every read and background write; revocation after an enqueue can therefore still reject its delivery, which is recorded as a background failure. Hooks never create or widen grants.
 
 ## Queue and delivery
 
@@ -36,8 +36,23 @@ Run `hyperag hook-writer-status` with the same protected hook configuration to i
 
 ## Deployment boundary
 
-This feature does not install the live latency/error guard or activate hooks. Before activation, an external watchdog must inspect native foreground errors and worker status even when no later hook arrives. Any worker failure, rejection, timeout, acknowledgement error or newly detected abandoned queue must disable hooks and dispatch the detached verified restore path. Quiet ungranted-project skips are excluded from error trips.
+The native writer can be supervised by `integrations/hooks/native_guard.py`. It does not activate hooks or change service builds. Use a private JSON guard configuration with absolute paths:
 
-The approved live watch remains one unscored warm-up, immediate trip on any error/stderr/timeout, hard trip on any single call over 1000 ms, and all-call p95 above 300 ms once at least 20 measured calls exist. Report p50/p95/errors at 50 controlled and 100 total calls. The watchdog integration and a fresh activation require coordinator GO; native fixture timings do not establish those live acceptance results.
+```json
+{
+  "binary": "/absolute/hyperag",
+  "active_marker": "/absolute/private/hooks-active",
+  "state_dir": "/absolute/private/watch-unique-to-activation",
+  "url": "http://127.0.0.1:7481",
+  "native_env": {"HOME": "/absolute/home", "XDG_CONFIG_HOME": "/absolute/home/.config"},
+  "rollback_command": ["/absolute/verified-rollback-command"]
+}
+```
+
+The guard never reads a token or fetches grants. Its native child uses `token_file` and performs the existing fresh scopes check. No grant cache is introduced. Pre-arm the watchdog with `python3 integrations/hooks/native_guard.py --config /absolute/guard.json arm` before controlled calls; install a thin launcher that delegates its native `hook EVENT --harness NAME` arguments to the guard's `hook` command. Central installer ownership markers must be preserved so rollback removes only managed entries. The launcher's stdin/stdout remain the harness channels. A private inherited pipe carries only category and scope names; tokens, input, memory context and raw stderr are never recorded.
+
+The watchdog runs in a detached session with a single-flight lock and readiness handshake. It polls native status independently of foreground calls, validates async mode, a dedicated token file and the matching active marker, and trips on failed/rejected/blocked delivery or inspection failure. Inspection also classifies an abandoned accepted queue as `lost_queue`. Trip handling first persists its intent and confirms the detached recovery worker has published its durable start record, then removes the marker. Further guard calls stop as soon as that intent exists. The watcher retries a pending intent if the foreground process is killed during handoff. No subsequent hook is required to notice a delivery failure. Missing grants remain category-only quiet skips, with no write, stderr or error trip.
+
+The live policy is one unscored warm-up, immediate trip on any error/stderr/timeout (including warm-up), hard trip on any single call over 1000 ms, and p95 above 300 ms across all measured calls once at least 20 exist. Reports at 50 and 100 calls contain p50/p95/error counts. The thin trusted launcher must set the named `HYPERAG_HOOK_STARTED_AT` epoch timestamp immediately before starting Python so timing includes interpreter startup. Successful foreground calls perform no Python fsync: summary and checkpoint persistence runs in the detached watchdog, outside the call append lock. Every sample adds a fixed 30 ms margin for the remaining process tail, including call-record append, policy evaluation, cleanup and interpreter exit. The [hosted calibration](../../docs/evidence/hooks-guard-tail-2026-10-27.json) measured p99 10.249 ms and max 10.663 ms over 200 calls; the margin is twice that maximum, rounded up to 10 ms. Hosted cohorts run 100 reads and 100 prompts on the real binary, report the uncounted tail p99/max, and require every tail to stay within the margin and every adjusted sample to cover complete parent-measured wall time. An in-flight deadline also detects hung finalization. Use a fresh state directory for each activation; the guard does not silently reset failure accounting. Activation still requires the merged integration, coordinator GO and the chief's machine clearance. Hosted fixtures do not establish live 50+50 acceptance.
 
 Hosted CI runs `HYPERAG_BIN=target/release/hyperag python3 crates/hyperag/tests/hooks_async.py` against synthetic HTTP fixtures. Tests exercise the actual native entrypoints, slow-write detachment and order, synchronous reads, fresh-per-call permissions, immediate denial/regrant and revocation after enqueue, no-grant skips, queue limits, process-group survival, abandoned delivery accounting, credential protections and native latency quantiles. No shared service port, real credential, model or database is used by this suite.
