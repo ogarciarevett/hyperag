@@ -15,6 +15,8 @@ mod lexical_scorer;
 mod lexical_read;
 pub mod hooks;
 pub mod hook_setup;
+#[cfg(unix)]
+mod hook_context;
 pub mod mcp;
 pub mod models;
 pub mod portable;

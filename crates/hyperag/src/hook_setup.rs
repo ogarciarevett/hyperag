@@ -15,6 +15,7 @@ const DEFAULT_CONFIG: &str = include_str!("hooks-default.toml");
 pub struct Config {
     pub url: String,
     pub token_env: String,
+    pub token_file: Option<PathBuf>,
     pub scope: String,
     pub timeout_ms: u64,
     pub events: BTreeMap<String, bool>,
@@ -31,7 +32,7 @@ impl Default for Harness {
 }
 impl Default for Config {
     fn default() -> Self {
-        Self { url: "http://127.0.0.1:7480".into(), token_env: "HYPERAG_TOKEN".into(), scope: "project".into(), timeout_ms: 1500, events: BTreeMap::new(), harnesses: BTreeMap::new() }
+        Self { url: "http://127.0.0.1:7480".into(), token_env: "HYPERAG_TOKEN".into(), token_file: None, scope: "project".into(), timeout_ms: 1500, events: BTreeMap::new(), harnesses: BTreeMap::new() }
     }
 }
 pub fn home() -> Result<PathBuf> {
@@ -41,6 +42,15 @@ pub fn config_dir(home: &Path) -> PathBuf {
     std::env::var_os("XDG_CONFIG_HOME").map(PathBuf::from).unwrap_or_else(|| home.join(".config")).join("hyperag")
 }
 impl Config {
+    pub fn token(&self) -> Result<String> {
+        if let Some(path) = &self.token_file {
+            #[cfg(unix)]
+            return crate::hook_context::read_token_file(path);
+            #[cfg(not(unix))]
+            { let _ = path; anyhow::bail!("hook token files require Unix"); }
+        }
+        std::env::var(&self.token_env).map_err(|_| anyhow::anyhow!("hook token environment variable is not set"))
+    }
     pub fn load(home: &Path) -> Result<Self> {
         let path = config_dir(home).join("hooks.toml");
         let config: Self = match std::fs::read_to_string(&path) {
@@ -49,6 +59,7 @@ impl Config {
             Err(e) => return Err(e.into()),
         };
         ensure!((100..=2000).contains(&config.timeout_ms), "timeout_ms must be 100..2000");
+        ensure!(config.token_file.as_ref().is_none_or(|path| path.is_absolute()), "token_file must be absolute");
         ensure!(!config.token_env.is_empty() && config.token_env.chars().all(|c| c.is_ascii_alphanumeric() || c == '_'), "token_env must name an environment variable");
         ensure!(!config.scope.is_empty(), "scope must be project or a fixed scope");
         for event in config.events.keys().chain(config.harnesses.values().flat_map(|h| h.events.iter())) {
