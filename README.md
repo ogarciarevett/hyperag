@@ -86,12 +86,12 @@ The result names each memory's version, source and author. The MCP server expose
 ## Module examples
 
 These TypeScript examples run from a reviewed source checkout with Bun, Postgres/pgvector
-and Neo4j. Pin the example checkout to the reviewed revision containing these files,
-start only the databases, then run all seven examples:
+and Neo4j. The pinned checkout below requires publication of `v0.2.1` after
+[PR #49](https://github.com/ogarciarevett/hyperag/pull/49). Once available, start
+only the databases, then run all seven examples:
 
 ```sh
-git clone https://github.com/ogarciarevett/hyperag hyperag-readme && cd hyperag-readme
-git checkout --detach 739111e80b5e1802908f11721c41ac247f4592fe
+git clone --branch v0.2.1 --depth 1 https://github.com/ogarciarevett/hyperag hyperag-readme && cd hyperag-readme
 docker compose -p hyperag-readme up -d postgres neo4j
 bun install --frozen-lockfile && bun run build
 bun examples/readme/run.ts
