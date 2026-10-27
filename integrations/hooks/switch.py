@@ -51,16 +51,7 @@ def forward(config_path):
         except ProcessLookupError:
             pass
         interrupted = True
-        deadline = time.monotonic() + 15
-        while True:
-            actual = rollback.identity(current["pid"])
-            if actual is None:
-                break
-            if actual != current:
-                raise ValueError("prior service identity changed while stopping")
-            if time.monotonic() >= deadline:
-                raise TimeoutError("prior service stop deadline")
-            time.sleep(.05)
+        rollback.wait_exited(current)
         phase("stopped", "prior_exited")
         phase("starting", "launch_verified_target")
         process = subprocess.Popen(target["argv"], env=environment, stdin=subprocess.DEVNULL,

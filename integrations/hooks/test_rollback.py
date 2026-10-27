@@ -51,6 +51,39 @@ class RollbackTest(unittest.TestCase):
         with patch.object(rollback.sys, 'platform', 'darwin'), patch.object(rollback.subprocess, 'run', side_effect=ps):
             self.assertIsNone(rollback.identity(123))
 
+    def test_real_macos_sequence_replays_identity_then_birth_only_wait(self):
+        fixture = json.loads((Path(__file__).parent / 'fixtures/macos-stop-2026-10-27.json').read_text())
+        probes = iter(event for event in fixture['events'] if event['field'] != 'identity')
+        with tempfile.TemporaryDirectory() as directory:
+            binary = Path(directory) / 'fixture';binary.write_bytes(b'fixture')
+            def ps(command, **kwargs):
+                event = next(probes)
+                self.assertEqual(command[-1], event['field'] + '=')
+                value = str(binary) if event['state'] == 'absolute' else 'birth' if event['field'] == 'lstart' else event['state']
+                return subprocess.CompletedProcess(command, 1 if event['state'] == 'absent' else 0, stdout=value)
+            with patch.object(rollback.sys, 'platform', 'darwin'), patch.object(rollback.subprocess, 'run', side_effect=ps):
+                current = rollback.identity(123)
+                rollback.wait_exited(current)
+                self.assertIsNone(rollback.identity(123))
+            self.assertEqual(list(probes), [])
+
+    def test_exit_wait_never_reads_an_executable_during_live_teardown(self):
+        values = iter([('stat=', 'S'), ('lstart=', 'birth'), ('stat=', 'S'), ('stat=', 'Z')])
+        def ps(command, **kwargs):
+            field, value = next(values)
+            self.assertEqual(command[-1], field)
+            return subprocess.CompletedProcess(command, 0, stdout=value)
+        with patch.object(rollback.sys, 'platform', 'darwin'), patch.object(rollback.subprocess, 'run', side_effect=ps), \
+                patch.object(rollback.time, 'sleep'):
+            rollback.wait_exited({'pid': 123, 'start_ticks': 'darwin:birth'})
+
+    def test_exit_wait_refuses_reused_birth_and_times_out_live_process(self):
+        with patch.object(rollback, '_live_start', return_value='different'), self.assertRaisesRegex(ValueError, 'start marker changed'):
+            rollback.wait_exited({'pid': 123, 'start_ticks': 'expected'})
+        with patch.object(rollback, '_live_start', return_value='expected'), \
+                patch.object(rollback.time, 'monotonic', side_effect=[0, 1]), self.assertRaises(TimeoutError):
+            rollback.wait_exited({'pid': 123, 'start_ticks': 'expected'}, timeout=.5)
+
     def test_macos_live_invalid_executable_and_reused_pid_fail_closed(self):
         for final_start in ('start-a', 'start-b'):
             with self.subTest(final_start=final_start):
@@ -82,6 +115,24 @@ class RollbackTest(unittest.TestCase):
         with patch.object(rollback.sys, "platform", "unsupported"), self.assertRaises(NotImplementedError):
             rollback.identity(123)
 
+    def test_restore_waits_for_invalid_teardown_path_without_signalling(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            binary = root / 'old';binary.write_bytes(b'fixture executable')
+            current = {'pid': 123, 'start_ticks': 'birth'}
+            old = {'pid': 456, 'binary': str(binary.resolve()), 'sha256': rollback.binary_hash(binary)}
+            config = {'current': current, 'restore': {'argv': [str(binary)], 'sha256': old['sha256'], 'env': {}},
+                      'health_url': 'http://127.0.0.1:12345/healthz'}
+            path = root / 'config.json';path.write_text(json.dumps(config));path.chmod(0o600)
+            service = Mock(pid=456);service.poll.return_value = None
+            with patch.object(rollback, 'identity', side_effect=[ValueError('absolute process executable required'), old]), \
+                    patch.object(rollback, '_live_start', side_effect=['birth', None]), \
+                    patch.object(rollback.time, 'sleep'), patch.object(rollback, 'healthy', side_effect=[False, True]), \
+                    patch.object(rollback.os, 'kill') as kill, patch.object(rollback.subprocess, 'Popen', return_value=service):
+                rollback.restore(path)
+            kill.assert_not_called()
+            self.assertEqual(json.loads((root / 'rollback-status.json').read_text())['state'], 'succeeded')
+
     def test_retry_after_current_exited_restores_without_signalling_another_process(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory);binary = root / "old";binary.write_bytes(b"fixture executable")
@@ -90,7 +141,7 @@ class RollbackTest(unittest.TestCase):
                       "health_url": "http://127.0.0.1:12345/healthz"}
             path = root / "config.json";path.write_text(json.dumps(config));path.chmod(0o600)
             service = Mock(pid=456);service.poll.return_value = None
-            with patch.object(rollback, "identity", side_effect=[None, None, old]), \
+            with patch.object(rollback, "identity", side_effect=[None, old]), \
                     patch.object(rollback, "healthy", side_effect=[False, True]), \
                     patch.object(rollback.os, "kill") as kill, patch.object(rollback.subprocess, "Popen", return_value=service):
                 rollback.restore(path)

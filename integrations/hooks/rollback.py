@@ -30,18 +30,22 @@ def binary_hash(path):
         return digest.hexdigest()
 
 
+def _darwin_metadata(pid, field):
+    result = subprocess.run(["/bin/ps", "-p", str(pid), "-o", field + "="],
+                            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True,
+                            env={"PATH": os.defpath, "LC_ALL": "C", "TZ": "UTC"})
+    if result.returncode == 1:
+        return None
+    if result.returncode or not result.stdout.strip():
+        raise OSError("process metadata unavailable")
+    return result.stdout.strip()
+
+
 def identity(pid):
-    """Executable identity/start marker, using metadata only; never process arguments."""
+    """Strict live ownership check; executable metadata is never used to wait for exit."""
     if sys.platform == "darwin":
         def metadata(field):
-            result = subprocess.run(["/bin/ps", "-p", str(pid), "-o", field + "="],
-                                    stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True,
-                                    env={"PATH": os.defpath, "LC_ALL": "C", "TZ": "UTC"})
-            if result.returncode == 1:
-                return None
-            if result.returncode or not result.stdout.strip():
-                raise OSError("process metadata unavailable")
-            return result.stdout.strip()
+            return _darwin_metadata(pid, field)
         process_state = metadata("stat")
         if process_state is None or process_state.startswith("Z"):
             return None
@@ -89,6 +93,42 @@ def identity(pid):
                 "sha256": binary_hash(executable), "start_ticks": fields[19]}
     except FileNotFoundError:
         return None
+
+
+def _live_start(pid):
+    if sys.platform == "darwin":
+        state = _darwin_metadata(pid, "stat")
+        if state is None or state.startswith("Z"):
+            return None
+        started = _darwin_metadata(pid, "lstart")
+        state = _darwin_metadata(pid, "stat")
+        if started is None or state is None or state.startswith("Z"):
+            return None
+        return "darwin:" + started
+    if sys.platform != "linux":
+        raise NotImplementedError("process identity unsupported on this platform")
+    try:
+        fields = (Path("/proc") / str(pid) / "stat").read_text().rsplit(")", 1)[1].split()
+        return None if fields[0] == "Z" else fields[19]
+    except FileNotFoundError:
+        return None
+
+
+def wait_exited(current, timeout=15):
+    """After ownership was verified, wait on birth/state without inspecting teardown paths."""
+    expected = current.get("start_ticks")
+    if not expected:
+        raise ValueError("verified process start marker required")
+    deadline = time.monotonic() + timeout
+    while True:
+        actual = _live_start(current["pid"])
+        if actual is None:
+            return
+        if actual != expected:
+            raise ValueError("process start marker changed while stopping")
+        if time.monotonic() >= deadline:
+            raise TimeoutError("service stop deadline")
+        time.sleep(.05)
 
 
 def healthy(url):
@@ -156,7 +196,15 @@ def restore(config_path):
         raise ValueError("invalid restore delay")
     state = {"state": "stopping", "started_at": time.time()}
     report_status(config_path.parent, state)
-    actual_current = identity(current["pid"])
+    try:
+        actual_current = identity(current["pid"])
+    except ValueError as error:
+        if str(error) != "absolute process executable required":
+            raise
+        # A forward stop may already be tearing this verified process down. Do not
+        # signal an unverified executable; confirm its birth and wait for absence.
+        wait_exited(current)
+        actual_current = None
     if actual_current is None:
         # A prior attempt may have stopped the service before its restarter was killed.
         if healthy(config["health_url"]):
@@ -168,11 +216,7 @@ def restore(config_path):
         raise ValueError("current process identity changed")
     else:
         os.kill(current["pid"], signal.SIGTERM)
-    deadline = time.monotonic() + 15
-    while identity(current["pid"]) is not None:
-        if time.monotonic() >= deadline:
-            raise TimeoutError("current service did not stop")
-        time.sleep(.05)
+        wait_exited(current)
     state.update(state="stopped", stopped_at=time.time())
     report_status(config_path.parent, state)
     # A configured holdoff also exercises recovery across harness deadlines in CI.

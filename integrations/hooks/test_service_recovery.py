@@ -22,7 +22,8 @@ spec.loader.exec_module(rollback)
 
 
 # Feed the production Darwin identity branch metadata from an actual Linux service.
-# The adapter stops only the owned fixture to force its exit between stat and comm.
+# Stop only the owned fixture. The 100ms invalid-executable/non-Z window is synthetic;
+# the authorized macOS probe observed Z then absence, not this invalid-path window.
 DARWIN_METADATA_ADAPTER = r'''import importlib.util,json,os,signal,subprocess,sys,time
 from pathlib import Path
 spec=importlib.util.spec_from_file_location('rollback',@MODULE@)
@@ -32,8 +33,9 @@ actual_run=subprocess.run
 actual_kill=os.kill
 armed=False
 late_race=@LATE_RACE@
-stale_checks=0
+exit_window=0
 live_start=None
+post_signal_comm_reads=0
 stubborn_target=@STUBBORN_TARGET@
 target_pid=None
 target_term_at=None
@@ -59,27 +61,24 @@ def kill(pid, signum):
         actual_kill(pid,signum)
 
 def metadata(command, **kwargs):
-    global armed,stale_checks,live_start
+    global armed,exit_window,live_start,post_signal_comm_reads
     if command[0]!='/bin/ps':return actual_run(command,**kwargs)
     pid=int(command[2]);field=command[-1];value=fields(pid)
-    if value is None:return subprocess.CompletedProcess(command,1,stdout='')
-    if pid==current and field=='stat=' and stale_checks==2:
-        text='S';stale_checks=1
-    elif pid==current and field=='lstart=' and stale_checks==1:
-        text=live_start;stale_checks=0
+    if pid==current and armed and field=='lstart=':
+        armed=False;live_start=value[19];actual_kill(pid,signal.SIGCONT)
+        exit_window=time.monotonic()+.1
+        Path(@RACE_PROOF@).write_text(json.dumps({'synthetic_exit_window':True,'post_signal_comm_reads':0}))
+    if pid==current and time.monotonic()<exit_window:
+        if field=='stat=':text='S'
+        elif field=='lstart=':text=live_start
+        elif field=='comm=':
+            post_signal_comm_reads+=1;text='<defunct>'
+            Path(@RACE_PROOF@).write_text(json.dumps({'synthetic_exit_window':True,'post_signal_comm_reads':post_signal_comm_reads}))
+        else:raise AssertionError('unexpected metadata field')
+    elif value is None:return subprocess.CompletedProcess(command,1,stdout='')
     elif field=='stat=':text=value[0]
     elif field=='lstart=':text=value[19]
-    elif field=='comm=':
-        if pid==current and armed:
-            armed=False;live_start=value[19];actual_kill(pid,signal.SIGCONT)
-            deadline=time.monotonic()+15
-            while (value:=fields(pid)) is not None and value[0]!='Z':
-                if time.monotonic()>deadline:raise TimeoutError('fixture service did not exit')
-                time.sleep(.01)
-            Path(@RACE_PROOF@).write_text(json.dumps({'executable_metadata':'defunct'}))
-            text='<defunct>'
-            if late_race:stale_checks=2
-        else:text=str((Path('/proc')/str(pid)/'exe').resolve())
+    elif field=='comm=':text=str((Path('/proc')/str(pid)/'exe').resolve())
     else:raise AssertionError('unexpected metadata field')
     return subprocess.CompletedProcess(command,0,stdout=text)
 
@@ -209,12 +208,12 @@ class ServiceRecoveryTest(unittest.TestCase):
                         self.assertEqual((rollback.identity(target["pid"])["sha256"], rollback.identity(target["pid"])["binary"]),
                                          (rollback.binary_hash(current), str(current)))
                         self.assertEqual((status['target_pid'], status['target_sha256']), (target['pid'], target['sha256']))
-                        self.assertEqual(json.loads((root / "exit-race.json").read_text())["executable_metadata"], "defunct")
+                        self.assertEqual(json.loads((root / "exit-race.json").read_text())["post_signal_comm_reads"], 0)
                         phases = [entry['phase'] if isinstance(entry, dict) else entry for entry in status['history']]
                         required = ['stopping', 'stopped', 'starting', 'target_identity', 'health', 'complete']
                         self.assertEqual([phase for phase in phases if phase in required], required)
                         print(json.dumps({"test_port": port, "forward_switch": True, "health": True,
-                                          "late_defunct_race": True, "target_sha256": target["sha256"], "old_exited": True}))
+                                          "synthetic_exit_window": True, "target_sha256": target["sha256"], "old_exited": True}))
                         return
                     fixture = root / "fixture";fixture.mkdir()
                     credential = root / "credential.json"
@@ -256,7 +255,7 @@ time.sleep(60)
                     self.assertEqual(rollback.identity(result["restored_pid"])["binary"], str(old))
                     self.assertGreater(result["completed_at"] - result["stopped_at"], 3)
                     if force_exit_race:
-                        self.assertEqual(json.loads((root / "exit-race.json").read_text())["executable_metadata"], "defunct")
+                        self.assertEqual(json.loads((root / "exit-race.json").read_text())["post_signal_comm_reads"], 0)
                     print(json.dumps({"test_port": port, "prior_commit": "a42ad2c6e7ad137b6b113bcfb12978fd18ccebf5",
                         "restored_binary_sha256": result["restored_sha256"], "health": True,
                         "recovery_after_stop_seconds": round(result["completed_at"] - result["stopped_at"], 3),

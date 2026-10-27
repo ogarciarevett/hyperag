@@ -96,8 +96,18 @@ The owner-only configuration contains `current` (the verified prior identity), `
 `health_url`. It writes the rollback record before stopping and after acquiring the new
 identity, then verifies health. Failure restores the prior service through the same helper.
 `switch-status.json` retains each phase/category and timestamps, without exception text,
-arguments or environment values. The switch uses `rollback.identity`, including the final
-Darwin defunct-state check; a still-live invalid executable or changed start marker fails.
-Hosted CI forces that late race on a real old-to-new switch, proves the unsafe mutant fails,
-and requires target identity and health on an isolated port. Updating these Python helpers
+arguments or environment values. Both paths verify executable ownership before signalling.
+After SIGTERM they share `rollback.wait_exited`: it checks process birth and state every
+50 ms, without reading executable metadata that macOS can discard during teardown.
+A changed birth fails closed. If failback finds an already-invalid executable path, it
+sends no signal and waits for that recorded birth to disappear before launching the prior
+build; a live process that does not exit times out.
+
+`fixtures/macos-stop-2026-10-27.json` records the one bounded macOS probe on trial port
+7482 (a42ad2c): after SIGTERM, zombie at 2.779 ms, absent at 6.099 ms. It did **not**
+reproduce the production invalid-path window; no second local probe was run. The fixture
+contains field names/states and relative timing only. Unit tests replay it. Hosted CI also
+extends teardown with a clearly synthetic 100 ms non-zombie/invalid-path window on real
+services, proves legacy executable polling fails, and requires successful forward switch
+and failback with binary identity and health on isolated ports. Updating these Python helpers
 does not require rebuilding an existing service binary. No live activation is implied.

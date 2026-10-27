@@ -155,36 +155,25 @@ jobs:
               print("RED: shared hook process group cannot restore the prior service after termination")
           PY
           python3 -I - <<'PY'
-          import pathlib, shutil, subprocess, sys, tempfile
+          import ast, pathlib, shutil, subprocess, sys, tempfile
           with tempfile.TemporaryDirectory() as temporary:
               copy = pathlib.Path(temporary) / "hooks"
               shutil.copytree("integrations/hooks", copy)
               helper = copy / "rollback.py"
-              check = "        if not same_live_process():\n            return None\n        if not Path(executable).is_absolute():"
-              assert check in helper.read_text()
-              late_check = "            final_state = metadata(\"stat\")\n            if final_state is None or final_state.startswith(\"Z\"):\n                return None\n"
-              assert late_check in helper.read_text()
-              helper.write_text(helper.read_text().replace(late_check, "", 1).replace(check, "        if not Path(executable).is_absolute():", 1))
-              result = subprocess.run([sys.executable, "-I", str(copy / "test_service_recovery.py"),
-                                       "ServiceRecoveryTest.test_macos_metadata_exit_race_restores_prior_service"],
-                                      capture_output=True, text=True)
-              assert result.returncode != 0 and "rollback failed: ValueError phase=stopping" in result.stderr
-              print("RED: actual service exit between Darwin state and executable metadata aborts restoration with ValueError")
-          PY
-          python3 -I - <<'PY'
-          import pathlib, shutil, subprocess, sys, tempfile
-          with tempfile.TemporaryDirectory() as temporary:
-              copy = pathlib.Path(temporary) / "hooks"
-              shutil.copytree("integrations/hooks", copy)
-              helper = copy / "rollback.py"
-              check = "            final_state = metadata(\"stat\")\n            if final_state is None or final_state.startswith(\"Z\"):\n                return None\n"
-              assert check in helper.read_text()
-              helper.write_text(helper.read_text().replace(check, "", 1))
-              result = subprocess.run([sys.executable, "-I", str(copy / "test_service_recovery.py"),
-                                       "ServiceRecoveryTest.test_forward_switch_tolerates_late_defunct_metadata"],
-                                      capture_output=True, text=True)
-              assert result.returncode != 0 and "switch failed: ValueError phase=stopping" in result.stderr
-              print("RED: late defunct metadata aborts the real old-to-new service switch with ValueError")
+              source = helper.read_text()
+              function = next(node for node in ast.parse(source).body if isinstance(node, ast.FunctionDef) and node.name == "wait_exited")
+              legacy = "def wait_exited(current, timeout=15):\n    deadline = time.monotonic() + timeout\n    while identity(current['pid']) is not None:\n        if time.monotonic() >= deadline: raise TimeoutError('legacy exit deadline')\n        time.sleep(.05)\n"
+              lines = source.splitlines(keepends=True)
+              lines[function.lineno-1:function.end_lineno] = [legacy]
+              helper.write_text("".join(lines))
+              for method, category in [
+                  ("test_macos_metadata_exit_race_restores_prior_service", "rollback"),
+                  ("test_forward_switch_tolerates_late_defunct_metadata", "switch"),
+              ]:
+                  result = subprocess.run([sys.executable, "-I", str(copy / "test_service_recovery.py"),
+                                           "ServiceRecoveryTest." + method], capture_output=True, text=True)
+                  assert result.returncode != 0 and category + " failed: ValueError phase=stopping" in result.stderr
+                  print("RED: legacy " + category + " identity polling rejects synthetic post-TERM executable metadata")
           PY
           python3 -I integrations/hooks/test_service_recovery.py
       - name: crate package includes its runtime assets
