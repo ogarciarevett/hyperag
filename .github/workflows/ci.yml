@@ -48,6 +48,7 @@ jobs:
           python3 -I integrations/hooks/test_guard.py
           python3 -I integrations/hooks/test_rollback.py
           python3 -I integrations/hooks/test_switch.py
+          python3 -I integrations/hooks/test_watchdog_clock.py
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: node_modules/@huggingface/transformers/.cache
@@ -115,6 +116,9 @@ jobs:
           retry_end = original.index("        nonce = secrets.token_hex", retry_start)
           one_shot = "        try:\n            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)\n        except BlockingIOError:\n            return\n"
           mutations = {
+              "test_fast_call_with_separate_process_monotonic_origins_never_trips": original.replace(
+                  "shared_started = _shared_time() - age", "shared_started = time.monotonic() - age", 1).replace(
+                  "age = _shared_time() - value['started']", "age = time.monotonic() - value['started']", 1),
               "test_bootstrap_retries_watchdog_lock_collision_with_parent_probe": original[:retry_start] + one_shot + original[retry_end:],
               "test_confirmed_recovery_survives_guard_kill_after_marker_unlink": original.replace(
                   "def _trip(config, category):\n    directory = Path(config['state_dir'])\n",
