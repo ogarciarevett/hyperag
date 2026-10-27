@@ -24,25 +24,19 @@ pub(crate) fn ancestors(path: &Path) -> Result<()> {
     }
     Ok(())
 }
-pub(crate) fn private(path: &Path, directory: bool) -> Result<fs::Metadata> {
+pub(crate) fn private_file(path: &Path) -> Result<fs::Metadata> {
     let metadata = fs::symlink_metadata(path)?;
-    let expected_mode = if directory { 0o700 } else { 0o600 };
-    let expected_type = if directory {
-        metadata.is_dir()
-    } else {
-        metadata.is_file()
-    };
     ensure!(
-        metadata.uid() == owner() && metadata.mode() & 0o777 == expected_mode && expected_type,
+        metadata.uid() == owner() && metadata.mode() & 0o777 == 0o600 && metadata.is_file(),
         "unsafe hook file owner, mode or type"
     );
     Ok(metadata)
 }
 fn open_private(path: &Path) -> Result<File> {
-    let before = private(path, false)?;
+    let before = private_file(path)?;
     let file = File::open(path)?;
     let opened = file.metadata()?;
-    let after = private(path, false)?;
+    let after = private_file(path)?;
     ensure!(
         (before.dev(), before.ino()) == (opened.dev(), opened.ino())
             && (after.dev(), after.ino()) == (opened.dev(), opened.ino()),
