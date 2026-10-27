@@ -9,6 +9,8 @@ mod lexical_generation;
 mod lexical_consumer;
 #[allow(dead_code)] // Private scoring feasibility; request integration follows separately.
 mod lexical_scorer;
+#[allow(dead_code)] // Authorized request snapshots are wired separately from the index worker.
+mod lexical_read;
 pub mod hooks;
 pub mod hook_setup;
 pub mod mcp;
