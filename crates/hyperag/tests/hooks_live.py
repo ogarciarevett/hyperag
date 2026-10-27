@@ -12,11 +12,12 @@ import sys
 import threading
 import time
 import unittest
+from unittest.mock import patch
 
 import hooks_async as fixture_module
 
 DIRECTORY = Path(__file__).resolve().parents[3] / 'integrations/hooks'
-GUARD = DIRECTORY / 'native_guard.py'
+GUARD = Path(os.getenv('HYPERAG_HOOK_GUARD', str(DIRECTORY / 'native_guard.py'))).resolve()
 
 
 @unittest.skipUnless(sys.platform == 'linux' and os.getenv('GITHUB_ACTIONS') == 'true', 'hosted native proof only')
@@ -55,10 +56,24 @@ class LiveHooks(unittest.TestCase):
     def command(self, *arguments):
         return [sys.executable, str(GUARD), '--config', str(self.config), *arguments]
 
+    def arm_diagnostics(self):
+        diagnostics = {'marker_present': self.fixture.marker.exists()}
+        for name, fields in [('trip.json', ('category', 'recovery_pid', 'pending_recovery_pid', 'dispatch_error')),
+                             ('recovery/status.json', ('state', 'pid', 'exit_code', 'error_type', 'phase')),
+                             ('watchdog-ready.json', ('ready', 'pid', 'heartbeat'))]:
+            try:
+                value = self.read(name)
+                diagnostics[name] = {field: value[field] for field in fields if field in value}
+                if name == 'watchdog-ready.json':
+                    diagnostics[name].update(has_fingerprint=bool(value.get('fingerprint')), has_nonce=bool(value.get('nonce')))
+            except Exception as error:diagnostics[name] = {'metadata_error': type(error).__name__}
+        return diagnostics
+
     def arm(self):
         result = subprocess.run(self.command('arm'), env=self.fixture.environment,
                                 text=True, capture_output=True, timeout=4)
-        self.assertEqual((result.returncode, result.stderr), (0, ''))
+        diagnostic = json.dumps(self.arm_diagnostics()) if result.returncode or result.stderr else ''
+        self.assertEqual((result.returncode, bool(result.stderr)), (0, False), diagnostic)
         status = json.loads(result.stdout)
         self.assertTrue(status['ready'])
         self.watch_signature = status['pid'], self.process_signature(status['pid'])
@@ -67,11 +82,13 @@ class LiveHooks(unittest.TestCase):
         return status['pid']
 
     def call(self, event='prompt', cwd=None):
+        payload = json.dumps({'cwd': str(cwd or self.fixture.project),
+                              'session_id': 'fixture-session', 'prompt': 'synthetic guarded input'})
+        environment = dict(self.fixture.environment)
         started = time.perf_counter()
+        environment['HYPERAG_HOOK_STARTED_AT'] = str(time.time())
         result = subprocess.run(self.command('hook', event, '--harness', 'claude-code'),
-                                env=self.fixture.environment, input=json.dumps({'cwd': str(cwd or self.fixture.project),
-                                'session_id': 'fixture-session', 'prompt': 'synthetic guarded input'}),
-                                text=True, capture_output=True, timeout=5)
+                                env=environment, input=payload, text=True, capture_output=True, timeout=5)
         return result, time.perf_counter() - started
 
     def wait(self, predicate, timeout=5):
@@ -142,7 +159,7 @@ class LiveHooks(unittest.TestCase):
         returned = self.fixture.home / 'hook-returned'
         driver = self.fixture.home / 'driver.py'
         payload = json.dumps({'cwd': str(self.fixture.project), 'prompt': 'synthetic guarded input'})
-        driver.write_text('import subprocess,time\nfrom pathlib import Path\nresult=subprocess.run(' +
+        driver.write_text('import os,subprocess,time\nfrom pathlib import Path\nos.environ["HYPERAG_HOOK_STARTED_AT"]=str(time.time())\nresult=subprocess.run(' +
             repr(self.command('hook', 'prompt', '--harness', 'claude-code')) + ',input=' + repr(payload) +
             ',text=True,capture_output=True)\nassert result.returncode==0 and not result.stderr\nPath(' +
             repr(str(returned)) + ').touch()\ntime.sleep(60)\n')
@@ -158,6 +175,137 @@ class LiveHooks(unittest.TestCase):
             self.recovered()
         finally:
             if process.poll() is None:os.killpg(process.pid, signal.SIGKILL); process.wait(timeout=2)
+
+    def test_confirmed_recovery_survives_guard_kill_after_marker_unlink(self):
+        watchdog = self.arm()
+        checkpoint = self.fixture.home / 'marker-removed'
+        driver = self.fixture.home / 'trip-window.py'
+        driver.write_text('import importlib.util,time\nfrom pathlib import Path\n' +
+            'spec=importlib.util.spec_from_file_location("native_guard",' + repr(str(GUARD)) + ')\n' +
+            'module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)\n' +
+            'original=Path.unlink\n' +
+            'def unlink(path,*args,**kwargs):\n    result=original(path,*args,**kwargs)\n    if path==Path(' +
+            repr(str(self.fixture.marker)) + '):\n        Path(' + repr(str(checkpoint)) + ').touch()\n        time.sleep(60)\n    return result\n' +
+            'Path.unlink=unlink\nraise SystemExit(module.main(' +
+            repr(['--config', str(self.config), 'hook', 'prompt', '--harness', 'claude-code']) + '))\n')
+        environment = dict(self.fixture.environment)
+        environment['HYPERAG_HOOK_STARTED_AT'] = str(time.time())
+        process = subprocess.Popen([sys.executable, str(driver)], env=environment, start_new_session=True,
+                                   stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        try:
+            process.stdin.write(b'{broken'); process.stdin.close()
+            self.wait(checkpoint.exists)
+            signature = self.process_signature(watchdog)
+            if signature is not None:
+                self.assertEqual(signature, self.watch_signature[1])
+                try:os.killpg(watchdog, signal.SIGKILL)
+                except ProcessLookupError:pass
+            os.killpg(process.pid, signal.SIGKILL); process.wait(timeout=2)
+            self.recovered()
+            self.assertFalse(any(method == 'POST' for method, _ in self.fixture.backend.requests))
+        finally:
+            if process.poll() is None:os.killpg(process.pid, signal.SIGKILL); process.wait(timeout=2)
+
+    def test_bootstrap_retries_watchdog_lock_collision_with_parent_probe(self):
+        child = self.fixture.home / 'collision-watchdog.py'
+        started = self.fixture.home / 'child-started'
+        release = self.fixture.home / 'child-enter-watchdog'
+        collided = self.fixture.home / 'child-collided'
+        arguments = ['--config', str(self.config), 'watchdog']
+        child.write_text('MODULE=' + repr(str(GUARD)) + '\nARGUMENTS=' + repr(arguments) +
+            '\nSTARTED=' + repr(str(started)) + '\nRELEASE=' + repr(str(release)) +
+            '\nCOLLIDED=' + repr(str(collided)) + '\n' + r'''import fcntl,importlib.util,os,time
+from pathlib import Path
+spec=importlib.util.spec_from_file_location('native_guard',MODULE)
+module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+Path(STARTED).write_text(str(os.getpid()))
+deadline=time.monotonic()+2
+while not Path(RELEASE).exists():
+    if time.monotonic()>deadline:raise TimeoutError('parent probe gate')
+    time.sleep(.001)
+original=fcntl.flock
+def flock(file,operation):
+    try:return original(file,operation)
+    except BlockingIOError:
+        Path(COLLIDED).touch()
+        raise
+fcntl.flock=flock
+raise SystemExit(module.main(ARGUMENTS))
+''')
+        driver = self.fixture.home / 'collision-arm.py'
+        driver.write_text('MODULE=' + repr(str(GUARD)) + '\nCONFIG=' + repr(str(self.config)) +
+            '\nCHILD=' + repr(str(child)) + '\nSTARTED=' + repr(str(started)) +
+            '\nRELEASE=' + repr(str(release)) + '\nCOLLIDED=' + repr(str(collided)) + '\n' + r'''import importlib.util,subprocess,sys,time
+from contextlib import contextmanager
+from pathlib import Path
+spec=importlib.util.spec_from_file_location('native_guard',MODULE)
+module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+original_spawn=subprocess.Popen
+original_lock=module._lock
+spawned=held=False
+def spawn(command,*args,**kwargs):
+    global spawned
+    if command[-1]=='watchdog':
+        result=original_spawn([sys.executable,CHILD],*args,**kwargs)
+        spawned=True
+        return result
+    return original_spawn(command,*args,**kwargs)
+def wait(path):
+    deadline=time.monotonic()+.5
+    while not Path(path).exists():
+        if time.monotonic()>deadline:raise TimeoutError('collision checkpoint')
+        time.sleep(.001)
+@contextmanager
+def locked(path):
+    global held
+    with original_lock(path) as file:
+        try:yield file
+        finally:
+            if path.name=='watchdog.lock' and spawned and not held:
+                held=True
+                wait(STARTED)
+                Path(RELEASE).touch()
+                wait(COLLIDED)
+                time.sleep(.1)
+subprocess.Popen=spawn
+module._lock=locked
+raise SystemExit(module.main(['--config',CONFIG,'arm']))
+''')
+        result = subprocess.run([sys.executable, str(driver)], env=self.fixture.environment,
+                                text=True, capture_output=True, timeout=5)
+        if started.exists():
+            pid = int(started.read_text()); self.watch_signature = pid, self.process_signature(pid)
+        self.assertEqual((result.returncode, bool(result.stderr)), (0, False), json.dumps(self.arm_diagnostics()))
+        ready = json.loads(result.stdout)
+        self.assertTrue(collided.exists())
+        self.assertTrue(ready['ready'])
+        self.assertEqual(ready['pid'], self.watch_signature[0])
+        self.assertTrue(self.fixture.marker.exists())
+        self.assertFalse((self.state / 'trip.json').exists())
+
+    def test_successful_foreground_does_not_wait_for_fsync(self):
+        self.arm()
+        driver = self.fixture.home / 'slow-fsync.py'
+        counts = self.fixture.home / 'foreground-fsync-count'
+        driver.write_text('import importlib.util,os,time\nfrom pathlib import Path\n' +
+            'spec=importlib.util.spec_from_file_location("native_guard",' + repr(str(GUARD)) + ')\n' +
+            'module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)\n' +
+            'original=os.fsync\ncount=0\n' +
+            'def fsync(descriptor):\n    global count\n    count+=1\n    time.sleep(.2)\n    return original(descriptor)\n' +
+            'os.fsync=fsync\nresult=module.main(' +
+            repr(['--config', str(self.config), 'hook', 'prompt', '--harness', 'claude-code']) + ')\n' +
+            'Path(' + repr(str(counts)) + ').write_text(str(count))\nraise SystemExit(result)\n')
+        payload = json.dumps({'cwd': str(self.fixture.project), 'prompt': 'synthetic guarded input'})
+        environment = dict(self.fixture.environment)
+        started = time.perf_counter()
+        environment['HYPERAG_HOOK_STARTED_AT'] = str(time.time())
+        result = subprocess.run([sys.executable, str(driver)], env=environment, input=payload,
+                                text=True, capture_output=True, timeout=5)
+        self.assertEqual((result.returncode, result.stdout, result.stderr), (0, '', ''))
+        self.assertLess(time.perf_counter() - started, .3)
+        self.assertEqual(counts.read_text(), '0')
+        self.assertTrue(self.fixture.marker.exists())
+        self.assertFalse((self.state / 'trip.json').exists())
 
     def test_dead_armed_watchdog_fails_closed_without_restarting_or_writing(self):
         watchdog = self.arm()
@@ -254,6 +402,17 @@ class LiveHooks(unittest.TestCase):
         across_both_cohorts = module.evaluate(mixed + [dict(row(1), cohort='write') for _ in range(81)])
         self.assertEqual((across_both_cohorts['calls'], across_both_cohorts['p95_ms']), (100, 350))
         self.assertTrue(across_both_cohorts['reason'])
+        rows = [dict(row(1, True), cohort='controlled')] + [dict(row(1), cohort=name)
+            for name in ('controlled', 'organic') for _ in range(50)]
+        written = {}
+        with patch.object(module, '_rows', return_value=rows), \
+                patch.object(module, '_write', side_effect=lambda path, value: written.update({path.name: value})):
+            module._reports({'state_dir': str(self.state)})
+        checkpoints = written['checkpoints.json']
+        self.assertEqual((checkpoints['50']['calls'], checkpoints['50']['cohorts']),
+                         (50, {'controlled': 50, 'organic': 0}))
+        self.assertEqual((checkpoints['100']['calls'], checkpoints['100']['cohorts']),
+                         (100, {'controlled': 50, 'organic': 50}))
 
     def test_first_slow_warmup_call_still_trips_hard_budget(self):
         self.fixture.backend.recent_delay = 1.05
@@ -262,7 +421,7 @@ class LiveHooks(unittest.TestCase):
         self.assertEqual(result.returncode, 0)
         self.assertGreater(elapsed, 1)
         self.recovered()
-        self.assertEqual(self.read('summary.json')['warmup_calls'], 1)
+        self.wait(lambda: self.read('summary.json').get('warmup_calls') == 1)
 
 
 if __name__ == '__main__':

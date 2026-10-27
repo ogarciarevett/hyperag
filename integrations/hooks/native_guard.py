@@ -55,13 +55,14 @@ def evaluate(rows):
             'p50_ms': statistics.median(measured) if measured else None, 'p95_ms': p95, 'reason': reason}
 
 
-def _write(path, value):
+def _write(path, value, durable=True):
     with tempfile.NamedTemporaryFile(mode='w', dir=path.parent, delete=False) as file:
         temporary = Path(file.name)
         try:
             json.dump(value, file)
             file.flush()
-            os.fsync(file.fileno())
+            if durable:
+                os.fsync(file.fileno())
             temporary.replace(path)
         finally:
             temporary.unlink(missing_ok=True)
@@ -128,21 +129,43 @@ def _context(path):
 
 def _trip(config, category):
     directory = Path(config['state_dir'])
-    Path(config['active_marker']).unlink(missing_ok=True)
     with _lock(directory / 'trip.lock') as lock:
         try:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
             return
-        previous = json.loads((directory / 'trip.json').read_text()) if (directory / 'trip.json').exists() else {}
+        path = directory / 'trip.json'
+        previous = json.loads(path.read_text()) if path.exists() else {}
         if previous.get('recovery_pid'):
+            Path(config['active_marker']).unlink(missing_ok=True)
             return
-        value = {'category': category, 'time': time.time()}
+        # The watcher retries this durable intent if the foreground process dies before dispatch.
+        value = {'category': previous.get('category', category), 'time': previous.get('time', time.time())}
+        pending = previous.get('pending_recovery_pid')
+        if pending:
+            acknowledged = _recovery.status_for(directory / 'recovery', pending)
+            if acknowledged and acknowledged.get('state') in ('running', 'succeeded', 'failed'):
+                value['recovery_pid'] = pending
+            else:
+                try:
+                    os.kill(pending, 0)
+                except ProcessLookupError:
+                    pending = None
+                if pending:
+                    return
+        _write(path, value)
         try:
-            value['recovery_pid'] = _recovery.dispatch(config['rollback_command'], directory / 'recovery')
+            if not value.get('recovery_pid'):
+                value['recovery_pid'] = _recovery.dispatch_confirmed(config['rollback_command'], directory / 'recovery')
         except Exception as error:
             value['dispatch_error'] = type(error).__name__
-        _write(directory / 'trip.json', value)
+            if getattr(error, 'worker_pid', None):
+                value['pending_recovery_pid'] = error.worker_pid
+            _write(path, value)
+            return
+        _write(path, value)
+        # A detached worker has acknowledged its durable start before the watcher can stop.
+        Path(config['active_marker']).unlink(missing_ok=True)
 
 
 def _native(config, args, raw=b'', report=False, budget=.25, forward=False):
@@ -235,36 +258,51 @@ def _status(config):
 def _watchdog(config):
     directory = Path(config['state_dir'])
     with _lock(directory / 'watchdog.lock') as lock:
-        try:
-            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError:
-            return
+        deadline = time.monotonic() + 1
+        while True:
+            try:
+                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except BlockingIOError:
+                # The arming parent briefly owns this lock while probing readiness.
+                if time.monotonic() >= deadline:
+                    return
+                time.sleep(.002)
         nonce = secrets.token_hex(16)
         lock.seek(0);lock.truncate();lock.write(json.dumps({'pid': os.getpid(), 'nonce': nonce}));lock.flush();os.fsync(lock.fileno())
-        while Path(config['active_marker']).exists():
-            try:
-                _status(config)
-                for path in directory.glob('inflight-*.json'):
-                    try:value = json.loads(path.read_text())
-                    except FileNotFoundError:continue
-                    if time.monotonic() - value['started'] > 1:
-                        raise ValueError('foreground_timeout')
-                    try:
-                        os.kill(value['pid'], 0)
-                    except ProcessLookupError:
-                        raise ValueError('foreground_lost')
-                _write(directory / 'watchdog-ready.json', {'ready': True, 'pid': os.getpid(),
-                       'fingerprint': config['_fingerprint'], 'nonce': nonce, 'heartbeat': time.monotonic()})
-            except Exception as error:
-                category = str(error) if isinstance(error, ValueError) and str(error) in {'writer_mode_mismatch', 'writer_status_error', 'foreground_timeout', 'foreground_lost', 'writer_failure', 'lost_queue', 'http401', 'http403', 'transport', 'backend', 'cancelled', 'drain_deadline', 'queue_full', 'ipc_rejected', 'enqueue_timeout', 'enqueue_io', 'startup', 'background_failure', 'ack_failure', 'writer_failure'} else type(error).__name__
-                _trip(config, category)
-                return
-            time.sleep(.1)
+        try:
+            while Path(config['active_marker']).exists():
+                try:
+                    if (directory / 'trip.json').exists():
+                        _trip(config, 'recovery_pending')
+                        if not Path(config['active_marker']).exists():
+                            return
+                    _reports(config)
+                    _status(config)
+                    for path in directory.glob('inflight-*.json'):
+                        try:value = json.loads(path.read_text())
+                        except FileNotFoundError:continue
+                        if time.monotonic() - value['started'] > 1:
+                            raise ValueError('foreground_timeout')
+                        try:
+                            os.kill(value['pid'], 0)
+                        except ProcessLookupError:
+                            raise ValueError('foreground_lost')
+                    _write(directory / 'watchdog-ready.json', {'ready': True, 'pid': os.getpid(),
+                           'fingerprint': config['_fingerprint'], 'nonce': nonce, 'heartbeat': time.monotonic()})
+                except Exception as error:
+                    category = str(error) if isinstance(error, ValueError) and str(error) in {'writer_mode_mismatch', 'writer_status_error', 'foreground_timeout', 'foreground_lost', 'writer_failure', 'lost_queue', 'http401', 'http403', 'transport', 'backend', 'cancelled', 'drain_deadline', 'queue_full', 'ipc_rejected', 'enqueue_timeout', 'enqueue_io', 'startup', 'background_failure', 'ack_failure', 'writer_failure'} else type(error).__name__
+                    _trip(config, category)
+                    if not Path(config['active_marker']).exists():
+                        return
+                time.sleep(.1)
+        finally:
+            _reports(config)
 
 
 def arm(config, bootstrap=False):
     directory = Path(config['state_dir'])
-    deadline = time.monotonic() + .5
+    deadline = time.monotonic() + (2 if bootstrap else .5)
     with _lock(directory / 'arm.lock') as startup:
         owned = spawned = False
         while time.monotonic() < deadline:
@@ -299,6 +337,39 @@ def arm(config, bootstrap=False):
     raise TimeoutError('watchdog handshake')
 
 
+def _rows(config):
+    directory = Path(config['state_dir'])
+    with _lock(directory / 'calls.lock') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        path = directory / 'calls.jsonl'
+        return [json.loads(line) for line in path.read_text().splitlines()] if path.exists() else []
+
+
+def _summary(rows):
+    summary = evaluate(rows)
+    summary['cohorts'] = {name: sum(r.get('cohort') == name and not r.get('warmup') for r in rows) for name in ('controlled', 'organic')}
+    summary['per_cohort'] = {name: {k: v for k, v in evaluate([r for r in rows if r.get('cohort') == name]).items() if k != 'reason'} for name in ('controlled', 'organic')}
+    return summary
+
+
+def _reports(config):
+    # Never hold the foreground append lock during a filesystem sync.
+    rows = _rows(config)
+    directory = Path(config['state_dir'])
+    _write(directory / 'summary.json', _summary(rows))
+    checkpoints = {}
+    controlled = total = 0
+    for index, row in enumerate(rows):
+        if not row.get('warmup'):
+            total += 1
+            controlled += row.get('cohort') == 'controlled'
+        if controlled == 50 and '50' not in checkpoints:
+            checkpoints['50'] = _summary(rows[:index + 1])
+        if total == 100 and '100' not in checkpoints:
+            checkpoints['100'] = _summary(rows[:index + 1])
+    _write(directory / 'checkpoints.json', checkpoints)
+
+
 def _record(config, row):
     directory = Path(config['state_dir'])
     with _lock(directory / 'calls.lock') as lock:
@@ -308,17 +379,10 @@ def _record(config, row):
         if len(rows) >= 10000:
             raise ValueError('monitor_capacity')
         row['warmup'] = not rows
+        # All fsync/report work runs in the independent watchdog, after this cheap append.
         row['latency_ms'] = round((time.monotonic() - STARTED) * 1000, 3)
-        _append(path, row);rows.append(row)
-        summary = evaluate(rows)
-        summary['cohorts'] = {name: sum(r.get('cohort') == name and not r.get('warmup') for r in rows) for name in ('controlled', 'organic')}
-        summary['per_cohort'] = {name: {k: v for k, v in evaluate([r for r in rows if r.get('cohort') == name]).items() if k != 'reason'} for name in ('controlled', 'organic')}
-        _write(directory / 'summary.json', summary)
-        checkpoints = json.loads((directory / 'checkpoints.json').read_text()) if (directory / 'checkpoints.json').exists() else {}
-        for count in (50, 100):
-            if (count == 50 and summary['cohorts']['controlled'] == 50) or (count == 100 and summary['calls'] == 100):
-                checkpoints.setdefault(str(count), summary)
-        _write(directory / 'checkpoints.json', checkpoints)
+        _append(path, row)
+        summary = evaluate([*rows, row])
     if summary['reason']:
         _trip(config, summary['reason'])
     return summary
@@ -329,16 +393,20 @@ def _hook(config, event, harness):
     if not Path(config['active_marker']).exists():
         return 0
     directory = Path(config['state_dir'])
+    if (directory / 'trip.json').exists():
+        _trip(config, 'recovery_pending')
+        return 0
     inflight = directory / ('inflight-' + str(os.getpid()) + '.json')
     report, error = {}, None
     try:
         epoch = os.getenv('HYPERAG_HOOK_STARTED_AT')
-        if epoch is not None:
-            age = time.time() - float(epoch)
-            if not math.isfinite(age) or not 0 <= age <= 5:raise ValueError('invalid launcher timestamp')
-            STARTED = time.monotonic() - age
+        if epoch is None:
+            raise ValueError('launcher timestamp required')
+        age = time.time() - float(epoch)
+        if not math.isfinite(age) or not 0 <= age <= 5:raise ValueError('invalid launcher timestamp')
+        STARTED = time.monotonic() - age
         arm(config)
-        _write(inflight, {'pid': os.getpid(), 'started': STARTED})
+        _write(inflight, {'pid': os.getpid(), 'started': STARTED}, durable=False)
         raw = _input(STARTED + 1)
         code, _output, stderr, raw_report = _native(config, ['hook', event, '--harness', harness], raw,
                                                    report=True, forward=True, budget=STARTED + 1 - time.monotonic())

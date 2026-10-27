@@ -11,6 +11,7 @@ import sys
 import tempfile
 import time
 import unittest
+from unittest.mock import patch
 
 MODULE = Path(__file__).with_name("recovery.py")
 spec = importlib.util.spec_from_file_location("recovery", MODULE)
@@ -115,6 +116,25 @@ while not Path({str(release)!r}).exists() and time.monotonic()<deadline:time.sle
         self.assertEqual((result["state"], result["exit_code"]), ("failed", 17))
         self.assertNotIn("private-output", raw)
         self.assertNotIn(str(command), raw)
+
+    def test_confirmed_dispatch_waits_for_this_workers_durable_status(self):
+        for phase in ("running", "succeeded", "failed"):
+            with self.subTest(phase=phase), patch.object(recovery, "dispatch", return_value=123), \
+                    patch.object(recovery, "status_for", side_effect=[None, {"pid": 123, "state": phase}]) as status, \
+                    patch.object(recovery.time, "sleep"):
+                self.assertEqual(recovery.dispatch_confirmed(["/fixture/restore"], self.state), 123)
+                self.assertEqual(status.call_count, 2)
+                self.assertEqual(status.call_args.args, (self.state, 123))
+
+    def test_confirmed_dispatch_rejects_an_existing_workers_status(self):
+        self.state.mkdir()
+        recovery._status(self.state, {"pid": 9, "state": "running"})
+        with patch.object(recovery, "dispatch", return_value=123), \
+                patch.object(recovery.time, "monotonic", side_effect=[0, .1]):
+            with self.assertRaises(TimeoutError) as raised:
+                recovery.dispatch_confirmed(["/fixture/restore"], self.state, timeout=.05)
+        self.assertEqual(raised.exception.worker_pid, 123)
+        self.assertEqual(recovery.status_for(self.state, 9)["state"], "running")
 
     def test_reused_directory_cannot_report_previous_success_for_new_worker(self):
         self.assertIsNone(recovery.status_for(self.state, -1))
