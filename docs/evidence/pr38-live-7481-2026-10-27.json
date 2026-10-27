@@ -1,0 +1,63 @@
+{
+  "schema_version": 1,
+  "observation_started_at": "2026-10-27T03:40:28.158883+00:00",
+  "observation_completed_at": "2026-10-27T03:40:28.303911+00:00",
+  "service": {
+    "endpoint": "http://127.0.0.1:7481",
+    "pid": 94930,
+    "build_sha": "a42ad2c6e7ad137b6b113bcfb12978fd18ccebf5",
+    "binary_name": "hyperag-a42ad2c",
+    "binary_sha256": "98b109e34c36006dad1ca1982a767e45e1652ce803fba40f20e3f9cd987d4529",
+    "identity_observed_at": "2026-10-27T03:40:28.180844+00:00",
+    "build_provenance_record": "build-a42ad2c-result.json",
+    "build_provenance_exit_code": 0,
+    "health": {
+      "path": "/healthz",
+      "http_status": 200,
+      "ok": true,
+      "observed_at": "2026-10-27T03:40:28.194171+00:00"
+    }
+  },
+  "hooks": {
+    "scope": "central_installer_real_home_profiles",
+    "guard_active": false,
+    "guard_observed_at": "2026-10-27T03:40:28.303967+00:00",
+    "agents": {
+      "claude-code": {
+        "profile_present": true,
+        "hyperag_hook_commands": 0,
+        "observed_at": "2026-10-27T03:40:28.215Z",
+        "central_installer_status": "not_installed",
+        "status": "OFF"
+      },
+      "codex": {
+        "profile_present": true,
+        "hyperag_hook_commands": 0,
+        "observed_at": "2026-10-27T03:40:28.217Z",
+        "central_installer_status": "not_installed",
+        "status": "OFF"
+      },
+      "cursor": {
+        "profile_present": true,
+        "hyperag_hook_commands": 0,
+        "observed_at": "2026-10-27T03:40:28.218Z",
+        "central_installer_status": "not_installed",
+        "status": "OFF"
+      },
+      "gemini": {
+        "profile_present": true,
+        "hyperag_hook_commands": 0,
+        "observed_at": "2026-10-27T03:40:28.218Z",
+        "central_installer_status": "not_installed",
+        "status": "OFF"
+      },
+      "kimi": {
+        "profile_present": false,
+        "hyperag_hook_commands": 0,
+        "observed_at": "2026-10-27T03:40:28.218Z",
+        "central_installer_status": "profile_absent",
+        "status": "OFF"
+      }
+    }
+  }
+}
