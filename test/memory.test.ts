@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 
-import { DEFAULT_RERANK_CACHE_SIZE, RerankCache, parseRerankCache, rerankCacheKey } from "../src/core";
+import { DEFAULT_RERANK_CACHE_SIZE, MAX_RERANK_CACHE_BYTES, RerankCache, parseRerankCache, rerankCacheKey } from "../src/core";
 import { HyperagError } from "../src/types";
 import { createNeo4jGraph } from "../src/adapters/neo4j";
 import { freshDatabase, NEO4J, open, uniq } from "./helpers";
@@ -287,6 +287,38 @@ describe("rerank cache", () => {
     expect(cache.get("m", "q1", c12)).toBeUndefined();
     cache.invalidate("m_1", 2);
     expect([cache.get("m", "q1", c12), cache.get("m", "q3", c34)]).toEqual([undefined, [0.7, 0.3]]);
+  });
+
+  test("rejects oversized IDs, candidate arrays and scores, and evicts by total bytes", () => {
+    const cache = new RerankCache(10);
+    const small: [string, number][] = [["small", 1]];
+    cache.put("m", "small", small, [1]);
+    const before = cache.retainedBytes;
+    cache.put("m", "large-id", [["界".repeat(MAX_RERANK_CACHE_BYTES / 2), 1]], [1]);
+    cache.put("m", "many-ids", Array.from({ length: MAX_RERANK_CACHE_BYTES / 64 + 1 }, () => ["", 1] as const), []);
+    cache.put("m", "many-scores", [], new Array<number>(MAX_RERANK_CACHE_BYTES / 8 + 1).fill(1));
+    expect([cache.size, cache.retainedBytes]).toEqual([1, before]);
+    expect(cache.get("m", "small", small)).toEqual([1]);
+    cache.invalidate("small");
+    expect(cache.retainedBytes).toBe(0);
+
+    const candidates: [string, number][] = [["界".repeat(Math.floor(MAX_RERANK_CACHE_BYTES / 6)), 1]];
+    cache.put("m", "q1", candidates, [1]);
+    cache.put("m", "q2", candidates, [2]);
+    expect(cache.get("m", "q1", candidates)).toEqual([1]);
+    cache.put("m", "q3", candidates, [3]);
+    expect(cache.size).toBe(2); // Entry count permits ten; bytes permit only two.
+    expect(cache.retainedBytes).toBeLessThanOrEqual(MAX_RERANK_CACHE_BYTES);
+    expect(cache.get("m", "q2", candidates)).toBeUndefined();
+    expect(cache.get("m", "q1", candidates)).toEqual([1]);
+    expect(cache.get("m", "q3", candidates)).toEqual([3]);
+    cache.put("m", "q3", candidates, [4]);
+    expect(cache.size).toBe(2);
+    expect(cache.retainedBytes).toBeLessThanOrEqual(MAX_RERANK_CACHE_BYTES);
+    cache.invalidate(candidates[0]![0], 2);
+    expect([cache.size, cache.retainedBytes]).toEqual([0, 0]);
+    cache.put("m", "small", small, [1]);
+    expect(cache.get("m", "small", small)).toEqual([1]);
   });
 
   test("retrieve uses rerank cache only when enabled and invalidates on candidate version change", async () => {

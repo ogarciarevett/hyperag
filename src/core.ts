@@ -61,6 +61,7 @@ export type HyperagConfig = Readonly<{
 }>;
 
 export const DEFAULT_RERANK_CACHE_SIZE = 256;
+export const MAX_RERANK_CACHE_BYTES = 8 * 1024 * 1024;
 
 export function rerankCacheKey(
   modelId: string,
@@ -87,9 +88,14 @@ export function parseRerankCache(value?: boolean | number | string | null): numb
 
 export class RerankCache {
   readonly capacity: number;
-  private readonly entries = new Map<string, { candidates: readonly (readonly [string, number])[]; scores: readonly number[] }>();
+  private readonly entries = new Map<string, { candidates: readonly (readonly [string, number])[]; scores: readonly number[]; bytes: number }>();
   constructor(capacity: boolean | number | string = 0) { this.capacity = parseRerankCache(capacity); }
   get size(): number { return this.entries.size; }
+  get retainedBytes(): number {
+    let bytes = 0;
+    for (const entry of this.entries.values()) bytes += entry.bytes;
+    return bytes;
+  }
 
   invalidate(id: string, currentVersion?: number): void {
     if (this.capacity === 0) return;
@@ -111,15 +117,21 @@ export class RerankCache {
 
   put(modelId: string, query: string, candidates: readonly (readonly [string, number])[], scores: readonly number[]): void {
     if (this.capacity === 0) return;
+    // Account for UTF-16 IDs, tuple/array slots, score doubles, and the fixed digest/entry.
+    let bytes = 256 + scores.length * 8 + candidates.length * 64;
+    for (const [id] of candidates) bytes += id.length * 2;
+    if (bytes > MAX_RERANK_CACHE_BYTES) return;
     for (const [id, ver] of candidates) this.invalidate(id, ver);
     const key = rerankCacheKey(modelId, query, candidates);
     this.entries.delete(key);
-    while (this.entries.size >= this.capacity) {
+    let retained = this.retainedBytes;
+    while (this.entries.size >= this.capacity || retained + bytes > MAX_RERANK_CACHE_BYTES) {
       const oldest = this.entries.keys().next().value;
       if (oldest === undefined) break;
+      retained -= this.entries.get(oldest)!.bytes;
       this.entries.delete(oldest);
     }
-    this.entries.set(key, { candidates: candidates.map(([id, v]) => [id, v] as const), scores: [...scores] });
+    this.entries.set(key, { candidates: candidates.map(([id, v]) => [id, v] as const), scores: [...scores], bytes });
   }
 }
 

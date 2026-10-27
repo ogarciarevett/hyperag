@@ -85,6 +85,7 @@ fn apply_rerank_scores(items: &mut [RetrievedItem], scores: &[f32]) {
 }
 
 pub const DEFAULT_RERANK_CACHE_SIZE: usize = 256;
+pub const MAX_RERANK_CACHE_BYTES: usize = 8 * 1024 * 1024;
 
 /// Stable key over the re-ranker model id, query text, and ordered `(id, version)` pairs.
 pub fn rerank_cache_key(model_id: &str, query: &str, candidates: &[(String, i32)]) -> String {
@@ -104,7 +105,19 @@ pub fn parse_rerank_cache(configured: Option<&str>) -> Result<usize> {
 #[derive(Clone, Debug)]
 struct RerankCacheEntry { key: String, candidates: Vec<(String, i32)>, scores: Vec<f32> }
 
-/// Bounded LRU cache of cross-encoder scores, off when capacity is zero.
+impl RerankCacheEntry {
+    fn retained_bytes(&self) -> usize {
+        self.candidates.iter().fold(
+            std::mem::size_of::<Self>()
+                .saturating_add(self.key.capacity())
+                .saturating_add(self.candidates.capacity().saturating_mul(std::mem::size_of::<(String, i32)>()))
+                .saturating_add(self.scores.capacity().saturating_mul(std::mem::size_of::<f32>())),
+            |bytes, (id, _)| bytes.saturating_add(id.capacity()),
+        )
+    }
+}
+
+/// LRU bounded by entry count and 8 MiB of retained storage, off when capacity is zero.
 #[derive(Debug, Default)]
 pub struct RerankCache { capacity: usize, entries: Mutex<VecDeque<RerankCacheEntry>> }
 
@@ -113,6 +126,10 @@ impl RerankCache {
     pub fn capacity(&self) -> usize { self.capacity }
     pub fn len(&self) -> usize { self.entries.lock().expect("rerank cache lock").len() }
     pub fn is_empty(&self) -> bool { self.len() == 0 }
+    pub fn retained_bytes(&self) -> usize {
+        self.entries.lock().expect("rerank cache lock").iter().map(RerankCacheEntry::retained_bytes).sum()
+    }
+    pub fn clear(&self) { self.entries.lock().expect("rerank cache lock").clear(); }
     pub fn invalidate(&self, id: &str, current_version: Option<i32>) {
         if self.capacity == 0 { return; }
         self.entries.lock().expect("rerank cache lock").retain(|e| {
@@ -133,10 +150,16 @@ impl RerankCache {
     pub fn put(&self, model_id: &str, query: &str, candidates: Vec<(String, i32)>, scores: Vec<f32>) {
         if self.capacity == 0 { return; }
         let key = rerank_cache_key(model_id, query, &candidates);
+        let entry = RerankCacheEntry { key, candidates, scores };
+        let bytes = entry.retained_bytes();
+        if bytes > MAX_RERANK_CACHE_BYTES { return; }
         let mut entries = self.entries.lock().expect("rerank cache lock");
-        entries.retain(|e| e.key != key && !e.candidates.iter().any(|(cid, ver)| candidates.iter().any(|(id, cur)| id == cid && cur != ver)));
-        while entries.len() >= self.capacity { entries.pop_front(); }
-        entries.push_back(RerankCacheEntry { key, candidates, scores });
+        entries.retain(|e| e.key != entry.key && !e.candidates.iter().any(|(cid, ver)| entry.candidates.iter().any(|(id, cur)| id == cid && cur != ver)));
+        let mut retained: usize = entries.iter().map(RerankCacheEntry::retained_bytes).sum();
+        while entries.len() >= self.capacity || retained + bytes > MAX_RERANK_CACHE_BYTES {
+            retained -= entries.pop_front().expect("nonempty over-budget cache").retained_bytes();
+        }
+        entries.push_back(entry);
     }
 }
 
@@ -866,7 +889,10 @@ impl Hyperag {
         }
         if let Some(r) = reranker {
             self.store.set_setting("reranker", r.as_ref().map(|r| r.spec.as_str()).unwrap_or("none")).await?;
-            self.models.write().await.reranker = r.map(Arc::new);
+            let mut models = self.models.write().await;
+            models.reranker = r.map(Arc::new);
+            // Retrieval holds the read lock through cache insertion, so old scorers cannot refill it.
+            self.rerank_cache.clear();
         }
         Ok(())
     }
@@ -1107,8 +1133,47 @@ mod rerank_cache_tests {
         assert!(cache.get("m1", "q3", &c3).is_none());
     }
 
+    #[test]
+    fn rerank_cache_rejects_oversized_storage_and_evicts_by_total_bytes() {
+        let cache = RerankCache::new(10);
+        let small = vec![("small".to_owned(), 1)];
+        cache.put("m", "small", small.clone(), vec![1.0]);
+        let before = cache.retained_bytes();
+        cache.put("m", "large-id", vec![("x".repeat(MAX_RERANK_CACHE_BYTES), 1)], vec![1.0]);
+        cache.put("m", "many-ids", vec![(String::new(), 1); MAX_RERANK_CACHE_BYTES / std::mem::size_of::<(String, i32)>() + 1], vec![]);
+        cache.put("m", "many-scores", vec![], vec![1.0; MAX_RERANK_CACHE_BYTES / 4 + 1]);
+        // Spare allocation is retained too, even when the logical payload is tiny.
+        let mut spare = String::with_capacity(MAX_RERANK_CACHE_BYTES);
+        spare.push('x');
+        cache.put("m", "spare-id", vec![(spare, 1)], vec![1.0]);
+        cache.put("m", "spare-candidates", Vec::with_capacity(MAX_RERANK_CACHE_BYTES / std::mem::size_of::<(String, i32)>() + 1), vec![]);
+        cache.put("m", "spare-scores", vec![], Vec::with_capacity(MAX_RERANK_CACHE_BYTES / 4 + 1));
+        assert_eq!((cache.len(), cache.retained_bytes()), (1, before));
+        assert_eq!(cache.get("m", "small", &small), Some(vec![1.0]));
+        cache.clear();
+        assert_eq!(cache.retained_bytes(), 0);
+
+        let candidates = vec![("x".repeat(MAX_RERANK_CACHE_BYTES / 3), 1)];
+        cache.put("m", "q1", candidates.clone(), vec![1.0]);
+        cache.put("m", "q2", candidates.clone(), vec![2.0]);
+        assert_eq!(cache.get("m", "q1", &candidates), Some(vec![1.0]));
+        cache.put("m", "q3", candidates.clone(), vec![3.0]);
+        assert_eq!(cache.len(), 2); // Entry count permits ten; bytes permit only two.
+        assert!(cache.retained_bytes() <= MAX_RERANK_CACHE_BYTES);
+        assert!(cache.get("m", "q2", &candidates).is_none());
+        assert_eq!(cache.get("m", "q1", &candidates), Some(vec![1.0]));
+        assert_eq!(cache.get("m", "q3", &candidates), Some(vec![3.0]));
+        cache.put("m", "q3", candidates.clone(), vec![4.0]);
+        assert_eq!(cache.len(), 2);
+        assert!(cache.retained_bytes() <= MAX_RERANK_CACHE_BYTES);
+        cache.invalidate(&candidates[0].0, None);
+        assert_eq!((cache.len(), cache.retained_bytes()), (0, 0));
+        cache.put("m", "small", small.clone(), vec![1.0]);
+        assert_eq!(cache.get("m", "small", &small), Some(vec![1.0]));
+    }
+
     #[tokio::test]
-    async fn retrieve_uses_rerank_cache_when_enabled_and_invalidates_on_version_change() {
+    async fn retrieve_cache_invalidates_on_version_change_and_same_spec_model_switch() {
         let url = std::env::var("HYPERAG_PG_URL").unwrap_or_else(|_| "postgres://hyperag:fake-test-only@127.0.0.1:55432/hyperag".into());
         let opts = PgConnectOptions::from_str(&url).unwrap();
         let admin = PgPoolOptions::new().max_connections(1).connect_with(opts.clone()).await.unwrap();
@@ -1136,6 +1201,7 @@ mod rerank_cache_tests {
         off.store.set_setting("rerank_cache", "2").await.unwrap();
         let mut on_cfg = Config::new(Store::new(pool.clone()));
         on_cfg.reranker = Some(make_reranker(calls.clone()));
+        on_cfg.admins = vec!["admin".into()];
         let on = Hyperag::init(on_cfg).await.unwrap();
         assert_eq!(on.rerank_cache.capacity(), 2);
         let r1 = on.retrieve("u", "alpha", &ropts).await.unwrap();
@@ -1150,6 +1216,22 @@ mod rerank_cache_tests {
         on.update("u", &m1.id, MemoryUpdate { text: "alpha updated passage".into(), source: "test".into(), expected_version: 1, valid_from: None, valid_to: None, metadata: None, idempotency_key: None }).await.unwrap();
         on.retrieve("u", "alpha passage", &ropts).await.unwrap();
         assert_eq!(calls.load(Ordering::SeqCst), 5);
+        let switched_calls = Arc::new(AtomicUsize::new(0));
+        let counter = switched_calls.clone();
+        let replacement = Reranker::custom("fixture-revision-b", "hf:fixture/reranker", move |_q, docs| {
+            counter.fetch_add(1, Ordering::SeqCst);
+            Ok(docs.iter().map(|text| if text.contains("winner") { -5.0 } else { 9.0 }).collect())
+        });
+        on.set_models("admin", None, Some(Some(replacement))).await.unwrap();
+        assert!(on.rerank_cache.is_empty());
+        let switched = on.retrieve("u", "alpha passage", &ropts).await.unwrap();
+        assert_eq!((&switched.items[0].memory.id, switched.items[0].rerank_score), (&m1.id, Some(9.0)));
+        assert_eq!(switched.items[1].rerank_score, Some(-5.0));
+        on.retrieve("u", "alpha passage", &ropts).await.unwrap();
+        assert_eq!(switched_calls.load(Ordering::SeqCst), 1);
+        assert_eq!(calls.load(Ordering::SeqCst), 5);
+        on.set_models("admin", None, Some(None)).await.unwrap();
+        assert!(on.rerank_cache.is_empty());
         drop(off);
         drop(on);
         pool.close().await;
