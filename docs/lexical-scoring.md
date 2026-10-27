@@ -2,7 +2,7 @@
 
 The private scorer ranks an immutable complete generation. The opt-in Rust request
 path below resolves authorization and an exact source fence before selecting its
-searcher. Service/index writer lifecycle and attachment remain separate.
+searcher. Serve owns the index lifecycle described below.
 
 ## Authorized request integration
 
@@ -43,8 +43,8 @@ keep whole-list SQL fallback and lexical payload reads usable after SQL failures
 Retrieval takes the model read lock before opening its pooled snapshot, matching
 the model switch's lock order and leaving connections available to its final pass.
 
-The store defaults to an empty reader and SQL fallback. Service/index writer
-lifecycle and attachment are a separate slice; this change starts no worker.
+A standalone store defaults to an empty reader and SQL fallback. Only Serve attaches
+and owns the background writer; other CLI commands retain explicit behavior.
 
 ## Native offline reference
 
@@ -71,3 +71,9 @@ require equal SQL IDs and non-tie positions, equal tie-group membership and scor
 Native WAND was rejected: scoped averages can invalidate the stored block-max
 pair, and dynamic OR accumulation produced a 1 ULP discrepancy. The retained
 512-document regression previously omitted the true winner even in one segment.
+
+## Serve-owned writer
+
+With `HYPERAG_LEXICAL_SCORER=tantivy`, `hyperag serve` owns one private consumer and updates its reader in the background. Initial construction and later changes use bounded source steps; requests use whole-list SQL fallback until their exact source fence is published. The default root is `$HOME/.hyperag-tantivy-<database_uuid>`; `HYPERAG_LEXICAL_INDEX_ROOT` selects an explicit root. Unsafe ancestors (including group-writable volume roots) cause startup to fail with the offending path.
+
+Shared CLI utilities such as export/import/models never start the writer. Shutdown cancels MCP sessions, drains HTTP, stops/joins the writer (dropping pending source snapshots), then closes the pool. Errors retain the last complete reader and retry after one second; no outbox pruning, generation garbage collection or model changes run.
