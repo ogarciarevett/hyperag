@@ -112,7 +112,7 @@ async fn handle(event: &str, harness: Option<&str>, config: &crate::hook_setup::
         let status = r.status();
         #[cfg(unix)]
         if event == "session-start" && scope.starts_with("project:") && matches!(status.as_u16(), 401 | 403 | 404) {
-            crate::hook_context::invalidate_scope(base, token, scope)?;
+            crate::hook_context::invalidate_scope(base, token, scope).await?;
         }
         let body: Value = r.json().await.unwrap_or(Value::Null);
         anyhow::ensure!(status.is_success(), "service answered {status}");

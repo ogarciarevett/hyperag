@@ -191,6 +191,36 @@ class FastPath(unittest.TestCase):
             if old.poll() is None:old.kill(); old.wait()
             old.stdout.close(); old.stderr.close()
 
+    def test_read_invalidation_fences_an_older_inflight_allow(self):
+        warm, _ = self.hook(); self.success(warm)
+        cache = next((self.home / '.hyperag-hooks').glob('*/scope-[0-9a-f]*.json'))
+        old = None
+        try:
+            # Force only this old request past the positive cache, then let the
+            # second native reader hit that cache and receive the live denial.
+            with (cache.parent / 'scopes.lock').open('a') as lock:
+                fcntl.flock(lock, fcntl.LOCK_EX)
+                old = self.held_grant_process()
+            self.backend.granted.clear(); self.backend.recent_status = 403
+            denied, _ = self.hook()
+            self.assertEqual((denied.returncode, denied.stdout), (0, ''))
+            self.assertIn('403', denied.stderr)
+            self.assertFalse(cache.exists())
+            self.backend.release_grant.set()
+            out, err = old.communicate(timeout=3)
+            self.assertEqual((old.returncode, out, err), (0, b'', b''))
+            self.assertFalse(cache.exists())
+            self.assertEqual((self.backend.scope_calls, self.backend.recent_calls, self.backend.posts), (2, 2, 0))
+            self.backend.recent_status = 200
+            fresh, _ = self.hook(); self.success(fresh); self.assertEqual(fresh.stdout, '')
+            self.assertFalse(json.loads(cache.read_text())['eligible'])
+            self.assertEqual((self.backend.scope_calls, self.backend.recent_calls, self.backend.posts), (3, 2, 0))
+        finally:
+            self.backend.release_grant.set()
+            if old is not None:
+                if old.poll() is None:old.kill(); old.wait()
+                old.stdout.close(); old.stderr.close()
+
     def test_cache_ttl_starts_before_delayed_grant_response(self):
         process = self.held_grant_process()
         try:

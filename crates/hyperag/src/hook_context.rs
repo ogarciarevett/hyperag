@@ -187,8 +187,8 @@ pub(crate) fn cached_scope(base: &str, token: &str, scope: &str) -> Result<Optio
         .map(|value| value.eligible))
 }
 
-async fn generation_lock(root: &Path) -> Result<File> {
-    let file = lock(&root.join("scope-generation.lock"))?;
+async fn scope_lock(root: &Path, name: &str) -> Result<File> {
+    let file = lock(&root.join(name))?;
     let deadline = tokio::time::Instant::now() + std::time::Duration::from_millis(100);
     loop {
         if file.try_lock().is_ok() {
@@ -196,22 +196,27 @@ async fn generation_lock(root: &Path) -> Result<File> {
         }
         ensure!(
             tokio::time::Instant::now() < deadline,
-            "hook scope generation unavailable"
+            "hook scope lock unavailable"
         );
         tokio::time::sleep(std::time::Duration::from_millis(1)).await;
     }
 }
 
-pub(crate) async fn begin_scope_request(base: &str, token: &str) -> Result<ScopeRequest> {
-    let started_ms = now_ms()?;
-    let root = root(base, token)?;
-    let _generation = generation_lock(&root).await?;
+fn advance_generation(root: &Path) -> Result<u64> {
     let path = root.join("grant-generation.json");
     let previous: u64 = json_file(&path)?.unwrap_or(0);
     let generation = previous
         .checked_add(1)
         .ok_or_else(|| anyhow!("hook scope generation exhausted"))?;
-    save(&root, &path, &generation)?;
+    save(root, &path, &generation)?;
+    Ok(generation)
+}
+
+pub(crate) async fn begin_scope_request(base: &str, token: &str) -> Result<ScopeRequest> {
+    let started_ms = now_ms()?;
+    let root = root(base, token)?;
+    let _generation = scope_lock(&root, "scope-generation.lock").await?;
+    let generation = advance_generation(&root)?;
     Ok(ScopeRequest {
         started_ms,
         generation,
@@ -232,7 +237,7 @@ pub(crate) async fn cache_scope(
     let can_publish = admission.try_lock().is_ok();
     // Allocation never takes the cache lock. Hold the generation lock through
     // publication so a newer request cannot appear between the fence and save.
-    let _generation = generation_lock(&root).await?;
+    let _generation = scope_lock(&root, "scope-generation.lock").await?;
     let latest: u64 = json_file(&root.join("grant-generation.json"))?.unwrap_or(0);
     ensure!(
         latest >= request.generation,
@@ -293,7 +298,11 @@ pub(crate) async fn cache_scope(
     )?;
     Ok(eligible)
 }
-pub(crate) fn invalidate(root: &Path, scope: &str) -> Result<()> {
+pub(crate) async fn invalidate(root: &Path, scope: &str) -> Result<()> {
+    // Match publication's lock order and fence delayed replies even when no cache exists.
+    let _publication = scope_lock(root, "scopes.lock").await?;
+    let _generation = scope_lock(root, "scope-generation.lock").await?;
+    advance_generation(root)?;
     let path = cache_path(root, scope);
     match private(&path, false) {
         Ok(_) => (),
@@ -313,8 +322,8 @@ pub(crate) fn invalidate(root: &Path, scope: &str) -> Result<()> {
     }
 }
 
-pub(crate) fn invalidate_scope(base: &str, token: &str, scope: &str) -> Result<()> {
-    invalidate(&root(base, token)?, scope)
+pub(crate) async fn invalidate_scope(base: &str, token: &str, scope: &str) -> Result<()> {
+    invalidate(&root(base, token)?, scope).await
 }
 pub(crate) fn read_token_file(path: &Path) -> Result<String> {
     ancestors(
