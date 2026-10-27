@@ -276,7 +276,7 @@ def _native(config, args, raw=b'', report=False, budget=.25, forward=False, trac
                 native_error = False
                 if reported:
                     try:native_error = json.loads(reported).get('category') == 'error'
-                    except (ValueError, AttributeError):native_error = True
+                    except (ValueError, AttributeError):pass  # A report interrupted by cancellation is not a hook error.
                 if prompt_budget and not stderr and not native_error:
                     raise BudgetSkip()
                 raise TimeoutError('native deadline')
