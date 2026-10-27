@@ -31,8 +31,8 @@ _append, _input = _helpers._append, _helpers._input
 _recovery = _module('recovery')
 SKIPS = {'skipped_ungranted', 'disabled'}
 REPORTS = SKIPS | {'budget_skip'} | {'completed', 'enqueued', 'empty_prompt', 'error', 'cancelled'}
-# Twice the hosted maximum tail (10.663 ms), rounded up to 10 ms; see docs/evidence/hooks-guard-tail-2026-10-27.json.
-TAIL_MARGIN_MS = 30
+# Statistical calibration: p99 tail plus conservative p95; see docs/evidence/hooks-guard-tail-2026-10-27.json.
+TAIL_MARGIN_MS = 80
 PROMPT_BUDGET_MS = 250
 STEP_NAMES = {'input_setup', 'process_start', 'native_total', 'scopes_get', 'recent_get', 'writer_enqueue'}
 

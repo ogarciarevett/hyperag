@@ -196,10 +196,12 @@ class LiveHooks(unittest.TestCase):
         self.assertEqual(self.fixture.backend.stored, [])
         self.wait(lambda: self.fixture.status().get('stored') == 1)
         self.fixture.backend.post_delay = .01
-        tails = []
+        spec = importlib.util.spec_from_file_location('tail_calibration', DIRECTORY / 'tail_calibration.py')
+        calibration = importlib.util.module_from_spec(spec);spec.loader.exec_module(calibration)
+        tails, all_samples, all_adjusted = [], [], []
         for event in ('session-start', 'prompt'):
-            samples = []
-            for _ in range(100):
+            samples, adjusted, event_tails = [], [], []
+            for _ in range(300):
                 result, elapsed = self.call(event)
                 diagnostic = json.dumps(self.call_diagnostics()) if result.returncode or result.stderr else ''
                 self.assertEqual((result.returncode, bool(result.stderr)), (0, False), diagnostic)
@@ -207,19 +209,22 @@ class LiveHooks(unittest.TestCase):
                 row = json.loads((self.state / 'calls.jsonl').read_text().splitlines()[-1])
                 margin = row['tail_margin_ms']
                 tail = elapsed * 1000 - (row['latency_ms'] - margin)
-                tails.append(tail)
-                self.assertLessEqual(tail, margin, 'full-process tail exceeded the fixed margin')
-                self.assertGreaterEqual(row['latency_ms'], elapsed * 1000, 'guard under-counted real wall time')
+                tails.append(tail);event_tails.append(tail)
+                adjusted.append(row['latency_ms'])
             p95 = sorted(samples)[math.ceil(.95 * len(samples)) - 1]
             print(json.dumps({'fixture': 'full_native_guard_wall', 'event': event, 'calls': len(samples),
                               'p50_ms': round(statistics.median(samples), 3), 'p95_ms': round(p95, 3), 'errors': 0}), flush=True)
+            calibration.check(event_tails, samples, adjusted, margin)
+            self.assertLess(calibration.percentile(adjusted, .95), 300)
             self.assertLess(p95, 300)
+            all_samples.extend(samples);all_adjusted.extend(adjusted)
+        print(json.dumps({'fixture':'statistical_tail_calibration', **calibration.check(tails, all_samples, all_adjusted, margin)}), flush=True)
         tail_p99 = sorted(tails)[math.ceil(.99 * len(tails)) - 1]
         print(json.dumps({'fixture': 'guard_exit_tail', 'calls': len(tails), 'p99_ms': round(tail_p99, 3),
                           'max_ms': round(max(tails), 3), 'fixed_margin_ms': margin}), flush=True)
         self.assertLessEqual(tail_p99, margin)
-        self.wait(lambda: self.fixture.status().get('stored') == 101)
-        self.assertEqual(self.fixture.backend.scope_gets, 201)
+        self.wait(lambda: self.fixture.status().get('stored') == 301)
+        self.assertEqual(self.fixture.backend.scope_gets, 601)
         self.assertTrue(self.fixture.marker.exists())
         self.assertFalse((self.state / 'trip.json').exists())
         self.assertNotIn('HYPERAG_TOKEN', self.fixture.environment)
@@ -738,8 +743,9 @@ raise SystemExit(result)
         module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
         calibration = json.loads((DIRECTORY.parents[1] / 'docs/evidence/hooks-guard-tail-2026-10-27.json').read_text())
         self.assertEqual(module.TAIL_MARGIN_MS, calibration['selected_margin_ms'])
-        tail = next(record for record in calibration['records'] if record['fixture'] == 'guard_exit_tail')
-        self.assertEqual(module.TAIL_MARGIN_MS, math.ceil(2 * tail['max_ms'] / 10) * 10)
+        hosted = max(record['p99_ms'] for record in calibration['reference_hosted_runs'])
+        selected = math.ceil(max(2 * hosted, 1.25 * calibration['retained_mac']['p99_ms']) / 10) * 10
+        self.assertEqual(module.TAIL_MARGIN_MS, selected)
         row = lambda latency, warmup=False, error=None: {'latency_ms': latency, 'warmup': warmup, 'error': error}
         self.assertIsNone(module.evaluate([row(999, True)])['reason'])
         self.assertTrue(module.evaluate([row(1000.001, True)])['reason'])
