@@ -151,6 +151,21 @@ async fn exercise(pool: &PgPool) -> anyhow::Result<()> {
         values('id-131',1,'arrivallexeme','fixture','fixture','arrival')").await?;
     let next = checkpoint(pool).await?;
     assert!(consumer.at(&next).is_none(), "lag must use SQL fallback");
+    assert!(consumer.step(pool).await?);
+    assert!(consumer.pending.is_some());
+    assert!(reader.at(&next).is_none());
+    let pending_path = root.join(&consumer.pending.as_ref().unwrap().name);
+    let moved_pending = scratch.path().join("failed-step");
+    std::fs::rename(&pending_path, &moved_pending)?;
+    let failed_step = consumer.step(pool).await;
+    std::fs::rename(&moved_pending, &pending_path)?;
+    assert!(failed_step.is_err());
+    assert!(
+        consumer.pending.is_none(),
+        "failed step must release its snapshot"
+    );
+    assert_eq!(reader.at(&first).unwrap().num_docs(), 130);
+    assert_eq!(std::fs::read(root.join("CURRENT"))?, original_pointer);
     // Drop a partially committed replay: the pointer and independent readers stay old.
     let mut pending = consumer.prepare(pool).await?.unwrap();
     assert!(pending.generation.advance().await?);
@@ -323,17 +338,32 @@ fn rejects_replaceable_ancestors_before_creating_lock() -> anyhow::Result<()> {
         std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o700))?;
     }
     for path in [&ancestor, &parent] {
-        for mode in [0o777, 0o770] {
+        for mode in [0o777, 0o770, 0o775] {
             std::fs::set_permissions(path, std::fs::Permissions::from_mode(mode))?;
-            let rejected = Consumer::open(&root).is_err();
+            let rejected = Consumer::open(&root)
+                .err()
+                .expect("replaceable ancestor accepted");
             std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o700))?;
-            anyhow::ensure!(rejected, "replaceable ancestor mode {mode:o} accepted");
+            anyhow::ensure!(
+                rejected.to_string().contains(&path.display().to_string()),
+                "unsafe ancestor diagnostic must name {}: {rejected}",
+                path.display()
+            );
             anyhow::ensure!(
                 !root.join(".consumer.lock").exists(),
                 "unsafe root was locked"
             );
         }
     }
+    let file = scratch.path().join("not-a-directory");
+    std::fs::write(&file, b"fixture")?;
+    let file = file.canonicalize()?;
+    let rejected = check_ancestors(&file, current_owner()).unwrap_err();
+    anyhow::ensure!(rejected.to_string().contains(&file.display().to_string()));
+    let file = scratch.path().join("file-parent");
+    std::fs::write(&file, b"fixture")?;
+    let error = Consumer::open(&file.join("index")).err().unwrap();
+    anyhow::ensure!(error.to_string().contains(&file.display().to_string()));
     // Sticky protection prevents other users from replacing our entry.
     std::fs::set_permissions(&ancestor, std::fs::Permissions::from_mode(0o1777))?;
     drop(Consumer::open(&root)?);

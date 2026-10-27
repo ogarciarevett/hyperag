@@ -4,7 +4,7 @@ use sqlx::{
     PgPool,
     postgres::{PgConnectOptions, PgPoolOptions},
 };
-use std::str::FromStr;
+use std::{future::Future, str::FromStr};
 use tantivy::{
     Term,
     postings::Postings,
@@ -209,7 +209,18 @@ async fn exercise(pool: &PgPool) -> anyhow::Result<()> {
     assert_eq!(full_source.target_checkpoint(), &replay_target);
     let replay_path = root.path().join("replayed");
     let base_metadata = std::fs::read(&meta_path)?;
-    let mut replay = Generation::replay(&replay_path, &complete_path, replay_source)?;
+    let cancelled_path = root.path().join("cancelled-copy");
+    let cancelled_source = SourceSnapshot::open(pool, Some(&target)).await?;
+    let mut cancelled = Box::pin(Generation::replay(
+        &cancelled_path, &complete_path, cancelled_source,
+    ));
+    assert!(std::future::poll_fn(|cx| std::task::Poll::Ready(cancelled.as_mut().poll(cx)))
+        .await.is_pending());
+    drop(cancelled);
+    assert!(recover(&cancelled_path, &target)?.is_none());
+    assert!(recover(&cancelled_path, &replay_target)?.is_none());
+    assert_eq!(recover(&complete_path, &target)?.unwrap().num_docs(), 130);
+    let mut replay = Generation::replay(&replay_path, &complete_path, replay_source).await?;
     assert!(
         recover(&replay_path, &target).is_err(),
         "the copied index has a single owner"
@@ -317,15 +328,15 @@ async fn exercise(pool: &PgPool) -> anyhow::Result<()> {
     );
     assert_eq!(std::fs::read(&meta_path)?, base_metadata);
     let full = SourceSnapshot::open(pool, None).await?;
-    assert!(Generation::replay(&root.path().join("bad-full"), &complete_path, full).is_err());
+    assert!(Generation::replay(&root.path().join("bad-full"), &complete_path, full).await.is_err());
     let mut consumed = SourceSnapshot::open(pool, Some(&target)).await?;
     assert!(consumed.next_batch().await?.is_some());
     assert!(
-        Generation::replay(&root.path().join("bad-consumed"), &complete_path, consumed).is_err()
+        Generation::replay(&root.path().join("bad-consumed"), &complete_path, consumed).await.is_err()
     );
     let source = SourceSnapshot::open(pool, Some(&target)).await?;
-    assert!(Generation::replay(&root.path().join("bad-base"), &old_path, source).is_err());
+    assert!(Generation::replay(&root.path().join("bad-base"), &old_path, source).await.is_err());
     let source = SourceSnapshot::open(pool, Some(&target)).await?;
-    assert!(Generation::replay(&root.path().join("bad-pending"), &pending_path, source).is_err());
+    assert!(Generation::replay(&root.path().join("bad-pending"), &pending_path, source).await.is_err());
     Ok(())
 }
