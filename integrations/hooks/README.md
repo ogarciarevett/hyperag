@@ -125,3 +125,14 @@ The 1 s deadline and 30 ms latency margin are unchanged. Hosted tests run real
 native calls and a detached watchdog with deliberately different process-local
 monotonic origins, plus marker-removal and dead-PID regressions. No activation
 or service rebuild is implied by this Python-only repair.
+
+
+The native subprocess supervisor polls completion before applying its deadline.
+A supervisor that resumes after the child has already exited drains the completed
+result; it times out a child that is still running. Output, report and stderr
+streams remain size-bounded while draining. The foreground guard still applies
+its full-call 1000 ms limit and the approved all-call p95 policy with 30 ms margin.
+Hosted tests force a successful status child to exit, pause its supervisor past
+250 ms, and require a successful result; a separate running child must still time
+out. The slow-fsync fixture now retains stage timings and category-only metadata
+on failure so a generic recovery message no longer destroys the diagnosis.
