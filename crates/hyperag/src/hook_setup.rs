@@ -45,7 +45,7 @@ impl Config {
     pub fn token(&self) -> Result<String> {
         if let Some(path) = &self.token_file {
             #[cfg(unix)]
-            return crate::hook_context::read_token_file(path);
+            return crate::hook_credentials::read_token_file(path);
             #[cfg(not(unix))]
             { let _ = path; anyhow::bail!("hook token files require Unix"); }
         }

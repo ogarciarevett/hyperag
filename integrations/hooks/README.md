@@ -84,4 +84,4 @@ changed identity key names without copying exception text. Hosted service tests
 force this Darwin metadata interleaving around a real Hyperag shutdown, then
 require the pinned prior executable and health to return under a guard trip.
 
-Native hook credentials and the session-start grant cache are documented in [FAST_PATH.md](FAST_PATH.md).
+Native hook credentials and fresh uncached permission checks are documented in [FAST_PATH.md](FAST_PATH.md).

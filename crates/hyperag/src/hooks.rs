@@ -108,33 +108,20 @@ async fn handle(event: &str, harness: Option<&str>, config: &crate::hook_setup::
     let base = base.as_str();
     let scope = scope.as_str();
     let send = |req: reqwest::RequestBuilder| async move {
-        let r = req.bearer_auth(&token).send().await?;
-        let status = r.status();
-        #[cfg(unix)]
-        if event == "session-start" && scope.starts_with("project:") && matches!(status.as_u16(), 401 | 403 | 404) {
-            crate::hook_context::invalidate_scope(base, token, scope).await?;
-        }
-        let body: Value = r.json().await.unwrap_or(Value::Null);
+        let response = req.bearer_auth(token).send().await?;
+        let status = response.status();
+        let body: Value = response.json().await.unwrap_or(Value::Null);
         anyhow::ensure!(status.is_success(), "service answered {status}");
         Ok::<Value, anyhow::Error>(body)
     };
     if scope.starts_with("project:") {
-        #[cfg(unix)]
-        let cached = if event == "session-start" { crate::hook_context::cached_scope(base, token, scope)? } else { None };
-        #[cfg(not(unix))]
-        let cached: Option<bool> = None;
-        let eligible = if let Some(eligible) = cached { eligible } else {
-            #[cfg(unix)]
-            let request = if event == "session-start" { Some(crate::hook_context::begin_scope_request(base, token).await?) } else { None };
-            let grants = send(http.get(format!("{base}/v1/scopes"))).await?;
-            let grants: ScopeGrants = serde_json::from_value(grants)
-                .map_err(|_| anyhow::anyhow!("invalid scope grant response"))?;
-            let eligible = grants.read.iter().any(|value| value == scope) && grants.write.iter().any(|value| value == scope);
-            #[cfg(unix)]
-            let eligible = if let Some(request) = request { crate::hook_context::cache_scope(base, token, scope, eligible, request).await? } else { eligible };
-            eligible
-        };
-        if !eligible { return Ok(String::new()); }
+        let grants = send(http.get(format!("{base}/v1/scopes"))).await?;
+        let grants: ScopeGrants = serde_json::from_value(grants)
+            .map_err(|_| anyhow::anyhow!("invalid scope grant response"))?;
+        if !grants.read.iter().any(|value| value == scope)
+            || !grants.write.iter().any(|value| value == scope) {
+            return Ok(String::new());
+        }
     }
     match event {
         "session-start" => {

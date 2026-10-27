@@ -156,6 +156,8 @@ when set). Install creates it with defaults; hooks also work when it is absent:
 url = "http://127.0.0.1:7480"
 # Environment variable NAME, never a literal token.
 token_env = "HYPERAG_TOKEN"
+# Optional absolute owner-only 0600 JSON credential file; overrides token_env.
+# token_file = "/absolute/path/to/hook-credential.json"
 # "project" => project:<lowercase-git-root-folder>; otherwise a fixed scope.
 scope = "project"
 # Overall deadline, including stdin, in milliseconds (100..2000).
@@ -175,7 +177,10 @@ events = ["session-start", "prompt", "session-end"]
 All supported harnesses and events are enabled by default. Event/harness switches apply
 at runtime; re-run install to reconcile the native subscriptions. Session start fetches
 recent context, prompt stores up to 4,000 characters, and session end stores a marker.
-The token stays in the environment and is never copied into generated settings.
+The token comes from the named environment variable, or the optional private `token_file`,
+and is never copied into generated settings. Native hooks use a current-thread runtime;
+every project call fetches fresh permissions, without a local grant cache. See the
+[native hook path and hosted measurement](integrations/hooks/FAST_PATH.md).
 Gemini's [environment redaction](https://geminicli.com/docs/hooks/best-practices/#sanitize-environment)
 filters token names. Setup adds only `token_env` to
 `security.environmentVariableRedaction.allowed`, retaining other allowance/block lists

@@ -1,0 +1,45 @@
+{
+  "measurement_head": "165bbfbba450eef1c6b92050386a306180bf0e0d",
+  "product_base_head": "6dea3f918ab75fe36e994e1abf3c7178553fd968",
+  "workflow_run": 40458039141,
+  "job_url": "https://github.com/ogarciarevett/hyperag/actions/runs/40458039141/job/122035846384",
+  "measurement_patch_sha256": "b8e778d5b5274f790f286a5672baa010c887bec0185e5c36b00c50b23e0a899c",
+  "platform": "hosted ubuntu-24.04",
+  "backend": "synthetic loopback HTTP; no database or model",
+  "timing_boundary": "full native hook subprocess wall time",
+  "live_acceptance": false,
+  "local_heavy_jobs": false,
+  "decision": "remove hook grant cache, generations and invalidation; fresh scopes GET every call",
+  "cohorts": [
+    {
+      "name": "fast_scopes",
+      "measured_calls": 50,
+      "excluded_warmups": 1,
+      "injected_scope_delay_ms": 0,
+      "p50_ms": 6.548,
+      "p95_ms": 7.31,
+      "max_ms": 7.913,
+      "errors": 0,
+      "scopes_get_including_warmup": 51,
+      "recent_get_including_warmup": 51,
+      "posts": 0,
+      "cache_state_created": false,
+      "observed_at": "2026-10-27T05:57:52.2943609Z"
+    },
+    {
+      "name": "scopes_delay_100ms",
+      "measured_calls": 50,
+      "excluded_warmups": 1,
+      "injected_scope_delay_ms": 100,
+      "p50_ms": 107.279,
+      "p95_ms": 107.812,
+      "max_ms": 107.897,
+      "errors": 0,
+      "scopes_get_including_warmup": 51,
+      "recent_get_including_warmup": 51,
+      "posts": 0,
+      "cache_state_created": false,
+      "observed_at": "2026-10-27T05:57:57.7683445Z"
+    }
+  ]
+}

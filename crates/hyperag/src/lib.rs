@@ -16,7 +16,7 @@ mod lexical_read;
 pub mod hooks;
 pub mod hook_setup;
 #[cfg(unix)]
-mod hook_context;
+mod hook_credentials;
 pub mod mcp;
 pub mod models;
 pub mod portable;
