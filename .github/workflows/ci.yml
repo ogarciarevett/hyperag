@@ -37,6 +37,16 @@ jobs:
       - run: bunx tsc --noEmit -p tsconfig.json
       - run: bun run build
       - run: node scripts/package-smoke.mjs . "$(npm pack --ignore-scripts --silent)"
+      - name: git dependency install in a scratch consumer
+        run: |
+          dir="$(mktemp -d)"
+          trap 'rm -rf "$dir"' EXIT
+          printf '{"private":true,"type":"module"}\n' > "$dir/package.json"
+          npm install --prefix "$dir" --no-audit --no-fund --save-exact "github:${{ github.event.pull_request.head.repo.full_name || github.repository }}#${{ github.event.pull_request.head.sha || github.sha }}"
+          printf 'import { loadPlugin, PluginError } from "hyperag/plugin";\nif (typeof loadPlugin !== "function" || typeof PluginError !== "function") process.exit(1);\n' > "$dir/consumer.mjs"
+          printf 'import { loadPlugin, PluginError } from "hyperag/plugin";\nvoid loadPlugin; void PluginError;\n' > "$dir/consumer.mts"
+          node "$dir/consumer.mjs"
+          node node_modules/typescript/bin/tsc --ignoreConfig --noEmit --strict --skipLibCheck --module NodeNext --moduleResolution NodeNext --target ES2022 "$dir/consumer.mts"
       - name: packaged host plugin against an isolated service
         run: bun test test/plugin.test.ts --timeout 30000
       - run: python3 -I eval/public/test_readme_table.py
