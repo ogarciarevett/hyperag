@@ -372,25 +372,107 @@ raise SystemExit(module.main())
         print(json.dumps({'fixture':'different_process_clock_origins', 'calls':5,
                           'max_full_wall_ms':round(max(latencies),3), 'trips':0}), flush=True)
 
+    def test_completed_native_status_survives_late_supervisor_wakeup(self):
+        spec = importlib.util.spec_from_file_location('native_guard', GUARD)
+        module = importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+        config = module._context(self.config)
+        spawn = subprocess.Popen
+        def delayed_poll(*args, **kwargs):
+            child = spawn(*args, **kwargs)
+            poll = child.poll
+            paused = False
+            def completed():
+                nonlocal paused
+                if not paused:
+                    paused = True
+                    child.wait(timeout=2)
+                    time.sleep(.3)  # Supervisor resumes beyond the 250 ms status deadline.
+                return poll()
+            child.poll = completed
+            return child
+        with patch.object(module.subprocess, 'Popen', side_effect=delayed_poll):
+            status = module._status(config)
+        self.assertTrue(status['async_writes'])
+        self.assertTrue(self.fixture.marker.exists())
+        self.assertFalse((self.state / 'trip.json').exists())
+
+    def test_native_stderr_remains_bounded(self):
+        spec = importlib.util.spec_from_file_location('native_guard', GUARD)
+        module = importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+        config = module._context(self.config)
+        config['binary'] = sys.executable
+        with self.assertRaisesRegex(ValueError, 'oversized native stderr'):
+            module._native(config, ['-c', 'import os;os.write(2,b"x"*100000)'], budget=2)
+
+    def test_running_native_child_still_obeys_deadline(self):
+        self.fixture.backend.recent_delay = .4
+        spec = importlib.util.spec_from_file_location('native_guard', GUARD)
+        module = importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+        config = module._context(self.config)
+        payload = json.dumps({'cwd': str(self.fixture.project)}).encode()
+        with self.assertRaises(TimeoutError):
+            module._native(config, ['hook', 'session-start', '--harness', 'claude-code'], payload, budget=.1)
+
     def test_successful_foreground_does_not_wait_for_fsync(self):
         self.arm()
         driver = self.fixture.home / 'slow-fsync.py'
         counts = self.fixture.home / 'foreground-fsync-count'
-        driver.write_text('import importlib.util,os,time\nfrom pathlib import Path\n' +
-            'spec=importlib.util.spec_from_file_location("native_guard",' + repr(str(GUARD)) + ')\n' +
-            'module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)\n' +
-            'original=os.fsync\ncount=0\n' +
-            'def fsync(descriptor):\n    global count\n    count+=1\n    time.sleep(.2)\n    return original(descriptor)\n' +
-            'os.fsync=fsync\nresult=module.main(' +
-            repr(['--config', str(self.config), 'hook', 'prompt', '--harness', 'claude-code']) + ')\n' +
-            'Path(' + repr(str(counts)) + ').write_text(str(count))\nraise SystemExit(result)\n')
+        diagnostics = self.fixture.home / 'foreground-diagnostics.json'
+        arguments = ['--config', str(self.config), 'hook', 'prompt', '--harness', 'claude-code']
+        driver.write_text('MODULE=' + repr(str(GUARD)) + '\nARGUMENTS=' + repr(arguments) +
+            '\nCOUNTS=' + repr(str(counts)) + '\nDIAGNOSTICS=' + repr(str(diagnostics)) + '\n' + r'''import importlib.util,json,os,time
+from pathlib import Path
+spec=importlib.util.spec_from_file_location('native_guard',MODULE)
+module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+original=os.fsync
+count=0
+trace={}
+def fsync(descriptor):
+    global count
+    count+=1
+    time.sleep(.2)
+    return original(descriptor)
+def instrument(name):
+    function=getattr(module,name)
+    def run(*args,**kwargs):
+        started=time.monotonic()
+        value={}
+        try:
+            result=function(*args,**kwargs)
+            if name=='_native':
+                code,output,stderr,report=result
+                value.update(returncode=code,stderr_present=bool(stderr))
+                if report:
+                    try:value['native_category']=json.loads(report)['category']
+                    except (ValueError,KeyError):value['native_category']='invalid_report'
+            return result
+        except Exception as error:
+            value['error_type']=type(error).__name__
+            allowed={'watchdog_lost_or_stale','watchdog handshake','native deadline','watchdog_startup'}
+            if str(error) in allowed:value['category']=str(error)
+            raise
+        finally:
+            value['elapsed_ms']=round((time.monotonic()-started)*1000,3)
+            trace[name]=value
+    setattr(module,name,run)
+for name in ('arm','_input','_native','_record'):instrument(name)
+os.fsync=fsync
+result=module.main(ARGUMENTS)
+Path(COUNTS).write_text(str(count))
+Path(DIAGNOSTICS).write_text(json.dumps(trace))
+raise SystemExit(result)
+''')
         payload = json.dumps({'cwd': str(self.fixture.project), 'prompt': 'synthetic guarded input'})
         environment = dict(self.fixture.environment)
         started = time.perf_counter()
         environment['HYPERAG_HOOK_STARTED_AT'] = str(time.time())
         result = subprocess.run([sys.executable, str(driver)], env=environment, input=payload,
                                 text=True, capture_output=True, timeout=5)
-        self.assertEqual((result.returncode, result.stdout, result.stderr), (0, '', ''))
+        diagnostic = self.call_diagnostics()
+        if diagnostics.exists():diagnostic['foreground_stages'] = json.loads(diagnostics.read_text())
+        if result.returncode or result.stderr:
+            print(json.dumps({'fixture':'fsync_guard_failure','metadata':diagnostic}), flush=True)
+        self.assertEqual((result.returncode, result.stdout, result.stderr), (0, '', ''), json.dumps(diagnostic))
         self.assertLess(time.perf_counter() - started, .3)
         self.assertEqual(counts.read_text(), '0')
         self.assertTrue(self.fixture.marker.exists())

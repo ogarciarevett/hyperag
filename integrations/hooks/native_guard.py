@@ -183,7 +183,7 @@ def _native(config, args, raw=b'', report=False, budget=.25, forward=False):
         os.close(writer)
     selector = selectors.DefaultSelector()
     output, reported, stderr = bytearray(), bytearray(), False
-    offset, total = 0, 0
+    offset, total, error_bytes = 0, 0, 0
     for pipe, kind in [(child.stdin, 'input'), (child.stdout, 'output'), (child.stderr, 'error')]:
         os.set_blocking(pipe.fileno(), False)
         if kind == 'input' and not raw:
@@ -196,9 +196,11 @@ def _native(config, args, raw=b'', report=False, budget=.25, forward=False):
     deadline = time.monotonic() + max(0, budget)
     try:
         while True:
-            if time.monotonic() >= deadline:
-                raise TimeoutError('native deadline')
+            # A delayed supervisor must collect an already-completed child before
+            # deciding that an operation still running has exceeded its deadline.
             exited = child.poll() is not None
+            if not exited and time.monotonic() >= deadline:
+                raise TimeoutError('native deadline')
             events = selector.select(0 if exited else min(.01, deadline - time.monotonic()))
             for key, _mask in events:
                 if key.data == 'input':
@@ -214,6 +216,9 @@ def _native(config, args, raw=b'', report=False, budget=.25, forward=False):
                     selector.unregister(key.fileobj)
                     continue
                 if key.data == 'error':
+                    error_bytes += len(chunk)
+                    if error_bytes > 65536:
+                        raise ValueError('oversized native stderr')
                     stderr = True
                 elif key.data == 'report':
                     reported.extend(chunk)
