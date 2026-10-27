@@ -7,8 +7,8 @@
 //! - `prompt`: stores the user's prompt (kind `prompt`) in the project's scope.
 //! - `session-end`: stores a marker that the session ended (kind `session`).
 //!
-//! The scope is `HYPERAG_SCOPE`, else `project:<name>` where name is the git root folder of the
-//! hook's `cwd` (or the folder itself), lowercased.
+//! The scope is `HYPERAG_SCOPE`, else `project:<name>` where name is the common git repository
+//! folder (so linked worktrees share a scope), or the current folder, lowercased.
 
 use std::path::Path;
 
@@ -17,12 +17,23 @@ use serde_json::{Value, json};
 const PROMPT_MAX_CHARS: usize = 4_000;
 
 pub fn scope_for(cwd: &Path) -> String {
-    if let Ok(s) = std::env::var("HYPERAG_SCOPE") {
-        if !s.is_empty() {
-            return s;
-        }
+    scope_with_override(cwd, std::env::var("HYPERAG_SCOPE").ok().as_deref())
+}
+
+fn scope_with_override(cwd: &Path, override_scope: Option<&str>) -> String {
+    if let Some(scope) = override_scope.filter(|scope| !scope.is_empty()) {
+        return scope.to_owned();
     }
     let root = cwd.ancestors().find(|d| d.join(".git").exists()).unwrap_or(cwd);
+    let common = std::process::Command::new("git")
+        .env_remove("GIT_DIR").env_remove("GIT_WORK_TREE").env_remove("GIT_COMMON_DIR")
+        .arg("-C").arg(cwd).args(["rev-parse", "--path-format=absolute", "--git-common-dir"])
+        .output().ok().filter(|output| output.status.success())
+        .and_then(|output| String::from_utf8(output.stdout).ok())
+        .map(|path| std::path::PathBuf::from(path.trim()))
+        .filter(|path| path.file_name().is_some_and(|name| name == ".git"))
+        .and_then(|path| path.parent().map(Path::to_path_buf));
+    let root = common.as_deref().unwrap_or(root);
     let name = root.file_name().map(|n| n.to_string_lossy().to_lowercase()).unwrap_or_else(|| "unknown".into());
     format!("project:{name}")
 }
@@ -121,8 +132,31 @@ mod tests {
         let nested = dir.join("Repo-X").join("src").join("deep");
         std::fs::create_dir_all(&nested).unwrap();
         std::fs::create_dir_all(dir.join("Repo-X").join(".git")).unwrap();
-        assert_eq!(scope_for(&nested), "project:repo-x");
-        assert_eq!(scope_for(&dir), format!("project:{}", dir.file_name().unwrap().to_string_lossy().to_lowercase()));
+        assert_eq!(scope_with_override(&nested, None), "project:repo-x");
+        assert_eq!(scope_with_override(&dir, None), format!("project:{}", dir.file_name().unwrap().to_string_lossy().to_lowercase()));
         std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn linked_worktree_uses_common_repository_scope_and_explicit_override() {
+        let fixture = tempfile::tempdir().unwrap();
+        let repository = fixture.path().join("Coordination");
+        let worktree = fixture.path().join("chief");
+        let git = |args: &[&str]| {
+            let output = std::process::Command::new("git")
+                .env_remove("GIT_DIR").env_remove("GIT_WORK_TREE").env_remove("GIT_COMMON_DIR")
+                .args(["-c", "core.hooksPath=/dev/null", "-c", "commit.gpgSign=false"])
+                .args(args).output().unwrap();
+            assert!(output.status.success(), "fixture git command failed");
+        };
+        git(&["init", repository.to_str().unwrap()]);
+        git(&["-C", repository.to_str().unwrap(), "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "commit", "--allow-empty", "-m", "fixture"]);
+        git(&["-C", repository.to_str().unwrap(), "worktree", "add", "-b", "chief", worktree.to_str().unwrap()]);
+        let nested = worktree.join("src");
+        std::fs::create_dir(&nested).unwrap();
+        assert_eq!(scope_with_override(&repository, None), "project:coordination");
+        assert_eq!(scope_with_override(&nested, None), "project:coordination");
+        assert_eq!(scope_with_override(&nested, Some("")), "project:coordination");
+        assert_eq!(scope_with_override(&nested, Some("project:explicit")), "project:explicit");
     }
 }
