@@ -34,8 +34,8 @@ jobs:
         with:
           bun-version: 1.4.3
       - run: bun install --frozen-lockfile
-      - run: bun run build
       - run: bunx tsc --noEmit -p tsconfig.json
+      - run: bun run build
       - run: node scripts/package-smoke.mjs . "$(npm pack --ignore-scripts --silent)"
       - name: packaged host plugin against an isolated service
         run: bun test test/plugin.test.ts --timeout 30000
