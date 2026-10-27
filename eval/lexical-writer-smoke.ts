@@ -93,7 +93,10 @@ try {
       if (created) {
         let count = -1;
         for (let i = 0; i < 20 && count !== 0; i++) {
-          ({ rows: [{ count }] } = await admin.query("select count(*)::int as count from pg_stat_activity where datname=$1", [name]));
+          const result = await admin.query<{ count: number }>("select count(*)::int as count from pg_stat_activity where datname=$1", [name]);
+          const row = result.rows[0];
+          assert(row, "session count query returned no row");
+          count = row.count;
           if (count !== 0) await Bun.sleep(50);
         }
         assert.equal(count, 0, "service shutdown must release every owned database connection");
