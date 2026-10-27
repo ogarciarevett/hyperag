@@ -4,6 +4,8 @@
   <img alt="Hyperag" src="assets/brand/logo/lockup-color.svg" width="420">
 </picture>
 
+Modular RAG and shared memory for agents.
+
 Shared memory and retrieval for agents, with permissions, version history and cited context.
 
 ## Install
@@ -61,6 +63,15 @@ curl -fsS localhost:7480/v1/context -H "authorization: Bearer $AGENT" -H 'conten
 
 The result names each memory's version, source and author. The MCP server exposes the same operations using the agent's token; see [MCP setup](docs/mcp.md).
 
+## Why modular
+
+- Combine BM25, vector search, typed graph relations and re-ranking in one retrieval pipeline.
+- Choose embeddings and re-ranking independently; each embedding space has its own vector index.
+- Use Neo4j for relationships or turn graph expansion off; Postgres keeps the source text and versions.
+- Integrate through HTTP, MCP or `hyperag/plugin`; your application supplies the answer model.
+
+[Module interfaces and backend limits](docs/modules.md) · [Runnable module examples](#module-examples)
+
 ## What it does
 
 - Server-side grants control every search, context and graph path. Revocation takes effect on the next query.
@@ -68,6 +79,183 @@ The result names each memory's version, source and author. The MCP server expose
 - BM25 and vector retrieval use reciprocal-rank fusion, optional typed graph expansion and re-ranking.
 - Context includes numbered citations or an `insufficientEvidence` signal when evidence is weak.
 - Models run locally from pinned revisions. Store, embedding, re-ranking and graph slots can be configured independently.
+
+## Module examples
+
+These TypeScript examples run from a reviewed source checkout with Bun, Postgres/pgvector
+and Neo4j. Start only the databases, then run all seven examples:
+
+```sh
+docker compose -p hyperag-readme up -d postgres neo4j
+bun install --frozen-lockfile && bun run build
+bun examples/readme/run.ts
+```
+
+Use the database ports in [docker-compose.yml](docker-compose.yml), or set
+`HYPERAG_PG_URL`, `HYPERAG_NEO4J_URL` and `HYPERAG_NEO4J_PASSWORD` for disposable
+local services. First re-ranking use downloads the pinned TypeScript reference model.
+This path is separate from the installed Rust service above.
+
+The shared [`demo`](examples/readme/demo.ts) harness creates and drops a fresh database,
+provisions a scoped test identity and private token file, starts the reference HTTP
+service on a temporary loopback port, then cleans up. No example uses 7481 or 7482.
+`call` sends an authenticated HTTP request and rejects non-200 responses. Every block
+below is the complete file linked above it; CI checks that they stay identical.
+Run an individual file with `bun examples/readme/<name>.ts` after the same setup.
+
+### Ingest a document
+
+Store document text with its source and scope. File parsing and chunking belong to the caller.
+
+[`examples/readme/ingest.ts`](examples/readme/ingest.ts)
+
+```ts
+import assert from "node:assert/strict";
+import { demo } from "./demo";
+
+await demo(async ({ call, scope }) => {
+  const saved = await call<{ id: string; version: number; created: boolean }>("/v1/memories", {
+    scope, source: "retry-policy.md", text: "Failed jobs retry three times with exponential backoff.",
+  });
+  assert.equal(saved.version, 1);
+  assert.equal(saved.created, true);
+});
+```
+
+### Search with citations
+
+Retrieve context within a token budget; honor `insufficientEvidence` before answering.
+
+[`examples/readme/search.ts`](examples/readme/search.ts)
+
+```ts
+import assert from "node:assert/strict";
+import type { Context, Retrieval, WriteResult } from "../../src/index";
+import { demo } from "./demo";
+
+await demo(async ({ call, scope }) => {
+  const saved = await call<WriteResult>("/v1/memories", {
+    scope, source: "retry-policy.md", text: "Failed jobs retry three times with exponential backoff.",
+  });
+  const context = await call<Context & { retrieval: Retrieval }>("/v1/context", {
+    query: "Failed jobs retry", maxTokens: 400,
+  });
+  assert.equal(context.retrieval.insufficientEvidence, false);
+  assert.equal(context.citations[0]?.memoryId, saved.id);
+  console.log(context.text);
+});
+```
+
+### Relate nodes
+
+Create a typed edge between two saved memories. Both endpoints require write access.
+
+[`examples/readme/relate.ts`](examples/readme/relate.ts)
+
+```ts
+import assert from "node:assert/strict";
+import type { Relation, WriteResult } from "../../src/index";
+import { demo } from "./demo";
+
+await demo(async ({ call, scope }) => {
+  const save = (text: string) => call<WriteResult>("/v1/memories", { scope, source: "operations.md", text });
+  const evidence = await save("The migration lock timed out after 30 seconds.");
+  const finding = await save("Raise the migration lock timeout to 120 seconds.");
+  await call("/v1/relations", { from: finding.id, to: evidence.id, type: "SUPPORTED_BY" });
+  const edges = await call<Relation[]>(`/v1/memories/${encodeURIComponent(finding.id)}/relations`);
+  assert(edges.some((edge) => edge.to === evidence.id && edge.type === "SUPPORTED_BY"));
+});
+```
+
+### Re-rank candidates
+
+Configure a local cross-encoder independently of embeddings. Retrieval runs it after fusion.
+
+[`examples/readme/rerank.ts`](examples/readme/rerank.ts)
+
+```ts
+import assert from "node:assert/strict";
+import { createLocalReranker, type Retrieval } from "../../src/index";
+import { demo } from "./demo";
+
+await demo(async ({ call, scope }) => {
+  for (const text of ["Failed jobs retry three times.", "Failed jobs appear in the monitoring dashboard."])
+    await call("/v1/memories", { scope, source: "operations.md", text });
+  const ranked = await call<Retrieval>("/v1/retrieve", { query: "How many times do failed jobs retry?" });
+  assert.equal(ranked.items.length, 2);
+  assert(ranked.pathsUsed.some((path) => path.startsWith("rerank:")));
+  assert(ranked.items.every((item) => Number.isFinite(item.rerankScore)));
+}, { reranker: createLocalReranker({ threads: 1 }) });
+```
+
+### Import the plugin in another app
+
+The public `hyperag/plugin` import calls the same service. In a host, supply your service URL and a private token file provisioned by its administrator; see [the plugin contract](docs/plugin.md) for packaging and permissions.
+
+[`examples/readme/plugin.ts`](examples/readme/plugin.ts)
+
+```ts
+import assert from "node:assert/strict";
+import { loadPlugin } from "hyperag/plugin";
+import { demo } from "./demo";
+
+await demo(async ({ url, tokenFile, scope }) => {
+  const memory = await loadPlugin({ url, tokenFile });
+  await memory.health();
+  const saved = await memory.save({ scope, source: "host-app", text: "Failed jobs retry three times." });
+  const context = await memory.search("Failed jobs retry", { maxTokens: 400 });
+  assert.equal(context.citations[0]?.memoryId, saved.id);
+});
+```
+
+### Swap the embedding backend
+
+Reindex into an OpenAI-compatible embedding space, then construct and serve an instance using it. The suite supplies a deterministic loopback provider with three dimensions; this tests the adapter contract, not model quality or a live provider. For an individual run, set `README_EMBEDDING_URL` to a compatible endpoint serving `example-embedding` with three dimensions, or adapt the model metadata to your endpoint.
+
+[`examples/readme/embeddings.ts`](examples/readme/embeddings.ts)
+
+```ts
+import assert from "node:assert/strict";
+import { Hyperag, createOpenAICompatibleEmbedder, type Retrieval, type WriteResult } from "../../src/index";
+import { demo } from "./demo";
+
+await demo(async ({ hyperag, store, serve, call, scope }) => {
+  const saved = await call<WriteResult>("/v1/memories", { scope, source: "policy.md", text: "Failed jobs retry three times." });
+  const embedder = createOpenAICompatibleEmbedder({
+    baseUrl: process.env.README_EMBEDDING_URL!, model: "example-embedding", revision: "v1",
+    dimensions: 3, normalized: true,
+  });
+  const indexed = await hyperag.reindex(embedder);
+  assert.equal(indexed.embedded, 1);
+  const next = new Hyperag({ store, embedder, graph: null });
+  await next.init(); // reindex alone does not switch the running instance.
+  serve(next);
+  const result = await call<Retrieval>("/v1/retrieve", { query: "retry", channels: { bm25: false, graph: false } });
+  assert(result.pathsUsed.includes("vector"));
+  assert.equal(result.items[0]?.memory.id, saved.id);
+});
+```
+
+### Choose the graph backend
+
+Neo4j is the only built-in graph backend; the relation example above exercises it. Set `graph: null` to disable expansion, as below. The TypeScript library accepts a custom `GraphStore` implementation, but no alternative adapter, edge migration or runtime graph-switch API is supplied.
+
+[`examples/readme/graph.ts`](examples/readme/graph.ts)
+
+```ts
+import assert from "node:assert/strict";
+import type { Retrieval } from "../../src/index";
+import { demo } from "./demo";
+
+// Neo4j is the built-in backend (used by relate.ts); null disables the graph slot.
+await demo(async ({ call, scope }) => {
+  await call("/v1/memories", { scope, source: "policy.md", text: "Failed jobs retry three times." });
+  const result = await call<Retrieval>("/v1/retrieve", { query: "retry" });
+  assert.equal(result.items.length, 1);
+  assert(!result.pathsUsed.includes("graph"));
+  assert(result.limitations.some((limit) => limit.includes("no graph configured")));
+}, { graph: null });
+```
 
 ## Benchmarks
 
@@ -122,7 +310,7 @@ This does not rerun or change recorded benchmark results.
 
 ## Docs
 
-[Install](docs/install.md) · [Concepts](docs/concepts.md) · [Configuration](docs/configuration.md) · [API](docs/api.md) · [MCP](docs/mcp.md) · [Hosting](docs/cloud.md) · [Export and import](docs/export.md) · [Models](docs/models.md) · [Architecture](docs/architecture.md) · [Status and limits](docs/status.md) · [FAQ](docs/faq.md) · [Contributing](CONTRIBUTING.md)
+[Modules](docs/modules.md) · [Plugin](docs/plugin.md) · [Install](docs/install.md) · [Concepts](docs/concepts.md) · [Configuration](docs/configuration.md) · [API](docs/api.md) · [MCP](docs/mcp.md) · [Hosting](docs/cloud.md) · [Export and import](docs/export.md) · [Models](docs/models.md) · [Architecture](docs/architecture.md) · [Status and limits](docs/status.md) · [FAQ](docs/faq.md) · [Contributing](CONTRIBUTING.md)
 
 Apache-2.0. See [LICENSE](LICENSE) and [NOTICE](NOTICE).
 
