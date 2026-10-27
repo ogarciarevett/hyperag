@@ -38,17 +38,45 @@ export async function startService(o: ServiceOptions) {
     ...(o.neo4j ? { HYPERAG_NEO4J_URL: process.env.HYPERAG_NEO4J_URL ?? "http://127.0.0.1:57474", HYPERAG_NEO4J_USER: "neo4j", HYPERAG_NEO4J_PASSWORD: "fake-test-only" } : {}),
     ...o.env,
   };
-  let child: ChildProcess = spawn(cmd[0]!, cmd.slice(1), { env, stdio: ["ignore", "ignore", "inherit"] });
+  let spawnError: Error | undefined;
+  const launch = () => {
+    spawnError = undefined;
+    const owned = spawn(cmd[0]!, cmd.slice(1), { env, stdio: ["ignore", "ignore", "inherit"] });
+    owned.on("error", (error) => { spawnError = error; });
+    return owned;
+  };
+  const terminate = async (owned: ChildProcess) => {
+    if (owned.exitCode !== null || owned.signalCode !== null || owned.pid === undefined)
+      return { code: owned.exitCode, signal: owned.signalCode };
+    const exited = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolve) => {
+      owned.once("exit", (code, signal) => resolve({ code, signal }));
+    });
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      owned.kill("SIGTERM");
+      timer = setTimeout(() => owned.kill("SIGKILL"), 15_000);
+      return await exited;
+    } finally { clearTimeout(timer); }
+  };
+  let child: ChildProcess = launch();
   const base = `http://127.0.0.1:${port}`;
   const ready = async () => {
-    for (let i = 0; i < 600; i++) {
-      const r = await fetch(`${base}/v1/whoami`, { headers: { authorization: `Bearer ${tokenOf(o.principals[0]!)}` } }).catch(() => null);
+    const deadline = Date.now() + 60_000;
+    while (Date.now() < deadline) {
+      if (spawnError) throw spawnError;
+      if (child.exitCode !== null || child.signalCode !== null)
+        throw new Error(`service exited before readiness: code=${child.exitCode} signal=${child.signalCode}`);
+      const r = await fetch(`${base}/v1/whoami`, { headers: { authorization: `Bearer ${tokenOf(o.principals[0]!)}` }, signal: AbortSignal.timeout(1_000) }).catch(() => null);
       if (r?.ok) return;
       await Bun.sleep(100);
     }
     throw new Error("service did not start");
   };
-  await ready();
+  const waitReady = async () => {
+    try { await ready(); }
+    catch (error) { await terminate(child); throw error; }
+  };
+  await waitReady();
   const call = async (as: string, method: string, path: string, body?: unknown) => {
     const r = await fetch(base + path, {
       method,
@@ -69,14 +97,12 @@ export async function startService(o: ServiceOptions) {
     must,
     pid: () => child.pid,
     async restart() {
-      child.kill();
-      await new Promise((r) => child.once("exit", r));
-      child = spawn(cmd[0]!, cmd.slice(1), { env, stdio: ["ignore", "ignore", "inherit"] });
-      await ready();
+      await terminate(child);
+      child = launch();
+      await waitReady();
     },
     async stop() {
-      child.kill();
-      await new Promise((r) => child.once("exit", r));
+      return terminate(child);
     },
     /** macOS physical footprint in bytes (what the memory pressure counts), or null elsewhere. */
     footprint: () => {

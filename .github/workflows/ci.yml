@@ -118,6 +118,8 @@ jobs:
         run: |
           HYPERAG_SERVICE_CMD="target/release/hyperag serve" bun eval/scenarios.ts --hyperag http --build rust --systems hyperag --out /tmp/scenarios.json | tee /tmp/out.txt
           grep -q "hyperag-http-rust: 13/13" /tmp/out.txt
+      - name: serve-owned lexical writer lifecycle
+        run: HYPERAG_SERVICE_CMD="target/release/hyperag serve" bun eval/lexical-writer-smoke.ts
       - name: model switch under concurrent writes
         run: HYPERAG_SERVICE_CMD="target/release/hyperag serve" bun eval/switch-race.ts
       - name: MCP end to end against the Rust service

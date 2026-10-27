@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use clap::Parser;
-use hyperag::cli::{Cli, Command, ModelsAction, open, parse_assignments, switch};
+use hyperag::cli::{Cli, Command, ModelsAction, open, open_service, parse_assignments, switch};
 use hyperag::mcp::Mcp;
 use hyperag::server::{App, TokenFile, models_view, router};
 use rmcp::ServiceExt;
@@ -14,9 +14,10 @@ async fn main() -> anyhow::Result<()> {
         Command::Serve { host, port } => {
             let file = std::env::var("HYPERAG_TOKENS_FILE").map_err(|_| anyhow::anyhow!("HYPERAG_TOKENS_FILE is required"))?;
             let tokens = TokenFile::open(file.into())?;
-            let app = App { hyperag: Arc::new(open().await?), tokens: Arc::new(tokens) };
             let listener = tokio::net::TcpListener::bind((host.as_str(), port)).await?;
             let local = listener.local_addr()?;
+            let service = open_service().await?;
+            let app = App { hyperag: service.hyperag.clone(), tokens: Arc::new(tokens) };
             // MCP over HTTP at /mcp: each tool call goes back through this service's own routes with
             // the request's bearer token, so it gets the same authentication and scope checks.
             // Call back on the bound address; a wildcard bind is reached on loopback.
@@ -26,13 +27,21 @@ async fn main() -> anyhow::Result<()> {
             // names its own host names in HYPERAG_MCP_ALLOWED_HOSTS.
             let mut hosts = vec!["localhost".to_owned(), "127.0.0.1".to_owned(), "::1".to_owned(), back.ip().to_string()];
             hosts.extend(std::env::var("HYPERAG_MCP_ALLOWED_HOSTS").unwrap_or_default().split(',').filter(|h| !h.is_empty()).map(str::to_owned));
+            let mcp_config = StreamableHttpServerConfig::default().with_allowed_hosts(hosts);
+            let mcp_cancel = mcp_config.cancellation_token.clone();
+            let shutdown = mcp_cancel.clone();
             let mcp = StreamableHttpService::new(
                 move || Ok(Mcp::new(&base, None)),
                 LocalSessionManager::default().into(),
-                StreamableHttpServerConfig::default().with_allowed_hosts(hosts),
+                mcp_config,
             );
             eprintln!("hyperag listening on http://{local} (MCP at /mcp)");
-            axum::serve(listener, router(app).nest_service("/mcp", mcp)).await?;
+            let result = axum::serve(listener, router(app).nest_service("/mcp", mcp))
+                .with_graceful_shutdown(async move { shutdown_signal().await; shutdown.cancel(); }).await;
+            mcp_cancel.cancel();
+            let cleanup = service.close().await;
+            result?;
+            cleanup?;
         }
         Command::Hook { event, harness } => std::process::exit(hyperag::hooks::run_for(&event, harness.as_deref()).await),
         Command::Hooks { action } => hyperag::hook_setup::run(&action)?,
@@ -157,4 +166,15 @@ async fn main() -> anyhow::Result<()> {
         }
     }
     Ok(())
+}
+
+async fn shutdown_signal() {
+    #[cfg(unix)]
+    {
+        let mut terminate = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+            .expect("install SIGTERM handler");
+        tokio::select! { _ = tokio::signal::ctrl_c() => (), _ = terminate.recv() => () }
+    }
+    #[cfg(not(unix))]
+    tokio::signal::ctrl_c().await.expect("install Ctrl-C handler");
 }

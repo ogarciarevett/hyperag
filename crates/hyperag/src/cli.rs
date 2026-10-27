@@ -155,6 +155,37 @@ pub async fn open() -> anyhow::Result<Hyperag> {
     Ok(Hyperag::init(config).await?)
 }
 
+/// Serve owns the writer separately from request state and command-line utilities.
+pub struct Service {
+    pub hyperag: std::sync::Arc<Hyperag>,
+    writer: Option<crate::lexical_worker::Worker>,
+}
+
+impl Service {
+    /// Called only after HTTP requests have drained.
+    pub async fn close(self) -> anyhow::Result<()> {
+        let result = match self.writer { Some(writer) => writer.close().await, None => Ok(()) };
+        self.hyperag.store.pool.close().await;
+        result
+    }
+}
+
+pub async fn open_service() -> anyhow::Result<Service> {
+    let mut hyperag = open().await?;
+    let writer = if crate::store::LexicalScorer::selected()? == crate::store::LexicalScorer::Tantivy {
+        let database_id: String = sqlx::query_scalar("select database_id::text from lexical_index_state")
+            .fetch_one(&hyperag.store.pool).await?;
+        let configured = std::env::var_os("HYPERAG_LEXICAL_INDEX_ROOT")
+            .filter(|root| !root.is_empty()).map(std::path::PathBuf::from);
+        let home = std::env::var_os("HOME").map(std::path::PathBuf::from);
+        let root = crate::lexical_root::resolve(configured.as_deref(), home.as_deref(), &database_id)?;
+        let consumer = crate::lexical_consumer::Consumer::open(&root)?;
+        hyperag.store.lexical_reader = consumer.reader();
+        Some(crate::lexical_worker::Worker::start(consumer, hyperag.store.pool.clone()))
+    } else { None };
+    Ok(Service { hyperag: std::sync::Arc::new(hyperag), writer })
+}
+
 /// One switch, used by the CLI, the service and MCP. `None` leaves that model as it is.
 pub async fn switch(h: &Hyperag, actor: &str, embedding: Option<&str>, reranker: Option<&str>) -> Result<()> {
     // Admin first: parsing a spec may download and load a model.
