@@ -119,7 +119,7 @@ jobs:
           one_shot = "        try:\n            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)\n        except BlockingIOError:\n            return\n"
           mutations = {
               "test_completed_native_status_survives_late_supervisor_wakeup": original.replace(
-                  "if not exited and time.monotonic() >= deadline:", "if time.monotonic() >= deadline:", 1),
+                  "expired = not exited and time.monotonic() >= deadline", "expired = time.monotonic() >= deadline", 1),
               "test_fast_call_with_separate_process_monotonic_origins_never_trips": original.replace(
                   "shared_started = _shared_time() - age", "shared_started = time.monotonic() - age", 1).replace(
                   "age = _shared_time() - value['started']", "age = time.monotonic() - value['started']", 1),

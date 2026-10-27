@@ -30,13 +30,19 @@ _helpers = _module('guard')
 _append, _input = _helpers._append, _helpers._input
 _recovery = _module('recovery')
 SKIPS = {'skipped_ungranted', 'disabled'}
-REPORTS = SKIPS | {'completed', 'enqueued', 'empty_prompt', 'error', 'cancelled'}
+REPORTS = SKIPS | {'budget_skip'} | {'completed', 'enqueued', 'empty_prompt', 'error', 'cancelled'}
 # Twice the hosted maximum tail (10.663 ms), rounded up to 10 ms; see docs/evidence/hooks-guard-tail-2026-10-27.json.
 TAIL_MARGIN_MS = 30
+PROMPT_BUDGET_MS = 250
+STEP_NAMES = {'input_setup', 'process_start', 'native_total', 'scopes_get', 'recent_get', 'writer_enqueue'}
+
+
+class BudgetSkip(Exception):
+    pass
 
 
 def evaluate(rows):
-    measured, errors, warmups, hard = [], 0, 0, False
+    measured, errors, warmups, hard, budget_skips = [], 0, 0, False, 0
     for row in rows:
         latency = row['latency_ms']
         if isinstance(latency, bool) or not isinstance(latency, (int, float)) or not math.isfinite(latency) or latency < 0:
@@ -44,16 +50,20 @@ def evaluate(rows):
         warmup = row.get('warmup', False)
         if not isinstance(warmup, bool):
             raise ValueError('invalid warmup')
+        wall = row.get('wall_ms', latency)
+        if isinstance(wall, bool) or not isinstance(wall, (int, float)) or not math.isfinite(wall) or wall < 0:
+            raise ValueError('invalid wall time')
+        budget_skips += row.get('category') == 'budget_skip'
         warmups += warmup
         errors += bool(row.get('error'))
-        hard |= latency > 1000
+        hard |= row.get('wall_ms', latency) > 1000
         if not warmup:
             measured.append(latency)
     measured.sort()
     p95 = measured[math.ceil(.95 * len(measured)) - 1] if measured else None
     reason = ('hook_error' if errors else 'warmup_count_exceeded' if warmups > 1 else
               'single_call_limit' if hard else 'p95_limit' if len(measured) >= 20 and p95 > 300 else None)
-    return {'calls': len(measured), 'warmup_calls': warmups, 'errors': errors,
+    return {'calls': len(measured), 'warmup_calls': warmups, 'errors': errors, 'budget_skips': budget_skips,
             'p50_ms': statistics.median(measured) if measured else None, 'p95_ms': p95, 'reason': reason}
 
 
@@ -193,17 +203,20 @@ def _trip(config, category, trace=None):
         Path(config['active_marker']).unlink(missing_ok=True)
 
 
-def _native(config, args, raw=b'', report=False, budget=.25, forward=False, trace=None):
+def _native(config, args, raw=b'', report=False, budget=.25, forward=False, trace=None, prompt_budget=False):
     """Drain bounded streams while the process runs; report completion never relies on EOF."""
     trace = trace if trace is not None else _trace('native', 'native_command')
     deadline = time.monotonic() + max(0, budget)
     environment = {'PATH': os.defpath, **config.get('native_env', {}), 'HYPERAG_URL': config['url']}
     reader, writer = os.pipe() if report else (None, None)
     if report:
+        environment['HYPERAG_HOOK_STARTED_AT'] = str(time.time() - (time.monotonic() - STARTED))
         environment['HYPERAG_HOOK_REPORT_FD'] = str(writer)
+    spawning = time.monotonic()
     child = subprocess.Popen([config['binary'], *args], env=environment, stdin=subprocess.PIPE,
                              stdout=subprocess.PIPE, stderr=subprocess.PIPE, close_fds=True,
                              pass_fds=(writer,) if report else ())
+    trace['spawn_ms'] = (time.monotonic() - spawning) * 1000
     trace['child_pid'] = child.pid
     if writer is not None:
         os.close(writer)
@@ -224,9 +237,8 @@ def _native(config, args, raw=b'', report=False, budget=.25, forward=False, trac
             # A delayed supervisor must collect an already-completed child before
             # deciding that an operation still running has exceeded its deadline.
             exited = child.poll() is not None
-            if not exited and time.monotonic() >= deadline:
-                raise TimeoutError('native deadline')
-            events = selector.select(0 if exited else min(.01, deadline - time.monotonic()))
+            expired = not exited and time.monotonic() >= deadline
+            events = selector.select(0 if exited or expired else max(0, min(.01, deadline - time.monotonic())))
             for key, _mask in events:
                 if key.data == 'input':
                     try:
@@ -257,6 +269,17 @@ def _native(config, args, raw=b'', report=False, budget=.25, forward=False, trac
                         sys.stdout.buffer.write(chunk);sys.stdout.buffer.flush()
                     else:
                         output.extend(chunk)
+            if expired:
+                # Drain already-readable stderr before allowing a quiet budget skip.
+                if prompt_budget and child.poll() is not None:
+                    continue
+                native_error = False
+                if reported:
+                    try:native_error = json.loads(reported).get('category') == 'error'
+                    except (ValueError, AttributeError):pass  # A report interrupted by cancellation is not a hook error.
+                if prompt_budget and not stderr and not native_error:
+                    raise BudgetSkip()
+                raise TimeoutError('native deadline')
             if exited and not events:
                 break
         return child.returncode, bytes(output), stderr, bytes(reported)
@@ -487,7 +510,9 @@ def _record(config, row, trace=None):
         row['warmup'] = not rows
         # All fsync/report work runs in the independent watchdog, after this cheap append.
         row['tail_margin_ms'] = TAIL_MARGIN_MS
-        row['latency_ms'] = round((time.monotonic() - STARTED) * 1000 + TAIL_MARGIN_MS, 3)
+        row['elapsed_ms'] = round((time.monotonic() - STARTED) * 1000, 3)
+        row['wall_ms'] = round(row['elapsed_ms'] + TAIL_MARGIN_MS, 3)
+        row['latency_ms'] = min(row['wall_ms'], PROMPT_BUDGET_MS) if row.get('category') == 'budget_skip' and not row.get('error') else row['wall_ms']
         _append(path, row)
         summary = evaluate([*rows, row])
     if summary['reason']:
@@ -508,6 +533,7 @@ def _hook(config, event, harness):
         return 0
     inflight = directory / ('inflight-' + str(os.getpid()) + '.json')
     report, error = {}, None
+    load_started = list(os.getloadavg())
     trace = _trace('hook', 'launcher_timestamp', agent=harness, event=event)
     try:
         epoch = os.getenv('HYPERAG_HOOK_STARTED_AT')
@@ -523,32 +549,55 @@ def _hook(config, event, harness):
         _write(inflight, {'pid': os.getpid(), 'started': shared_started, 'started_at': float(epoch),
                           'agent': harness, 'event': event}, durable=False)
         _step(trace, 'hook', 'read_input')
-        raw = _input(STARTED + 1)
+        deadline = STARTED + ((PROMPT_BUDGET_MS - TAIL_MARGIN_MS) / 1000 if event == 'prompt' else 1)
+        try:
+            raw = _input(deadline)
+        except TimeoutError:
+            if event == 'prompt':raise BudgetSkip()
+            raise
         _step(trace, 'hook', 'native_hook')
+        if event == 'prompt' and time.monotonic() >= deadline:
+            raise BudgetSkip()
         code, _output, stderr, raw_report = _native(config, ['hook', event, '--harness', harness], raw,
-                                                   report=True, forward=True, budget=STARTED + 1 - time.monotonic(), trace=trace)
+                                                   report=True, forward=True, budget=deadline - time.monotonic(), trace=trace, prompt_budget=event == 'prompt')
         trace['operation'] = 'native_report'
         lines = raw_report.splitlines()
         if len(lines) != 1:
             raise ValueError('missing_or_multiple_native_report')
         report = json.loads(lines[0])
-        if not isinstance(report, dict) or report.get('category') not in REPORTS or set(report) - {'category', 'scope'}:
+        if not isinstance(report, dict) or report.get('category') not in REPORTS or set(report) - {'category', 'scope', 'steps_ms', 'stage'}:
             raise ValueError('invalid_native_report')
+        steps = report.get('steps_ms', {})
+        if not isinstance(steps, dict) or set(steps) - STEP_NAMES or any(isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v) or v < 0 for v in steps.values()):
+            raise ValueError('invalid_native_timings')
+        if 'stage' in report and report['stage'] not in {'setup', 'scopes_get', 'recent_get', 'writer_enqueue'}:
+            raise ValueError('invalid_native_stage')
         if 'scope' in report and (not isinstance(report['scope'], str) or len(report['scope']) > 1024):
             raise ValueError('invalid_native_report')
         if code or stderr or report['category'] == 'error':
             error = 'native_hook_error'
         elif report['category'] == 'cancelled':
             if Path(config['active_marker']).exists():error = 'cancelled'
+        elif report['category'] == 'budget_skip':
+            if event != 'prompt':raise ValueError('invalid_budget_skip')
         elif report['category'] == 'empty_prompt' and event == 'prompt':
             pass
         elif report['category'] not in SKIPS and report['category'] != ('completed' if event == 'session-start' else 'enqueued'):
             error = 'native_mode_mismatch'
+        if event == 'prompt' and not error and report['category'] not in SKIPS | {'cancelled'} and time.monotonic() >= deadline:
+            # A completed child can be collected after a scheduler pause; preserve its
+            # successful completion, but account for the missed foreground budget.
+            report['category'] = 'budget_skip'
+    except BudgetSkip:
+        report['category'] = 'budget_skip'
     except Exception as exception:
         trace.setdefault('_duration_ms', (time.monotonic() - trace['_started']) * 1000)
         error = type(exception).__name__
     latency = round((time.monotonic() - STARTED) * 1000 + TAIL_MARGIN_MS, 3)
     row = {'event': event, 'agent': harness, 'scope': report.get('scope'), 'cohort': 'controlled' if os.getenv('HYPERAG_HOOK_CHECK_COHORT') == 'controlled' else 'organic', 'latency_ms': latency, 'error': error}
+    row.update(category=report.get('category'), steps_ms=report.get('steps_ms', {}),
+               stage=report.get('stage', trace['operation']), recorded_at=time.time(),
+               machine_load=load_started, machine_load_end=list(os.getloadavg()), native_ms=trace.get('_duration_ms'), spawn_ms=trace.get('spawn_ms'))
     monitor_trace = _trace('hook_monitor', 'record_call', agent=harness, event=event)
     try:
         if not error and report.get('category') in SKIPS | {'cancelled'}:
@@ -559,6 +608,8 @@ def _hook(config, event, harness):
                                       child_pid=trace.get('child_pid'), agent=harness, event=event)
                 _trip(config, 'single_call_limit', policy_trace)
         else:
+            if not error and report.get('category') == 'budget_skip':
+                _append(directory / 'skips.jsonl', {'category': 'budget_skip'})
             _record(config, row, trace)
     except Exception:
         _trip(config, 'monitor_failure', monitor_trace)

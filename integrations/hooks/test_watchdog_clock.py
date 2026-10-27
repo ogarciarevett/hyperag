@@ -2,6 +2,7 @@
 """Clock and marker completion races; all process probes are mocked."""
 import importlib.util
 import json
+import os
 from pathlib import Path
 import tempfile
 import unittest
@@ -13,6 +14,57 @@ spec.loader.exec_module(guard)
 
 
 class WatchdogClockTest(unittest.TestCase):
+    def test_budget_skip_is_counted_with_cap_but_hard_rule_uses_uncapped_wall(self):
+        with tempfile.TemporaryDirectory() as name:
+            directory = Path(name)
+            config = {'state_dir': name}
+            with patch.object(guard.time, 'monotonic', return_value=guard.STARTED + .544174), patch.object(guard, '_trip') as trip:
+                summary = guard._record(config, {'agent': 'claude-code', 'event': 'prompt', 'category': 'budget_skip', 'error': None})
+                trip.assert_not_called()
+            row = json.loads((directory / 'calls.jsonl').read_text())
+            self.assertEqual(row['latency_ms'], 250)
+            self.assertEqual(row['wall_ms'], 574.174)
+            self.assertEqual((summary['calls'], summary['budget_skips'], summary['errors']), (0, 1, 0))
+            measured = [{**row, 'warmup': False} for _ in range(20)]
+            result = guard.evaluate(measured)
+            self.assertEqual((result['calls'], result['p95_ms'], result['reason']), (20, 250, None))
+            self.assertEqual(guard.evaluate([{**row, 'wall_ms': 1000.001}])['reason'], 'single_call_limit')
+            self.assertEqual(guard.evaluate([{**row, 'error': 'native_hook_error'}])['reason'], 'hook_error')
+            for value in (float('nan'), -1, True):
+                with self.assertRaises(ValueError):guard.evaluate([{**row, 'wall_ms': value}])
+
+    def test_error_budget_row_cannot_hide_latency_and_capped_rows_still_trip_p95(self):
+        with tempfile.TemporaryDirectory() as name:
+            with patch.object(guard.time, 'monotonic', return_value=guard.STARTED + .4), patch.object(guard, '_trip') as trip:
+                guard._record({'state_dir': name}, {'agent': 'claude-code', 'event': 'prompt', 'category': 'budget_skip', 'error': 'stderr'})
+                trip.assert_called_once()
+            row = json.loads((Path(name) / 'calls.jsonl').read_text())
+            self.assertEqual(row['latency_ms'], 430)
+        rows = [{'latency_ms': 250, 'wall_ms': 260, 'category': 'budget_skip'} for _ in range(18)]
+        self.assertEqual(guard.evaluate(rows + [{'latency_ms': 301}] * 2)['reason'], 'p95_limit')
+
+    def test_late_collection_of_success_counts_as_budget_skip_without_hiding_errors(self):
+        for stderr, category in [(False, 'budget_skip'), (True, 'enqueued')]:
+            with self.subTest(stderr=stderr), tempfile.TemporaryDirectory() as name:
+                root = Path(name)
+                marker = root / 'active';marker.touch()
+                config = {'state_dir': name, 'active_marker': str(marker)}
+                clock = [10.0]
+                def completed(*args, **kwargs):
+                    clock[0] += .4
+                    return 0, b'', stderr, b'{"category":"enqueued"}'
+                with patch.object(guard, 'STARTED', 10), patch.object(guard.time, 'monotonic', side_effect=lambda: clock[0]), \
+                        patch.object(guard.time, 'time', return_value=100), patch.dict(os.environ, {'HYPERAG_HOOK_STARTED_AT': '100'}), \
+                        patch.object(guard, 'arm'), patch.object(guard, '_input', return_value=b'{}'), \
+                        patch.object(guard, '_native', side_effect=completed), patch.object(guard, '_trip') as trip, \
+                        patch.object(guard.sys, 'stderr'):
+                    guard._hook(config, 'prompt', 'claude-code')
+                row = json.loads((root / 'calls.jsonl').read_text())
+                self.assertEqual(row['category'], category)
+                self.assertEqual(row['wall_ms'], 430)
+                self.assertEqual(row['latency_ms'], 430 if stderr else 250)
+                self.assertEqual(trip.call_count, int(stderr))
+
     def test_delivery_failure_precedes_simultaneous_mode_mismatch(self):
         for counters in ({'categories': {'http401': 1}}, {'failed': 1}, {'blocked': True},
                          {'rejected': 1}, {'enqueue_errors': {'rejected': 1}},

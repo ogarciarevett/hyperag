@@ -58,7 +58,12 @@ pub async fn run(event: &str) -> i32 {
 
 pub async fn run_for(event: &str, harness: Option<&str>) -> i32 {
     use std::io::Write;
-    let mut report = json!({"category": "completed"});
+    let started = std::time::Instant::now();
+    let launch_age = std::env::var("HYPERAG_HOOK_STARTED_AT").ok()
+        .and_then(|value| value.parse::<f64>().ok())
+        .map(|epoch| std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs_f64() - epoch)
+        .filter(|age| age.is_finite() && (0.0..=5.0).contains(age)).unwrap_or(0.0);
+    let mut report = json!({"category": "completed", "steps_ms": {"process_start": launch_age * 1000.0}});
     let report_pipe = report_pipe();
     let result: anyhow::Result<String> = async {
         if let Err(error) = &report_pipe { anyhow::bail!("hook report unavailable: {error}"); }
@@ -71,8 +76,20 @@ pub async fn run_for(event: &str, harness: Option<&str>) -> i32 {
             report["category"] = json!("disabled");
             return Ok(String::new());
         }
-        tokio::time::timeout(std::time::Duration::from_millis(config.timeout_ms), handle(event, harness, &config, &mut report)).await
-            .map_err(|_| anyhow::anyhow!("hook timed out"))?
+        // Leave 10 ms for reporting, then 30 ms for the guard tail within the 250 ms budget.
+        let remaining = (0.210 - launch_age - started.elapsed().as_secs_f64()).max(0.0);
+        let budget_limited = event == "prompt" && std::env::var_os("HYPERAG_HOOK_STARTED_AT").is_some()
+            && remaining <= config.timeout_ms as f64 / 1000.0;
+        let budget = if budget_limited { std::time::Duration::from_secs_f64(remaining) }
+            else { std::time::Duration::from_millis(config.timeout_ms) };
+        match tokio::time::timeout(budget, handle(event, harness, &config, &mut report, started)).await {
+            Ok(result) => result,
+            Err(_) if budget_limited => {
+                report["category"] = json!("budget_skip");
+                Ok(String::new())
+            }
+            Err(_) => anyhow::bail!("hook timed out"),
+        }
     }.await;
     let out = match result {
         Ok(text) => text,
@@ -82,6 +99,13 @@ pub async fn run_for(event: &str, harness: Option<&str>) -> i32 {
             String::new()
         }
     };
+    if let Some(step_started) = report.as_object_mut().unwrap().remove("_step_started_ms").and_then(|value| value.as_f64()) {
+        let stage = report["stage"].as_str().unwrap_or("setup").to_owned();
+        if report["steps_ms"][&stage].is_null() {
+            report["steps_ms"][&stage] = json!((started.elapsed().as_secs_f64() * 1000.0 - step_started).max(0.0));
+        }
+    }
+    report["steps_ms"]["native_total"] = json!(started.elapsed().as_secs_f64() * 1000.0);
     if let Ok(Some(mut pipe)) = report_pipe {
         if writeln!(pipe, "{report}").is_err() {
             let _ = writeln!(std::io::stderr(), "hyperag hook report failed");
@@ -119,7 +143,7 @@ fn report_pipe() -> anyhow::Result<Option<std::fs::File>> {
     { let _ = value; anyhow::bail!("hook reporting requires Unix") }
 }
 
-async fn handle(event: &str, harness: Option<&str>, config: &crate::hook_setup::Config, report: &mut Value) -> anyhow::Result<String> {
+async fn handle(event: &str, harness: Option<&str>, config: &crate::hook_setup::Config, report: &mut Value, started: std::time::Instant) -> anyhow::Result<String> {
     use tokio::io::AsyncReadExt;
     let mut raw = String::new();
     // Bounded input and an outer deadline also protect malformed/incomplete stdin.
@@ -135,6 +159,7 @@ async fn handle(event: &str, harness: Option<&str>, config: &crate::hook_setup::
         .unwrap_or_else(|| if config.scope == "project" { scope_for(&cwd) } else { config.scope.clone() });
     anyhow::ensure!(scope.len() <= 1024, "hook scope too long");
     report["scope"] = json!(scope);
+    report["stage"] = json!("setup");
     let session = input["session_id"].as_str().or_else(|| input["conversation_id"].as_str()).unwrap_or("unknown").to_owned();
     let base = std::env::var("HYPERAG_URL").unwrap_or_else(|_| config.url.clone()).trim_end_matches('/').to_owned();
     let token = config.token()?;
@@ -149,7 +174,13 @@ async fn handle(event: &str, harness: Option<&str>, config: &crate::hook_setup::
         anyhow::ensure!(status.is_success(), "service answered {status}");
         Ok::<Value, anyhow::Error>(body)
     };
-    let grants = send(http.get(format!("{base}/v1/scopes"))).await?;
+    report["steps_ms"]["input_setup"] = json!(started.elapsed().as_secs_f64() * 1000.0);
+    report["stage"] = json!("scopes_get");
+    report["_step_started_ms"] = json!(started.elapsed().as_secs_f64() * 1000.0);
+    let step = std::time::Instant::now();
+    let response = send(http.get(format!("{base}/v1/scopes"))).await;
+    report["steps_ms"]["scopes_get"] = json!(step.elapsed().as_secs_f64() * 1000.0);
+    let grants = response?;
     let grants: ScopeGrants = serde_json::from_value(grants)
         .map_err(|_| anyhow::anyhow!("invalid scope grant response"))?;
     if !grants.read.iter().any(|value| value == scope)
@@ -162,7 +193,12 @@ async fn handle(event: &str, harness: Option<&str>, config: &crate::hook_setup::
     match event {
         "session-start" => {
             let url = format!("{base}/v1/recent?scope={}&limit=30&maxBytes=12000", crate::mcp::urlencode(scope));
-            let body = send(http.get(url)).await?;
+            report["stage"] = json!("recent_get");
+            report["_step_started_ms"] = json!(started.elapsed().as_secs_f64() * 1000.0);
+            let step = std::time::Instant::now();
+            let response = send(http.get(url)).await;
+            report["steps_ms"]["recent_get"] = json!(step.elapsed().as_secs_f64() * 1000.0);
+            let body = response?;
             let text = body["text"].as_str().unwrap_or_default();
             Ok(if text.is_empty() { String::new() } else { format!("Hyperag memory, newest first (scope {scope}):\n{text}") })
         }
@@ -174,7 +210,12 @@ async fn handle(event: &str, harness: Option<&str>, config: &crate::hook_setup::
             }
             let body = json!({ "scope": scope, "kind": "prompt", "source": format!("session {session}"), "text": prompt });
             if config.async_writes {
-                let accepted = enqueue_write(base, token, body, config).await?;
+                report["stage"] = json!("writer_enqueue");
+                report["_step_started_ms"] = json!(started.elapsed().as_secs_f64() * 1000.0);
+                let step = std::time::Instant::now();
+                let result = enqueue_write(base, token, body, config).await;
+                report["steps_ms"]["writer_enqueue"] = json!(step.elapsed().as_secs_f64() * 1000.0);
+                let accepted = result?;
                 report["category"] = json!(if accepted { "enqueued" } else { "cancelled" });
                 return Ok(String::new());
             }
@@ -186,7 +227,12 @@ async fn handle(event: &str, harness: Option<&str>, config: &crate::hook_setup::
             let text = format!("Session {session} ended ({reason}).");
             let body = json!({ "scope": scope, "kind": "session", "source": format!("session {session}"), "text": text });
             if config.async_writes {
-                let accepted = enqueue_write(base, token, body, config).await?;
+                report["stage"] = json!("writer_enqueue");
+                report["_step_started_ms"] = json!(started.elapsed().as_secs_f64() * 1000.0);
+                let step = std::time::Instant::now();
+                let result = enqueue_write(base, token, body, config).await;
+                report["steps_ms"]["writer_enqueue"] = json!(step.elapsed().as_secs_f64() * 1000.0);
+                let accepted = result?;
                 report["category"] = json!(if accepted { "enqueued" } else { "cancelled" });
                 return Ok(String::new());
             }
