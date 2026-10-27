@@ -166,6 +166,12 @@ pub(crate) fn now_ms() -> Result<u128> {
 }
 pub(crate) fn cached_scope(base: &str, token: &str, scope: &str) -> Result<Option<bool>> {
     let root = root(base, token)?;
+    let access = lock(&root.join("scopes.lock"))?;
+    // Atomic cache replacement is legitimate. Read under the writer's lock, or
+    // use the authoritative endpoint without waiting for an in-progress update.
+    if access.try_lock().is_err() {
+        return Ok(None);
+    }
     let value: Option<ScopeCache> = json_file(&cache_path(&root, scope))?;
     let now = now_ms()?;
     Ok(value

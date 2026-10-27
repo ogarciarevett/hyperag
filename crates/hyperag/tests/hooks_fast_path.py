@@ -1,4 +1,5 @@
 """Native read fast-path contract; synthetic credentials and loopback fixtures only."""
+import fcntl
 import json
 import math
 import os
@@ -104,6 +105,33 @@ class FastPath(unittest.TestCase):
             self.assertNotIn('fixture-owner', text); self.assertNotIn('synthetic context', text)
             self.assertEqual(set(json.loads(text)), {'scope', 'eligible', 'expires_ms'})
         self.assertEqual(caches[0].parent.stat().st_mode & 0o777, 0o700)
+
+    def test_contended_atomic_cache_replacement_falls_back_to_authoritative_get(self):
+        warm, _ = self.hook(); self.success(warm)
+        cache = next((self.home / '.hyperag-hooks').glob('*/scope-*.json'))
+        cached = cache.read_text()
+        stop = threading.Event()
+        replacements = []
+        def replace_cache():
+            while not stop.is_set():
+                with tempfile.NamedTemporaryFile(mode='w', dir=cache.parent, delete=False) as file:
+                    file.write(cached)
+                    temporary = Path(file.name)
+                temporary.replace(cache)
+                replacements.append(True)
+                stop.wait(.001)
+        with (cache.parent / 'scopes.lock').open('a') as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            writer = threading.Thread(target=replace_cache, daemon=True); writer.start()
+            try:
+                for _ in range(10):
+                    result, _ = self.hook(); self.success(result)
+                    self.assertIn('synthetic context', result.stdout)
+                self.assertEqual((self.backend.scope_calls, self.backend.recent_calls, self.backend.posts), (11, 11, 0))
+                self.assertTrue(replacements)
+            finally:
+                stop.set(); writer.join(timeout=2)
+                self.assertFalse(writer.is_alive())
 
     def test_negative_cache_expires_after_five_seconds(self):
         self.backend.granted.clear()
