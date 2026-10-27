@@ -556,6 +556,8 @@ def _hook(config, event, harness):
             if event == 'prompt':raise BudgetSkip()
             raise
         _step(trace, 'hook', 'native_hook')
+        if event == 'prompt' and time.monotonic() >= deadline:
+            raise BudgetSkip()
         code, _output, stderr, raw_report = _native(config, ['hook', event, '--harness', harness], raw,
                                                    report=True, forward=True, budget=deadline - time.monotonic(), trace=trace, prompt_budget=event == 'prompt')
         trace['operation'] = 'native_report'

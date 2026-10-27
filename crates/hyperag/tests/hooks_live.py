@@ -142,6 +142,19 @@ class LiveHooks(unittest.TestCase):
         self.assertEqual(json.loads((self.state / 'skips.jsonl').read_text().splitlines()[-1]), {'category': 'budget_skip'})
         self.assertFalse(any(method == 'POST' for method, _ in self.fixture.backend.requests))
 
+    def test_already_spent_prompt_budget_does_not_launch_native_or_write(self):
+        self.arm()
+        environment = dict(self.fixture.environment, HYPERAG_HOOK_STARTED_AT=str(time.time() - .4))
+        result = subprocess.run(self.command('hook', 'prompt', '--harness', 'claude-code'),
+                                env=environment, input='{}', text=True, capture_output=True, timeout=4)
+        self.assertEqual((result.returncode, result.stdout, result.stderr), (0, '', ''))
+        row = json.loads((self.state / 'calls.jsonl').read_text().splitlines()[-1])
+        self.assertEqual(row['category'], 'budget_skip')
+        self.assertEqual(row['latency_ms'], 250)
+        self.assertIsNone(row['native_ms'])
+        self.assertFalse(self.fixture.backend.requests)
+        self.assertFalse(self.read('trip.json'))
+
     def test_native_prompt_budget_reports_the_slow_stage_without_stderr(self):
         self.fixture.backend.scope_delay = .7
         self.fixture.environment['HYPERAG_HOOK_STARTED_AT'] = str(time.time())
