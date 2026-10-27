@@ -3,7 +3,11 @@ use crate::lexical_snapshot::SourceDocument;
 use crate::lexical_snapshot::{Batch, Checkpoint, SourceSnapshot};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use std::{fs, path::Path};
+use std::{
+    fs,
+    io::{Read, Write},
+    path::Path,
+};
 use tantivy::{
     Index, IndexReader, IndexWriter, ReloadPolicy, Searcher, TantivyDocument, Term,
     directory::{Directory, INDEX_WRITER_LOCK, META_LOCK},
@@ -113,34 +117,52 @@ impl Generation {
         &mut self.source
     }
 
-    pub fn replay(path: &Path, base: &Path, source: SourceSnapshot) -> anyhow::Result<Self> {
+    pub async fn replay(path: &Path, base: &Path, source: SourceSnapshot) -> anyhow::Result<Self> {
         let expected = source.fresh_replay_base().ok_or_else(|| {
             anyhow::anyhow!("replay requires an unconsumed source stream and its base checkpoint")
         })?;
         let index = Index::open_in_dir(base)?;
         let _writer = index.directory().acquire_lock(&INDEX_WRITER_LOCK)?;
         let _files = index.directory().acquire_lock(&META_LOCK)?;
-        let manifest = complete_manifest(&index)?
+        let mut manifest = complete_manifest(&index)?
             .ok_or_else(|| anyhow::anyhow!("incomplete or incompatible replay base"))?;
         anyhow::ensure!(
             manifest.checkpoint == *expected,
             "replay base checkpoint mismatch"
         );
         private_directory(path)?;
+        // Pending metadata must precede the first yield, even if copying is cancelled.
+        manifest.complete = false;
+        let mut metadata = index.load_metas()?;
+        metadata.payload = Some(serde_json::to_string(&manifest)?);
+        fs::write(path.join("meta.json"), serde_json::to_vec(&metadata)?)?;
+        fs::set_permissions(path.join("meta.json"), fs::metadata(base.join("meta.json"))?.permissions())?;
+        let mut buffer = vec![0; 256 * 1024];
         // shortcut: copy base files once; use reflinks if measured copy cost warrants it.
         for entry in fs::read_dir(base)? {
             let entry = entry?;
             let name = entry.file_name();
             if name == INDEX_WRITER_LOCK.filepath.as_os_str()
                 || name == META_LOCK.filepath.as_os_str()
+                || name == "meta.json"
             {
                 continue;
             }
             anyhow::ensure!(entry.file_type()?.is_file(), "nonregular replay base entry");
             let copied = path.join(name);
-            fs::copy(entry.path(), &copied)?;
+            let mut input = fs::File::open(entry.path())?;
+            let mut output = fs::File::create(copied)?;
+            loop {
+                let read = input.read(&mut buffer)?;
+                if read == 0 {
+                    break;
+                }
+                output.write_all(&buffer[..read])?;
+                tokio::task::yield_now().await;
+            }
+            output.set_permissions(input.metadata()?.permissions())?;
             // A durable CURRENT must not reference unsynced copied segment contents.
-            fs::File::open(copied)?.sync_all()?;
+            output.sync_all()?;
         }
         Self::initialize(Index::open_in_dir(path)?, source)
     }

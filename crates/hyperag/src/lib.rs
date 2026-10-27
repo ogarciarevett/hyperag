@@ -7,6 +7,7 @@ mod lexical_snapshot;
 mod lexical_generation;
 #[allow(dead_code)] // Private explicit consumer; no background service is enabled.
 mod lexical_consumer;
+mod lexical_root;
 #[allow(dead_code)] // Private scoring feasibility; request integration follows separately.
 mod lexical_scorer;
 #[allow(dead_code)] // Authorized request snapshots are wired separately from the index worker.

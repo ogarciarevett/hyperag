@@ -29,3 +29,9 @@ Activation syncs a mode-0600 temporary pointer in the same root, atomically rena
 A cloneable `ReaderHandle` serves old pins while updates build. `at(fresh_source_checkpoint)` returns a searcher only for the exact database/epoch/token fence; a missing or lagging reader requires SQL fallback. The caller still must obtain fresh authorization and source state and apply scope/time masks before retrieval. This module has no service caller or background loop.
 
 The synthetic consumer test covers multi-batch replay with unchanged rows, updates/tombstones, marker-only epochs, retention gaps, missing epochs, resets, divergent tokens, one root owner, no-op updates, pending/complete orphan windows, a pre-rename write failure, restart after rename and unsafe CURRENT paths/symlinks. These are committed-state simulations, not power-loss tests. Production copy/disk/RSS cost and frozen-question latency/quality remain unmeasured.
+
+## Bounded consumer steps
+
+`step(pool)` advances one64-document source page and returns whether more work remains; `update(pool)` retains its explicit full-update behavior by looping over steps. Pending state is taken before awaiting work, so cancellation or failure drops its source transaction and never replaces CURRENT or the prior reader. Replay copies yield between256KiB chunks and write incomplete metadata before yielding; canceling a copy cannot leave a recoverable complete generation.
+
+The root selector defaults to a database-UUID namespace under the canonical, user-owned HOME directory (`.hyperag-tantivy-<uuid>`), never the working directory. The consumer still validates every resolved ancestor and refuses unsafe owners/modes/types with the offending path. Existing roots are never chmod-ed to bypass those checks.

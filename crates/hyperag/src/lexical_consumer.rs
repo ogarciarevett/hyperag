@@ -1,6 +1,7 @@
 //! Explicit local updates; query integration must supply a fresh source fence.
 use crate::lexical_generation::{self, Generation};
 use crate::lexical_snapshot::{Checkpoint, SourceSnapshot};
+use anyhow::Context;
 use sqlx::PgPool;
 use std::{
     fs,
@@ -31,6 +32,7 @@ impl ReaderHandle {
 pub(super) struct Consumer {
     root: PathBuf,
     reader: ReaderHandle,
+    pending: Option<Prepared>,
     _owner: fs::File,
 }
 
@@ -52,7 +54,7 @@ fn generation_name() -> anyhow::Result<String> {
     Ok(format!("gen-{}", hex::encode(nonce)))
 }
 
-fn current_owner() -> u32 {
+pub(super) fn current_owner() -> u32 {
     #[cfg(unix)]
     {
         unsafe extern "C" {
@@ -103,7 +105,11 @@ fn check_ancestors(parent: &Path, _owner: u32) -> anyhow::Result<()> {
     // Validate top-down so a trusted parent protects each subsequent pathname.
     for path in parent.ancestors().collect::<Vec<_>>().into_iter().rev() {
         let metadata = fs::symlink_metadata(path)?;
-        anyhow::ensure!(metadata.is_dir(), "unsafe consumer ancestor type");
+        anyhow::ensure!(
+            metadata.is_dir(),
+            "unsafe consumer ancestor type: {}",
+            path.display()
+        );
         #[cfg(unix)]
         {
             use std::os::unix::fs::MetadataExt;
@@ -181,8 +187,9 @@ impl Consumer {
         let parent = root
             .parent()
             .filter(|path| !path.as_os_str().is_empty())
-            .unwrap_or(Path::new("."))
-            .canonicalize()?;
+            .unwrap_or(Path::new("."));
+        let parent = parent.canonicalize()
+            .with_context(|| format!("cannot resolve consumer ancestor: {}", parent.display()))?;
         check_ancestors(&parent, uid)?;
         // Retain the resolved path: later operations must not follow a retargeted alias.
         let root = parent.join(
@@ -229,6 +236,7 @@ impl Consumer {
         Ok(Self {
             root,
             reader,
+            pending: None,
             _owner: owner,
         })
     }
@@ -259,7 +267,9 @@ impl Consumer {
                     &self.root.join(&name),
                     &self.root.join(&active.name),
                     source,
-                ) {
+                )
+                .await
+                {
                     return Ok(Some(Prepared {
                         name,
                         checkpoint,
@@ -280,23 +290,36 @@ impl Consumer {
         }))
     }
 
-    pub async fn update(&mut self, pool: &PgPool) -> anyhow::Result<Checkpoint> {
-        let Some(mut pending) = self.prepare(pool).await? else {
-            return Ok(self
-                .reader
-                .0
-                .read()
-                .map_err(|_| anyhow::anyhow!("published reader lock poisoned"))?
-                .as_ref()
-                .expect("no-op requires an active generation")
-                .checkpoint
-                .clone());
+    /// Advance one source page; cancellation discards its snapshot without replacing the reader.
+    pub async fn step(&mut self, pool: &PgPool) -> anyhow::Result<bool> {
+        let mut pending = match self.pending.take() {
+            Some(pending) => pending,
+            None => match self.prepare(pool).await? {
+                Some(pending) => pending,
+                None => return Ok(false),
+            },
         };
-        while pending.generation.advance().await? {}
+        if pending.generation.advance().await? {
+            self.pending = Some(pending);
+            return Ok(true);
+        }
         let searcher = pending.generation.publish()?;
         drop(pending.generation);
-        self.activate(pending.name, pending.checkpoint.clone(), searcher)?;
-        Ok(pending.checkpoint)
+        self.activate(pending.name, pending.checkpoint, searcher)?;
+        Ok(false)
+    }
+
+    pub async fn update(&mut self, pool: &PgPool) -> anyhow::Result<Checkpoint> {
+        while self.step(pool).await? {}
+        Ok(self
+            .reader
+            .0
+            .read()
+            .map_err(|_| anyhow::anyhow!("published reader lock poisoned"))?
+            .as_ref()
+            .expect("completed update requires an active generation")
+            .checkpoint
+            .clone())
     }
 
     fn activate(
