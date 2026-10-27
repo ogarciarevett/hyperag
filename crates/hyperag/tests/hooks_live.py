@@ -416,6 +416,35 @@ raise SystemExit(module.main())
         self.assertTrue(self.fixture.marker.exists())
         self.assertFalse((self.state / 'trip.json').exists())
 
+    def test_mode_mismatch_cannot_delay_authoritative_delivery_failure(self):
+        driver = self.fixture.home / 'mismatch-failure-guard.py'
+        fault = self.fixture.home / 'mixed-status'
+        response = json.dumps({'async_writes': False, 'token_file': False,
+                               'failed': 1, 'categories': {'http401': 1}})
+        driver.write_text('MODULE=' + repr(str(GUARD)) + '\nFAULT=' + repr(str(fault)) +
+            '\nRESPONSE=' + repr(response) + '\n' + r'''import importlib.util,subprocess,sys
+from pathlib import Path
+spec=importlib.util.spec_from_file_location('native_guard',MODULE)
+module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+module.__file__=str(Path(__file__).resolve())
+original=subprocess.Popen
+def spawn(command,*args,**kwargs):
+    if command[1:]==['hook-writer-status'] and Path(FAULT).exists():
+        command=[sys.executable,'-c','print('+repr(RESPONSE)+')']
+    return original(command,*args,**kwargs)
+subprocess.Popen=spawn
+raise SystemExit(module.main())
+''')
+        command = lambda *args: [sys.executable, str(driver), '--config', str(self.config), *args]
+        with patch.object(self, 'command', side_effect=command):
+            self.arm()
+            fault.touch()
+            self.recovered()
+        trip = self.read('trip.json')
+        self.assertEqual((trip['category'], trip['stage'], trip['consecutive_failures']),
+                         ('http401', 'background_probe', 1))
+        self.assertEqual(len(self.probe_failures()), 1)
+
     def test_three_consecutive_probe_timeouts_trip_with_stage(self):
         with patch.object(self, 'command', side_effect=self.probe_driver((1, 2, 3))):
             self.arm()

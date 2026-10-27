@@ -280,8 +280,6 @@ def _status(config, trace=None, budget=.25):
     if code or stderr:
         raise ValueError('writer_status_error')
     value = json.loads(output)
-    if value.get('async_writes') is not True or value.get('token_file') is not True or value.get('async_active_marker') != config['active_marker']:
-        raise ValueError('writer_mode_mismatch')
     counters = [value.get('categories', {}), value.get('enqueue_errors', {}).get('categories', {})]
     for categories in counters:
         for category, count in categories.items():
@@ -289,6 +287,9 @@ def _status(config, trace=None, budget=.25):
                 raise WriterFailure(category)
     if value.get('blocked') or value.get('failed') or value.get('rejected') or value.get('enqueue_errors', {}).get('rejected'):
         raise WriterFailure('writer_failure')
+    # Authoritative delivery/drop evidence takes precedence over a configuration mismatch.
+    if value.get('async_writes') is not True or value.get('token_file') is not True or value.get('async_active_marker') != config['active_marker']:
+        raise ValueError('writer_mode_mismatch')
     return value
 
 
