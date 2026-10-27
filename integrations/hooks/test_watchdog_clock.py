@@ -13,6 +13,20 @@ spec.loader.exec_module(guard)
 
 
 class WatchdogClockTest(unittest.TestCase):
+    def test_delivery_failure_precedes_simultaneous_mode_mismatch(self):
+        for counters in ({'categories': {'http401': 1}}, {'failed': 1}, {'blocked': True},
+                         {'rejected': 1}, {'enqueue_errors': {'rejected': 1}},
+                         {'enqueue_errors': {'categories': {'queue_full': 1}}}):
+            with self.subTest(counters=counters):
+                response = {'async_writes': False, 'token_file': False, **counters}
+                with patch.object(guard, '_native', return_value=(0, json.dumps(response).encode(), False, b'')), \
+                        self.assertRaises(guard.WriterFailure):
+                    guard._status({'active_marker': '/fixture-marker'})
+        with patch.object(guard, '_native', return_value=(0, b'{"async_writes":false}', False, b'')), \
+                self.assertRaisesRegex(ValueError, 'writer_mode_mismatch') as error:
+            guard._status({'active_marker': '/fixture-marker'})
+        self.assertNotIsInstance(error.exception, guard.WriterFailure)
+
     def test_shared_clock_uses_raw_clock_not_process_relative_monotonic(self):
         with patch.object(guard.time, 'clock_gettime', return_value=123) as clock, \
                 patch.object(guard.time, 'monotonic', side_effect=AssertionError('process-relative clock')):

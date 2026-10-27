@@ -135,7 +135,7 @@ def _trace(stage, operation, **fields):
 
 
 def _step(trace, stage, operation):
-    for key in ('_duration_ms', 'foreground_pid'):
+    for key in ('_duration_ms', 'foreground_pid', 'consecutive_failures'):
         trace.pop(key, None)
     if stage == 'watchdog':
         trace.pop('agent', None);trace.pop('event', None)
@@ -145,7 +145,7 @@ def _step(trace, stage, operation):
 def _snapshot(trace):
     value = {key: trace[key] for key in ('stage', 'operation', 'child_pid', 'started_at')}
     value['duration_ms'] = round(trace.get('_duration_ms', (time.monotonic() - trace['_started']) * 1000), 3)
-    for key in ('agent', 'event', 'foreground_pid'):
+    for key in ('agent', 'event', 'foreground_pid', 'consecutive_failures'):
         if key in trace:value[key] = trace[key]
     return value
 
@@ -164,7 +164,7 @@ def _trip(config, category, trace=None):
             return
         # The watcher retries this durable intent if the foreground process dies before dispatch.
         details = _snapshot(trace or _trace('guard', category))
-        details.update({key: previous[key] for key in ('stage', 'operation', 'child_pid', 'started_at', 'duration_ms', 'agent', 'event', 'foreground_pid') if key in previous})
+        details.update({key: previous[key] for key in ('stage', 'operation', 'child_pid', 'started_at', 'duration_ms', 'agent', 'event', 'foreground_pid', 'consecutive_failures') if key in previous})
         value = {**details, 'category': previous.get('category', category), 'time': previous.get('time', time.time())}
         pending = previous.get('pending_recovery_pid')
         if pending:
@@ -196,6 +196,7 @@ def _trip(config, category, trace=None):
 def _native(config, args, raw=b'', report=False, budget=.25, forward=False, trace=None):
     """Drain bounded streams while the process runs; report completion never relies on EOF."""
     trace = trace if trace is not None else _trace('native', 'native_command')
+    deadline = time.monotonic() + max(0, budget)
     environment = {'PATH': os.defpath, **config.get('native_env', {}), 'HYPERAG_URL': config['url']}
     reader, writer = os.pipe() if report else (None, None)
     if report:
@@ -218,7 +219,6 @@ def _native(config, args, raw=b'', report=False, budget=.25, forward=False, trac
     if reader is not None:
         os.set_blocking(reader, False)
         selector.register(reader, selectors.EVENT_READ, 'report')
-    deadline = time.monotonic() + max(0, budget)
     try:
         while True:
             # A delayed supervisor must collect an already-completed child before
@@ -271,20 +271,25 @@ def _native(config, args, raw=b'', report=False, budget=.25, forward=False, trac
             os.close(reader)
 
 
-def _status(config, trace=None):
-    code, output, stderr, _report = _native(config, ['hook-writer-status'], trace=trace)
+class WriterFailure(ValueError):
+    pass
+
+
+def _status(config, trace=None, budget=.25):
+    code, output, stderr, _report = _native(config, ['hook-writer-status'], trace=trace, budget=budget)
     if code or stderr:
         raise ValueError('writer_status_error')
     value = json.loads(output)
-    if value.get('async_writes') is not True or value.get('token_file') is not True or value.get('async_active_marker') != config['active_marker']:
-        raise ValueError('writer_mode_mismatch')
     counters = [value.get('categories', {}), value.get('enqueue_errors', {}).get('categories', {})]
     for categories in counters:
         for category, count in categories.items():
             if count and category != 'skipped_ungranted':
-                raise ValueError(category)
+                raise WriterFailure(category)
     if value.get('blocked') or value.get('failed') or value.get('rejected') or value.get('enqueue_errors', {}).get('rejected'):
-        raise ValueError('writer_failure')
+        raise WriterFailure('writer_failure')
+    # Authoritative delivery/drop evidence takes precedence over a configuration mismatch.
+    if value.get('async_writes') is not True or value.get('token_file') is not True or value.get('async_active_marker') != config['active_marker']:
+        raise ValueError('writer_mode_mismatch')
     return value
 
 
@@ -316,6 +321,21 @@ def _check_inflight(path, trace=None):
         raise ValueError('foreground_timeout')
 
 
+BACKGROUND_PROBE_BUDGET = 2
+BACKGROUND_PROBE_FAILURES = 3
+
+
+def _category(error):
+    return str(error) if isinstance(error, ValueError) and str(error) in {'writer_mode_mismatch', 'writer_status_error', 'foreground_timeout', 'foreground_lost', 'invalid_foreground_clock', 'writer_failure', 'lost_queue', 'http401', 'http403', 'transport', 'backend', 'cancelled', 'drain_deadline', 'queue_full', 'ipc_rejected', 'enqueue_timeout', 'enqueue_io', 'startup', 'background_failure', 'ack_failure', 'writer_failure'} else type(error).__name__
+
+
+def _probe(config, trace):
+    try:
+        return _status(config, trace=trace, budget=BACKGROUND_PROBE_BUDGET)
+    finally:
+        trace['_duration_ms'] = (time.monotonic() - trace['_started']) * 1000
+
+
 def _watchdog(config):
     directory = Path(config['state_dir'])
     with _lock(directory / 'watchdog.lock') as lock:
@@ -331,6 +351,9 @@ def _watchdog(config):
                 time.sleep(.002)
         nonce = secrets.token_hex(16)
         lock.seek(0);lock.truncate();lock.write(json.dumps({'pid': os.getpid(), 'nonce': nonce}));lock.flush();os.fsync(lock.fileno())
+        from concurrent.futures import ThreadPoolExecutor
+        executor = ThreadPoolExecutor(max_workers=1)
+        probe, failures = None, 0
         trace = _trace('watchdog', 'loop')
         try:
             while Path(config['active_marker']).exists():
@@ -341,21 +364,42 @@ def _watchdog(config):
                             return
                     _step(trace, 'watchdog', 'reports')
                     _reports(config)
-                    _step(trace, 'watchdog', 'hook-writer-status')
-                    _status(config, trace)
+                    if probe is None:
+                        probe_trace = _trace('background_probe', 'hook-writer-status')
+                        _step(trace, 'watchdog', 'probe_start')
+                        probe = executor.submit(_probe, config, probe_trace)
+                    if probe.done():
+                        trace = probe_trace
+                        try:
+                            probe.result()
+                        except Exception as error:
+                            failures += 1
+                            trace['consecutive_failures'] = failures
+                            record = {**_snapshot(trace), 'category': _category(error), 'time': time.time()}
+                            trace = _trace('watchdog', 'probe_failure_log')
+                            _append(directory / 'probe-failures.jsonl', record)
+                            trace = probe_trace
+                            # Valid status reporting a real delivery/drop error remains immediate.
+                            if isinstance(error, WriterFailure) or failures >= BACKGROUND_PROBE_FAILURES:
+                                raise
+                        else:
+                            failures = 0
+                        probe = None
                     for path in directory.glob('inflight-*.json'):
                         _step(trace, 'watchdog', 'inflight_check')
                         _check_inflight(path, trace)
                     _step(trace, 'watchdog', 'heartbeat')
                     _write(directory / 'watchdog-ready.json', {'ready': True, 'pid': os.getpid(),
-                           'fingerprint': config['_fingerprint'], 'nonce': nonce, 'heartbeat': _shared_time()})
+                           'fingerprint': config['_fingerprint'], 'nonce': nonce, 'heartbeat': _shared_time(),
+                           'probe_failures': failures, 'probe_pending': probe is not None})
                 except Exception as error:
-                    category = str(error) if isinstance(error, ValueError) and str(error) in {'writer_mode_mismatch', 'writer_status_error', 'foreground_timeout', 'foreground_lost', 'invalid_foreground_clock', 'writer_failure', 'lost_queue', 'http401', 'http403', 'transport', 'backend', 'cancelled', 'drain_deadline', 'queue_full', 'ipc_rejected', 'enqueue_timeout', 'enqueue_io', 'startup', 'background_failure', 'ack_failure', 'writer_failure'} else type(error).__name__
+                    category = _category(error)
                     _trip(config, category, trace)
                     if not Path(config['active_marker']).exists():
                         return
                 time.sleep(.1)
         finally:
+            executor.shutdown(wait=True)
             _reports(config)
 
 

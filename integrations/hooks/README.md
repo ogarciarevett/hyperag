@@ -147,3 +147,27 @@ No input, returned memory, token, environment, arguments or raw exception text i
 recorded. Retry dispatch preserves the first failure's trace. Watchdog reporting,
 status CLI, foreground checks and heartbeat each have distinct operation names.
 This tracing-only change leaves all budgets, retry counts and hook policy intact.
+
+
+### Chief-approved background probe policy (2026-10-27)
+
+A background health probe is not a user hook latency sample. Its native status
+command has a **2 s budget**. Only **three consecutive failed probes** request
+recovery; a successful probe resets the count. Every failed probe is appended to
+`probe-failures.jsonl` with category, stage `background_probe`, operation,
+child PID, start time, measured duration and consecutive-failure count. The third
+failure's live `trip.json` retains the same operation trace. Native CLI exit,
+stderr, timeout, malformed response or configuration mismatch are probe failures.
+A valid status that reports a real async delivery/drop failure remains an immediate
+real-write failure, not a transient probe failure.
+
+One probe runs at a time in a background thread. The independent watchdog keeps
+publishing heartbeats and supervising foreground calls during a slow probe; a
+pending probe never makes a healthy fast hook fail the heartbeat freshness check.
+Every foreground hook error or stderr still trips immediately. The full-hook
+1000 ms hard limit, one unscored warm-up, global p95 after 20 measured calls above
+300 ms, quiet skips and fixed 30 ms margin are unchanged. Probe durations are
+excluded from user-hook p50/p95. Successful calls add no foreground fsync.
+
+This reading is approved by the chief. Deployment still requires merge and a
+fresh coordinator confirmation, then the same 50 controlled plus 50 organic watch.
