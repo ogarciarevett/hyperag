@@ -28,16 +28,19 @@ Verify:
 ~/.local/bin/hyperag --version
 ```
 
-The installer downloads a prebuilt binary and checks its SHA-256. [Windows, Homebrew, source and package options](docs/install.md). The first public release is prepared; release assets must exist before the installer can download them.
+The installer downloads a prebuilt binary and checks its SHA-256. [Windows, Homebrew, source and package options](docs/install.md). [v0.2.0 binary assets are published](https://github.com/ogarciarevett/hyperag/releases/tag/v0.2.0).
 
 [![CI](https://github.com/ogarciarevett/hyperag/actions/workflows/ci.yml/badge.svg)](https://github.com/ogarciarevett/hyperag/actions/workflows/ci.yml) [![Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
 ## Run a local stack
 
-The binary needs Postgres with pgvector. The full template also uses Neo4j. To run everything together:
+The binary needs Postgres with pgvector. The full template also uses Neo4j.
+The pinned source path below requires the `v0.2.1` tag, planned after
+[the git-package build fix](https://github.com/ogarciarevett/hyperag/pull/49) merges;
+it is not available until that tag is published. To run everything together then:
 
 ```sh
-git clone https://github.com/ogarciarevett/hyperag && cd hyperag
+git clone --branch v0.2.1 --depth 1 https://github.com/ogarciarevett/hyperag && cd hyperag
 docker compose -p hyperag --profile service up -d
 ```
 
@@ -83,9 +86,12 @@ The result names each memory's version, source and author. The MCP server expose
 ## Module examples
 
 These TypeScript examples run from a reviewed source checkout with Bun, Postgres/pgvector
-and Neo4j. Start only the databases, then run all seven examples:
+and Neo4j. Pin the example checkout to the reviewed revision containing these files,
+start only the databases, then run all seven examples:
 
 ```sh
+git clone https://github.com/ogarciarevett/hyperag hyperag-readme && cd hyperag-readme
+git checkout --detach 739111e80b5e1802908f11721c41ac247f4592fe
 docker compose -p hyperag-readme up -d postgres neo4j
 bun install --frozen-lockfile && bun run build
 bun examples/readme/run.ts
@@ -148,7 +154,7 @@ await demo(async ({ call, scope }) => {
 
 ### Relate nodes
 
-Create a typed edge between two saved memories. Both endpoints require write access.
+Create a typed edge between two saved memories. The caller needs write access on `from` and read access on `to`.
 
 [`examples/readme/relate.ts`](examples/readme/relate.ts)
 
@@ -190,6 +196,14 @@ await demo(async ({ call, scope }) => {
 
 ### Import the plugin in another app
 
+For another app, install the immutable git tag after `v0.2.1` is published following
+[PR #49](https://github.com/ogarciarevett/hyperag/pull/49):
+
+```sh
+bun add --exact github:ogarciarevett/hyperag#v0.2.1
+```
+
+Once the npm release is published, use `npm install --save-exact hyperag@0.2.1`.
 The public `hyperag/plugin` import calls the same service. In a host, supply your service URL and a private token file provisioned by its administrator; see [the plugin contract](docs/plugin.md) for packaging and permissions.
 
 [`examples/readme/plugin.ts`](examples/readme/plugin.ts)
