@@ -111,19 +111,30 @@ class LiveHooks(unittest.TestCase):
         self.assertLess(elapsed, .3)
         self.assertEqual(self.fixture.backend.stored, [])
         self.wait(lambda: self.fixture.status().get('stored') == 1)
-        self.fixture.backend.post_delay = .05
+        self.fixture.backend.post_delay = .01
+        tails = []
         for event in ('session-start', 'prompt'):
             samples = []
-            for _ in range(20):
+            for _ in range(100):
                 result, elapsed = self.call(event)
                 self.assertEqual((result.returncode, result.stderr), (0, ''))
                 samples.append(elapsed * 1000)
+                row = json.loads((self.state / 'calls.jsonl').read_text().splitlines()[-1])
+                margin = row['tail_margin_ms']
+                tail = elapsed * 1000 - (row['latency_ms'] - margin)
+                tails.append(tail)
+                self.assertLessEqual(tail, margin, 'full-process tail exceeded the fixed margin')
+                self.assertGreaterEqual(row['latency_ms'], elapsed * 1000, 'guard under-counted real wall time')
             p95 = sorted(samples)[math.ceil(.95 * len(samples)) - 1]
             print(json.dumps({'fixture': 'full_native_guard_wall', 'event': event, 'calls': len(samples),
                               'p50_ms': round(statistics.median(samples), 3), 'p95_ms': round(p95, 3), 'errors': 0}), flush=True)
             self.assertLess(p95, 300)
-        self.wait(lambda: self.fixture.status().get('stored') == 21)
-        self.assertEqual(self.fixture.backend.scope_gets, 41)
+        tail_p99 = sorted(tails)[math.ceil(.99 * len(tails)) - 1]
+        print(json.dumps({'fixture': 'guard_exit_tail', 'calls': len(tails), 'p99_ms': round(tail_p99, 3),
+                          'max_ms': round(max(tails), 3), 'fixed_margin_ms': margin}), flush=True)
+        self.assertLessEqual(tail_p99, margin)
+        self.wait(lambda: self.fixture.status().get('stored') == 101)
+        self.assertEqual(self.fixture.backend.scope_gets, 201)
         self.assertTrue(self.fixture.marker.exists())
         self.assertFalse((self.state / 'trip.json').exists())
         self.assertNotIn('HYPERAG_TOKEN', self.fixture.environment)

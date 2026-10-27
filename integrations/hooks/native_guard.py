@@ -31,6 +31,8 @@ _append, _input = _helpers._append, _helpers._input
 _recovery = _module('recovery')
 SKIPS = {'skipped_ungranted', 'disabled'}
 REPORTS = SKIPS | {'completed', 'enqueued', 'empty_prompt', 'error', 'cancelled'}
+# Conservative fixed ceiling for the hosted full-process tail p99; fixtures bound every tail.
+TAIL_MARGIN_MS = 100
 
 
 def evaluate(rows):
@@ -380,7 +382,8 @@ def _record(config, row):
             raise ValueError('monitor_capacity')
         row['warmup'] = not rows
         # All fsync/report work runs in the independent watchdog, after this cheap append.
-        row['latency_ms'] = round((time.monotonic() - STARTED) * 1000, 3)
+        row['tail_margin_ms'] = TAIL_MARGIN_MS
+        row['latency_ms'] = round((time.monotonic() - STARTED) * 1000 + TAIL_MARGIN_MS, 3)
         _append(path, row)
         summary = evaluate([*rows, row])
     if summary['reason']:
@@ -428,7 +431,7 @@ def _hook(config, event, harness):
             error = 'native_mode_mismatch'
     except Exception as exception:
         error = type(exception).__name__
-    latency = round((time.monotonic() - STARTED) * 1000, 3)
+    latency = round((time.monotonic() - STARTED) * 1000 + TAIL_MARGIN_MS, 3)
     row = {'event': event, 'agent': harness, 'scope': report.get('scope'), 'cohort': 'controlled' if os.getenv('HYPERAG_HOOK_CHECK_COHORT') == 'controlled' else 'organic', 'latency_ms': latency, 'error': error}
     try:
         if not error and report.get('category') in SKIPS | {'cancelled'}:
