@@ -44,7 +44,9 @@ test("built package saves, recalls, searches and checks authenticated health", a
   const saved = await plugin.save({ scope: "project:demo", source: "host", text: "Deployment decision: cedar.", idempotencyKey: "cedar" });
   expect(saved.created).toBe(true);
   expect((await plugin.recall("cedar")).items.map((item) => item.memory.id)).toEqual([saved.id]);
-  expect((await plugin.search("cedar")).citations[0]?.memoryId).toBe(saved.id);
+  const context = await plugin.search("cedar");
+  expect(context.citations[0]?.memoryId).toBe(saved.id);
+  expect(context.retrieval.insufficientEvidence).toBe(false);
   await expect(plugin.save({ scope: "secret", source: "host", text: "private" })).rejects.toMatchObject({ code: "http_error", status: 403 });
   await hyperag.revoke("admin", "host", "project:demo", "read");
   expect((await plugin.recall("cedar")).items).toEqual([]);
@@ -83,9 +85,11 @@ test("HTTP, redirect, timeout and malformed response errors cannot echo private 
   } });
   const log = spyOn(console, "error").mockImplementation(() => {});
   try {
-    const client = await loadPlugin({ url: failing.url.origin, tokenFile, timeoutMs: 30 });
+    const client = await loadPlugin({ url: failing.url.origin, tokenFile, timeoutMs: 1_000 });
     for (mode of ["http", "redirect", "timeout", "malformed"]) {
-      const error = await client.health().catch((error: unknown) => error);
+      const active = mode === "timeout" ? await loadPlugin({ url: failing.url.origin, tokenFile, timeoutMs: 30 }) : client;
+      const error = await active.health().catch((error: unknown) => error);
+      expect(error).toMatchObject({ code: mode === "http" ? "http_error" : "request_failed", status: mode === "http" ? 500 : 0 });
       expect(error).toBeInstanceOf(PluginError);
       expect(JSON.stringify(error)).not.toContain(secret);
       expect(String(error)).not.toContain(secret);

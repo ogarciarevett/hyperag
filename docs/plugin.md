@@ -40,7 +40,7 @@ when the host must be restricted to one project.
 Provision the returned raw bearer token into the host file through a private
 channel. Keep it in a trusted owner-controlled directory, owned by the host user
 with mode `0600` or `0400`. It contains only the token and an optional final newline,
-at most 4 KiB. The loader refuses symlinks, non-files, other owners and group/other
+at most 4 KiB. The loader refuses token-file symlinks, non-files, other owners and group/other
 permissions. POSIX ownership checks are required; unsupported platforms fail closed.
 This host file differs from the server registry JSON, which stores token hashes.
 Never put credentials in command arguments, source, logs or shared configuration.

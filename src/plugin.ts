@@ -58,7 +58,7 @@ export async function loadPlugin(config: { url: string; tokenFile: string; timeo
   return Object.freeze({
     save: (memory: NewMemory) => call<WriteResult>("/v1/memories", memory),
     recall: (query: string, options: RetrieveOptions = {}) => call<Retrieval>("/v1/retrieve", { ...options, query }),
-    search: (query: string, options: RetrieveOptions & { maxTokens?: number } = {}) => call<Context>("/v1/context", { ...options, query }),
+    search: (query: string, options: RetrieveOptions & { maxTokens?: number } = {}) => call<Context & { retrieval: Retrieval }>("/v1/context", { ...options, query }),
     health: () => call<{ principal: string }>("/v1/whoami"),
   });
 }
