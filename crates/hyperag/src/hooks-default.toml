@@ -8,6 +8,11 @@ token_env = "HYPERAG_TOKEN"
 scope = "project"
 # One overall hook budget, including reading stdin (100..2000 milliseconds).
 timeout_ms = 1500
+# Opt-in Unix in-memory write queue. Enqueued does not mean stored; reads remain synchronous.
+async_writes = false
+# Before activation, an owner watchdog must observe background failure counters.
+# Optional cancellation fence, checked before queued writes start:
+# async_active_marker = "/absolute/path/to/active-marker"
 
 [events]
 session-start = true

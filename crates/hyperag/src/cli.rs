@@ -50,6 +50,11 @@ pub enum Command {
         #[arg(long)]
         harness: Option<String>,
     },
+    /// Internal detached writer for opt-in asynchronous hooks.
+    #[command(hide = true)]
+    HookWriter { root: std::path::PathBuf },
+    /// Inspect private async counters and classify a dead worker's unconfirmed queue.
+    HookWriterStatus,
     /// Configure the same hooks across supported harnesses.
     Hooks {
         #[command(subcommand)]

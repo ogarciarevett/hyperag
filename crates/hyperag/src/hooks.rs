@@ -119,6 +119,8 @@ async fn handle(event: &str, harness: Option<&str>, config: &crate::hook_setup::
         .map_err(|_| anyhow::anyhow!("invalid scope grant response"))?;
     if !grants.read.iter().any(|value| value == scope)
         || !grants.write.iter().any(|value| value == scope) {
+        #[cfg(unix)]
+        if config.async_writes { crate::hook_writer::skipped_scope(base, token).await?; }
         return Ok(String::new());
     }
     match event {
@@ -133,17 +135,35 @@ async fn handle(event: &str, harness: Option<&str>, config: &crate::hook_setup::
             if prompt.trim().is_empty() {
                 return Ok(String::new());
             }
-            send(http.post(format!("{base}/v1/memories")).json(&json!({ "scope": scope, "kind": "prompt", "source": format!("session {session}"), "text": prompt }))).await?;
+            let body = json!({ "scope": scope, "kind": "prompt", "source": format!("session {session}"), "text": prompt });
+            if config.async_writes {
+                return enqueue_write(base, token, body, config).await;
+            }
+            send(http.post(format!("{base}/v1/memories")).json(&body)).await?;
             Ok(String::new())
         }
         "session-end" => {
             let reason = input["reason"].as_str().unwrap_or("ended");
             let text = format!("Session {session} ended ({reason}).");
-            send(http.post(format!("{base}/v1/memories")).json(&json!({ "scope": scope, "kind": "session", "source": format!("session {session}"), "text": text }))).await?;
+            let body = json!({ "scope": scope, "kind": "session", "source": format!("session {session}"), "text": text });
+            if config.async_writes {
+                return enqueue_write(base, token, body, config).await;
+            }
+            send(http.post(format!("{base}/v1/memories")).json(&body)).await?;
             Ok(String::new())
         }
         other => anyhow::bail!("unknown hook event {other}; use session-start, prompt or session-end"),
     }
+}
+
+async fn enqueue_write(base: &str, token: &str, body: Value, config: &crate::hook_setup::Config) -> anyhow::Result<String> {
+    #[cfg(unix)]
+    {
+        crate::hook_writer::enqueue(base, token, body, config.async_active_marker.as_deref()).await?;
+        Ok(String::new())
+    }
+    #[cfg(not(unix))]
+    { let _ = (base, token, body, config); anyhow::bail!("asynchronous hooks require Unix") }
 }
 
 #[cfg(test)]

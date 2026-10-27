@@ -85,3 +85,6 @@ force this Darwin metadata interleaving around a real Hyperag shutdown, then
 require the pinned prior executable and health to return under a guard trip.
 
 Native hook credentials and fresh uncached permission checks are documented in [FAST_PATH.md](FAST_PATH.md).
+
+Opt-in native asynchronous writes are documented in [ASYNC.md](ASYNC.md). That path
+requires separate guard/watchdog integration before any live activation.
