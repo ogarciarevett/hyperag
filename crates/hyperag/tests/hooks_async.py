@@ -223,7 +223,7 @@ class AsyncHooks(unittest.TestCase):
         rejected, _elapsed = self.hook()
         self.assertTrue(rejected.stderr)
         self.assertEqual(list(target.iterdir()), [])
-        self.assertEqual(self.backend.requests, [])
+        self.assertEqual(self.backend.requests, [("GET", "/v1/scopes")])
 
     def test_native_fast_fixture_reports_session_start_and_prompt_quantiles(self):
         self.backend.post_delay = 0
