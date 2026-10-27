@@ -3,6 +3,7 @@
     "target": "ES2022",
     "module": "ESNext",
     "moduleResolution": "bundler",
+    "paths": { "hyperag/plugin": ["./src/plugin.ts"] },
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "skipLibCheck": true,

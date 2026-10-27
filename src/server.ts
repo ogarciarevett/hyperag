@@ -176,7 +176,7 @@ export function createHandler(hyperag: Hyperag, auth: ServiceAuth) {
     } catch (error) {
       if (error instanceof HyperagError)
         return Response.json({ error: { code: error.code, message: error.message, ...error.detail } }, { status: STATUS[error.code] });
-      console.error("hyperag request failed", error);
+      console.error("hyperag request failed");
       return Response.json({ error: { code: "internal" } }, { status: 500 });
     }
   };
