@@ -75,3 +75,11 @@ this command. The regression kills the hook process group more than three second
 after stopping the service; recovery must still restore health and the prior
 binary identity. The RED variant shares the hook group and must fail. Neither
 variant contacts ports 7481/7482.
+
+On macOS the process-state, start-time and executable checks are separate `ps`
+snapshots. A service that becomes defunct between them is treated as exited so
+restoration continues; an invalid executable for a still-live process or a changed
+start marker still fails closed. Failure records retain the restoration phase and
+changed identity key names without copying exception text. Hosted service tests
+force this Darwin metadata interleaving around a real Hyperag shutdown, then
+require the pinned prior executable and health to return under a guard trip.

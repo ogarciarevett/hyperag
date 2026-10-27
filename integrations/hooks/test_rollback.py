@@ -32,6 +32,42 @@ class RollbackTest(unittest.TestCase):
                     patch.object(rollback.subprocess, "run", return_value=subprocess.CompletedProcess([], code, stdout=value)):
                 self.assertIsNone(rollback.identity(123))
 
+    def test_macos_exit_between_state_and_executable_is_not_a_live_identity(self):
+        replies = iter([('stat=', 'S'), ('lstart=', 'start-a'), ('comm=', '<defunct>'), ('stat=', 'Z')])
+        def ps(command, **kwargs):
+            field, value = next(replies)
+            self.assertEqual(command[-1], field)
+            return subprocess.CompletedProcess(command, 0, stdout=value)
+        with patch.object(rollback.sys, 'platform', 'darwin'), patch.object(rollback.subprocess, 'run', side_effect=ps):
+            self.assertIsNone(rollback.identity(123))
+
+    def test_macos_live_invalid_executable_and_reused_pid_fail_closed(self):
+        for final_start in ('start-a', 'start-b'):
+            with self.subTest(final_start=final_start):
+                values = iter([('stat=', 'S'), ('lstart=', 'start-a'), ('comm=', '<defunct>'),
+                               ('stat=', 'S'), ('lstart=', final_start)])
+                def ps(command, **kwargs):
+                    field, value = next(values)
+                    self.assertEqual(command[-1], field)
+                    return subprocess.CompletedProcess(command, 0, stdout=value)
+                with patch.object(rollback.sys, 'platform', 'darwin'), patch.object(rollback.subprocess, 'run', side_effect=ps):
+                    message = 'absolute process executable required' if final_start == 'start-a' else 'process start marker changed'
+                    with self.assertRaisesRegex(ValueError, message):
+                        rollback.identity(123)
+
+    def test_failure_status_keeps_phase_without_exception_text(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            def fail(_):
+                rollback.write_status(root, {'state': 'stopping'})
+                raise ValueError('synthetic-private-diagnostic')
+            with patch.object(rollback, 'restore', side_effect=fail):
+                self.assertEqual(rollback.main([str(root / 'config.json')]), 1)
+            raw = (root / 'rollback-status.json').read_text()
+            status = json.loads(raw)
+            self.assertEqual((status['state'], status['phase'], status['error_type']), ('failed', 'stopping', 'ValueError'))
+            self.assertNotIn('synthetic-private-diagnostic', raw)
+
     def test_unknown_platform_fails_closed(self):
         with patch.object(rollback.sys, "platform", "unsupported"), self.assertRaises(NotImplementedError):
             rollback.identity(123)

@@ -1,0 +1,50 @@
+{
+  "incident": "organic_prompt_latency_and_interrupted_restore",
+  "running_build": "fdbfd2180cc04c9900a4395b173bf8a553bf9ff7",
+  "restored_build": "a42ad2c6e7ad137b6b113bcfb12978fd18ccebf5",
+  "trip_at": "2026-10-27T04:23:15.108045Z",
+  "automatic_restore_failure_at": "2026-10-27T04:23:21.109038Z",
+  "automatic_restore_error_type": "ValueError",
+  "automatic_restore_phase": "stopping",
+  "first_recorded_tcp_refusal_at": "2026-10-27T04:24:05.022000+00:00",
+  "first_refusal_timestamp_basis": "tool_result_completion",
+  "restored_health_at": "2026-10-27T04:24:41.508987+00:00",
+  "observed_outage_seconds": 36.486987,
+  "earlier_downtime_not_directly_observed": true,
+  "organic_calls": [
+    {
+      "call": 1,
+      "agent": "claude-code",
+      "event": "prompt",
+      "observed_at": "2026-10-27T04:23:04.033032+00:00",
+      "hook_ms": 378.11,
+      "synchronous_client_path_ms": 255.573,
+      "additional_wrapper_ms": 122.537,
+      "error": null
+    },
+    {
+      "call": 2,
+      "agent": "claude-code",
+      "event": "prompt",
+      "observed_at": "2026-10-27T04:23:07.297383+00:00",
+      "hook_ms": 317.334,
+      "synchronous_client_path_ms": 167.15,
+      "additional_wrapper_ms": 150.184,
+      "error": null
+    },
+    {
+      "call": 3,
+      "agent": "claude-code",
+      "event": "prompt",
+      "observed_at": "2026-10-27T04:23:15.097031+00:00",
+      "hook_ms": 606.168,
+      "synchronous_client_path_ms": 423.464,
+      "additional_wrapper_ms": 182.704,
+      "error": null
+    }
+  ],
+  "pure_memory_post_timing_available": false,
+  "coordinator_save_verified_at": "2026-10-27T04:25:28.229750+00:00",
+  "coordinator_verification_ms": 267.402,
+  "hooks_active": false
+}
