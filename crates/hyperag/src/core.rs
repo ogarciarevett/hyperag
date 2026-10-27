@@ -101,7 +101,6 @@ pub fn parse_rerank_cache(configured: Option<&str>) -> Result<usize> {
     }
 }
 
-#[allow(dead_code)]
 #[derive(Clone, Debug)]
 struct RerankCacheEntry { key: String, candidates: Vec<(String, i32)>, scores: Vec<f32> }
 
@@ -114,9 +113,31 @@ impl RerankCache {
     pub fn capacity(&self) -> usize { self.capacity }
     pub fn len(&self) -> usize { self.entries.lock().expect("rerank cache lock").len() }
     pub fn is_empty(&self) -> bool { self.len() == 0 }
-    pub fn invalidate(&self, _id: &str, _current_version: Option<i32>) {}
-    pub fn get(&self, _model_id: &str, _query: &str, _candidates: &[(String, i32)]) -> Option<Vec<f32>> { None }
-    pub fn put(&self, _model_id: &str, _query: &str, _candidates: Vec<(String, i32)>, _scores: Vec<f32>) {}
+    pub fn invalidate(&self, id: &str, current_version: Option<i32>) {
+        if self.capacity == 0 { return; }
+        self.entries.lock().expect("rerank cache lock").retain(|e| {
+            !e.candidates.iter().any(|(cid, ver)| cid == id && current_version.is_none_or(|cur| *ver != cur))
+        });
+    }
+    pub fn get(&self, model_id: &str, query: &str, candidates: &[(String, i32)]) -> Option<Vec<f32>> {
+        if self.capacity == 0 { return None; }
+        let key = rerank_cache_key(model_id, query, candidates);
+        let mut entries = self.entries.lock().expect("rerank cache lock");
+        entries.retain(|e| !e.candidates.iter().any(|(cid, ver)| candidates.iter().any(|(id, cur)| id == cid && cur != ver)));
+        let idx = entries.iter().position(|e| e.key == key)?;
+        let entry = entries.remove(idx).expect("indexed entry");
+        let scores = entry.scores.clone();
+        entries.push_back(entry);
+        Some(scores)
+    }
+    pub fn put(&self, model_id: &str, query: &str, candidates: Vec<(String, i32)>, scores: Vec<f32>) {
+        if self.capacity == 0 { return; }
+        let key = rerank_cache_key(model_id, query, &candidates);
+        let mut entries = self.entries.lock().expect("rerank cache lock");
+        entries.retain(|e| e.key != key && !e.candidates.iter().any(|(cid, ver)| candidates.iter().any(|(id, cur)| id == cid && cur != ver)));
+        while entries.len() >= self.capacity { entries.pop_front(); }
+        entries.push_back(RerankCacheEntry { key, candidates, scores });
+    }
 }
 
 #[derive(Clone, Debug, Serialize)]

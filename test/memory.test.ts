@@ -280,9 +280,11 @@ describe("rerank cache", () => {
     expect(cache.get("m", "q1", c12)).toBeUndefined();
     cache.put("m", "q1", c12, [0.9, 0.1]);
     cache.put("m", "q2", c23, [0.8, 0.2]);
-    expect([cache.get("m", "q1", c12), cache.get("m", "q1", [["m_1", 2], ["m_2", 1]])]).toEqual([[0.9, 0.1], undefined]);
+    expect(cache.get("m", "q1", c12)).toEqual([0.9, 0.1]);
     cache.put("m", "q3", c34, [0.7, 0.3]);
     expect([cache.get("m", "q2", c23), cache.get("m", "q1", c12)]).toEqual([undefined, [0.9, 0.1]]);
+    expect(cache.get("m", "q1", [["m_1", 2], ["m_2", 1]])).toBeUndefined();
+    expect(cache.get("m", "q1", c12)).toBeUndefined();
     cache.invalidate("m_1", 2);
     expect([cache.get("m", "q1", c12), cache.get("m", "q3", c34)]).toEqual([undefined, [0.7, 0.3]]);
   });

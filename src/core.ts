@@ -88,22 +88,39 @@ export function parseRerankCache(value?: boolean | number | string | null): numb
 export class RerankCache {
   readonly capacity: number;
   private readonly entries = new Map<string, { candidates: readonly (readonly [string, number])[]; scores: readonly number[] }>();
+  constructor(capacity: boolean | number | string = 0) { this.capacity = parseRerankCache(capacity); }
+  get size(): number { return this.entries.size; }
 
-  constructor(capacity: boolean | number | string = 0) {
-    this.capacity = parseRerankCache(capacity);
+  invalidate(id: string, currentVersion?: number): void {
+    if (this.capacity === 0) return;
+    for (const [k, entry] of this.entries)
+      if (entry.candidates.some(([cid, ver]) => cid === id && (currentVersion === undefined || ver !== currentVersion)))
+        this.entries.delete(k);
   }
 
-  get size(): number {
-    return this.entries.size;
+  get(modelId: string, query: string, candidates: readonly (readonly [string, number])[]): number[] | undefined {
+    if (this.capacity === 0) return undefined;
+    for (const [id, ver] of candidates) this.invalidate(id, ver);
+    const key = rerankCacheKey(modelId, query, candidates);
+    const hit = this.entries.get(key);
+    if (hit === undefined) return undefined;
+    this.entries.delete(key);
+    this.entries.set(key, hit);
+    return [...hit.scores];
   }
 
-  invalidate(_id: string, _currentVersion?: number): void {}
-
-  get(_modelId: string, _query: string, _candidates: readonly (readonly [string, number])[]): number[] | undefined {
-    return undefined;
+  put(modelId: string, query: string, candidates: readonly (readonly [string, number])[], scores: readonly number[]): void {
+    if (this.capacity === 0) return;
+    for (const [id, ver] of candidates) this.invalidate(id, ver);
+    const key = rerankCacheKey(modelId, query, candidates);
+    this.entries.delete(key);
+    while (this.entries.size >= this.capacity) {
+      const oldest = this.entries.keys().next().value;
+      if (oldest === undefined) break;
+      this.entries.delete(oldest);
+    }
+    this.entries.set(key, { candidates: candidates.map(([id, v]) => [id, v] as const), scores: [...scores] });
   }
-
-  put(_modelId: string, _query: string, _candidates: readonly (readonly [string, number])[], _scores: readonly number[]): void {}
 }
 
 /**
