@@ -25,17 +25,25 @@ fn scope_with_override(cwd: &Path, override_scope: Option<&str>) -> String {
         return scope.to_owned();
     }
     let root = cwd.ancestors().find(|d| d.join(".git").exists()).unwrap_or(cwd);
-    let common = std::process::Command::new("git")
-        .env_remove("GIT_DIR").env_remove("GIT_WORK_TREE").env_remove("GIT_COMMON_DIR")
-        .arg("-C").arg(cwd).args(["rev-parse", "--path-format=absolute", "--git-common-dir"])
-        .output().ok().filter(|output| output.status.success())
-        .and_then(|output| String::from_utf8(output.stdout).ok())
-        .map(|path| std::path::PathBuf::from(path.trim()))
-        .filter(|path| path.file_name().is_some_and(|name| name == ".git"))
-        .and_then(|path| path.parent().map(Path::to_path_buf));
+    let common = common_repository(root);
     let root = common.as_deref().unwrap_or(root);
     let name = root.file_name().map(|n| n.to_string_lossy().to_lowercase()).unwrap_or_else(|| "unknown".into());
     format!("project:{name}")
+}
+
+fn common_repository(root: &Path) -> Option<std::path::PathBuf> {
+    let marker = root.join(".git");
+    if !marker.is_file() { return None; }
+    let metadata = std::fs::read_to_string(marker).ok()?;
+    let gitdir = root.join(metadata.trim().strip_prefix("gitdir:")?.trim()).canonicalize().ok()?;
+    let common = match std::fs::read_to_string(gitdir.join("commondir")) {
+        Ok(relative) => gitdir.join(relative.trim()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => gitdir,
+        Err(_) => return None,
+    }.canonicalize().ok()?;
+    if common.file_name().is_some_and(|name| name == ".git") {
+        common.parent().map(Path::to_path_buf)
+    } else { None }
 }
 
 pub async fn run(event: &str) -> i32 {
@@ -158,5 +166,18 @@ mod tests {
         assert_eq!(scope_with_override(&nested, None), "project:coordination");
         assert_eq!(scope_with_override(&nested, Some("")), "project:coordination");
         assert_eq!(scope_with_override(&nested, Some("project:explicit")), "project:explicit");
+        std::fs::write(worktree.join(".git"), "gitdir: ../Coordination/.git/worktrees/chief\n").unwrap();
+        assert_eq!(scope_with_override(&nested, None), "project:coordination");
+    }
+
+    #[test]
+    fn custom_git_directory_falls_back_to_worktree_name() {
+        let fixture = tempfile::tempdir().unwrap();
+        let worktree = fixture.path().join("Repo-X");
+        let metadata = fixture.path().join("custom-metadata");
+        std::fs::create_dir(&worktree).unwrap();
+        std::fs::create_dir(&metadata).unwrap();
+        std::fs::write(worktree.join(".git"), "gitdir: ../custom-metadata\n").unwrap();
+        assert_eq!(scope_with_override(&worktree, None), "project:repo-x");
     }
 }

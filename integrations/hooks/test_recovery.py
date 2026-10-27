@@ -99,6 +99,7 @@ while not Path({str(release)!r}).exists() and time.monotonic()<deadline:time.sle
         try:
             self.wait_for(exited)
             self.assertEqual(json.loads((self.state / "status.json").read_text())["state"], "running")
+            self.assertIsNone(recovery.status_for(self.state, second))
             self.assertEqual(started.read_text().splitlines(), ["started"])
         finally:
             release.touch()
@@ -114,6 +115,32 @@ while not Path({str(release)!r}).exists() and time.monotonic()<deadline:time.sle
         self.assertEqual((result["state"], result["exit_code"]), ("failed", 17))
         self.assertNotIn("private-output", raw)
         self.assertNotIn(str(command), raw)
+
+    def test_reused_directory_cannot_report_previous_success_for_new_worker(self):
+        self.assertIsNone(recovery.status_for(self.state, -1))
+        initial = self.script("initial.py", "pass\n")
+        first = recovery.dispatch([sys.executable, str(initial)], self.state)
+        self.children.append(first)
+        self.wait_for(self.completed)
+        self.assertEqual(recovery.status_for(self.state, first)["state"], "succeeded")
+        self.assertIsNone(recovery.status_for(self.state, -1))
+        release = self.root / "release"
+        command = self.script("next.py", f"""import time
+from pathlib import Path
+deadline=time.monotonic()+5
+while not Path({str(release)!r}).exists() and time.monotonic()<deadline:time.sleep(.01)
+""")
+        second = recovery.dispatch([sys.executable, str(command)], self.state)
+        self.children.append(second)
+        try:
+            status = recovery.status_for(self.state, second)
+            self.assertTrue(status is None or status["state"] == "running")
+            self.wait_for(lambda: recovery.status_for(self.state, second) is not None)
+            self.assertEqual(recovery.status_for(self.state, second)["state"], "running")
+        finally:
+            release.touch()
+        self.wait_for(lambda: recovery.status_for(self.state, second)["state"] == "succeeded")
+        self.assertIsNone(recovery.status_for(self.state, first))
 
     def test_spawn_failure_records_exception_type(self):
         self.children.append(recovery.dispatch([str(self.root / "missing")], self.state))

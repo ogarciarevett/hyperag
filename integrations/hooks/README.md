@@ -4,17 +4,20 @@ Harness commands can be killed after three seconds. A guard must disable hooks
 first, then dispatch service recovery outside that process group:
 
 ```python
-from recovery import dispatch
+from recovery import dispatch, status_for
 
 active_marker.unlink(missing_ok=True)
-dispatch(["/absolute/path/to/rollback.sh"], private_state_directory)
+worker_pid = dispatch(["/absolute/path/to/rollback.sh"], private_state_directory)
+status = status_for(private_state_directory, worker_pid)
 ```
 
 `dispatch(command, state_dir)` returns the detached worker PID promptly. Concurrent
-workers share a nonblocking lock, so only one recovery command runs. Read
-`state_dir/status.json` for `running`, `succeeded`, or `failed`; a successful launch
-does not establish successful restoration. The rollback command must check service
-health before exiting zero.
+workers share a nonblocking lock, so only one recovery command runs. Always use
+`status_for(state_dir, worker_pid)` for `running`, `succeeded`, or `failed`: it
+returns `None` until that PID owns the status, preventing a previous attempt's
+success from being reused. A suppressed duplicate never owns a status; only the
+winning worker PID does. Launch success does not establish restoration. The
+rollback command must check service health before exiting zero.
 
 Use a trusted private state directory and absolute command paths. Recovery inherits
 only a minimal `PATH`; the rollback command loads its required named service

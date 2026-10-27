@@ -44,6 +44,15 @@ def dispatch(command: list[str], state_dir: Path) -> int:
     return child.pid
 
 
+def status_for(state_dir: Path, worker_pid: int):
+    """Return this worker's status; missing or another attempt's status is unknown."""
+    try:
+        value = json.loads((Path(state_dir) / "status.json").read_text())
+    except (FileNotFoundError, json.JSONDecodeError):
+        return None
+    return value if isinstance(value, dict) and value.get("pid") == worker_pid else None
+
+
 def _worker(command, directory):
     os.umask(0o077)
     with (directory / "recovery.lock").open("a") as lock:
