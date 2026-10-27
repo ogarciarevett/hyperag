@@ -48,10 +48,32 @@ def identity(pid):
         started, executable = metadata("lstart"), metadata("comm")
         if started is None or executable is None:
             return None
+        def same_live_process():
+            latest_state = metadata("stat")
+            if latest_state is None or latest_state.startswith("Z"):
+                return False
+            latest_start = metadata("lstart")
+            if latest_start is None:
+                return False
+            if latest_start != started:
+                raise ValueError("process start marker changed")
+            return True
+        # ps reads are separate snapshots. A terminating process can become defunct
+        # after the first state read; that is absence, not an invalid live executable.
+        if not same_live_process():
+            return None
         if not Path(executable).is_absolute():
             raise ValueError("absolute process executable required")
+        try:
+            digest = binary_hash(executable)
+        except OSError:
+            if not same_live_process():
+                return None
+            raise
+        if not same_live_process():
+            return None
         return {"pid": pid, "binary": str(Path(executable).resolve()),
-                "sha256": binary_hash(executable), "start_ticks": "darwin:" + started}
+                "sha256": digest, "start_ticks": "darwin:" + started}
     if sys.platform != "linux":
         raise NotImplementedError("process identity unsupported on this platform")
     try:
@@ -115,6 +137,9 @@ def restore(config_path):
         if healthy(config["health_url"]):
             raise ValueError("healthy endpoint has no verified process owner")
     elif actual_current != current:
+        state["identity_changed_keys"] = sorted(key for key in current.keys() | actual_current.keys()
+                                                if current.get(key) != actual_current.get(key))
+        write_status(config_path.parent, state)
         raise ValueError("current process identity changed")
     else:
         os.kill(current["pid"], signal.SIGTERM)
@@ -147,14 +172,19 @@ def restore(config_path):
     raise TimeoutError("restored service health timed out")
 
 
-if __name__ == "__main__":
+def main(arguments=None):
     os.umask(0o077)
-    path = Path(sys.argv[1])
+    path = Path((sys.argv[1:] if arguments is None else arguments)[0])
     try:
         restore(path)
     except Exception as error:
         status_path = path.parent / "rollback-status.json"
         state = json.loads(status_path.read_text()) if status_path.exists() else {}
-        state.update(state="failed", error_type=type(error).__name__, completed_at=time.time())
+        state.update(phase=state.get("state", "config"), state="failed", error_type=type(error).__name__, completed_at=time.time())
         write_status(path.parent, state)
-        raise SystemExit(1)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

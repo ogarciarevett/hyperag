@@ -20,9 +20,68 @@ rollback = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(rollback)
 
 
+
+# Feed the production Darwin identity branch metadata from an actual Linux service.
+# The adapter stops only the owned fixture to force its exit between stat and comm.
+DARWIN_METADATA_ADAPTER = r'''import importlib.util,json,os,signal,subprocess,sys,time
+from pathlib import Path
+spec=importlib.util.spec_from_file_location('rollback',@MODULE@)
+module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+current=@CURRENT_PID@
+actual_run=subprocess.run
+actual_kill=os.kill
+armed=False
+
+def fields(pid):
+    try:return (Path('/proc')/str(pid)/'stat').read_text().rsplit(')',1)[1].split()
+    except FileNotFoundError:return None
+
+def kill(pid, signum):
+    global armed
+    if pid==current and signum==signal.SIGTERM:
+        actual_kill(pid,signal.SIGSTOP)
+        deadline=time.monotonic()+5
+        while (value:=fields(pid)) is not None and value[0]!='T':
+            if time.monotonic()>deadline:raise TimeoutError('fixture stop metadata')
+            time.sleep(.01)
+        actual_kill(pid,signum);armed=True
+    else:actual_kill(pid,signum)
+
+def metadata(command, **kwargs):
+    global armed
+    if command[0]!='/bin/ps':return actual_run(command,**kwargs)
+    pid=int(command[2]);field=command[-1];value=fields(pid)
+    if value is None:return subprocess.CompletedProcess(command,1,stdout='')
+    if field=='stat=':text=value[0]
+    elif field=='lstart=':text=value[19]
+    elif field=='comm=':
+        if pid==current and armed:
+            armed=False;actual_kill(pid,signal.SIGCONT)
+            deadline=time.monotonic()+15
+            while (value:=fields(pid)) is not None and value[0]!='Z':
+                if time.monotonic()>deadline:raise TimeoutError('fixture service did not exit')
+                time.sleep(.01)
+            Path(@RACE_PROOF@).write_text(json.dumps({'executable_metadata':'defunct'}))
+            text='<defunct>'
+        else:text=str((Path('/proc')/str(pid)/'exe').resolve())
+    else:raise AssertionError('unexpected metadata field')
+    return subprocess.CompletedProcess(command,0,stdout=text)
+
+module.sys.platform='darwin'
+module.subprocess.run=metadata
+module.os.kill=kill
+raise SystemExit(module.main(sys.argv[1:]))
+'''
+
 @unittest.skipUnless(sys.platform == "linux" and os.getenv("GITHUB_ACTIONS") == "true", "hosted Linux proof only")
 class ServiceRecoveryTest(unittest.TestCase):
     def test_old_service_restored_after_hook_process_group_deadline(self):
+        self.assert_real_service_recovery(force_exit_race=False)
+
+    def test_macos_metadata_exit_race_restores_prior_service(self):
+        self.assert_real_service_recovery(force_exit_race=True)
+
+    def assert_real_service_recovery(self, force_exit_race):
         current = Path(os.environ["HYPERAG_RECOVERY_CURRENT_BIN"]).resolve()
         old = Path(os.environ["HYPERAG_RECOVERY_OLD_BIN"]).resolve()
         self.assertNotEqual(rollback.binary_hash(current), rollback.binary_hash(old))
@@ -61,6 +120,11 @@ class ServiceRecoveryTest(unittest.TestCase):
                 def wait_for(predicate, timeout=40, message="isolated service recovery checkpoint timed out"):
                     deadline = time.monotonic() + timeout
                     while time.monotonic() < deadline:
+                        status_file = root / "rollback-status.json"
+                        if status_file.exists():
+                            state = json.loads(status_file.read_text())
+                            if state.get("state") == "failed":
+                                self.fail("rollback failed: " + state.get("error_type", "unknown") + " phase=" + state.get("phase", "unknown"))
                         if predicate():return
                         time.sleep(.05)
                     self.fail(message)
@@ -69,6 +133,13 @@ class ServiceRecoveryTest(unittest.TestCase):
                     config = {"current": rollback.identity(service.pid), "restore": {
                         "argv": [str(old), *argv], "sha256": rollback.binary_hash(old), "env": environment},
                         "health_url": health_url, "restart_delay_seconds": 5}
+                    command = [sys.executable, str(DIRECTORY / "rollback.py")]
+                    if force_exit_race:
+                        config["current"]["start_ticks"] = "darwin:" + config["current"]["start_ticks"]
+                        adapter = root / "darwin-metadata.py"
+                        adapter.write_text(DARWIN_METADATA_ADAPTER.replace("@MODULE@", repr(str(DIRECTORY / "rollback.py")))
+                                           .replace("@CURRENT_PID@", str(service.pid)).replace("@RACE_PROOF@", repr(str(root / "exit-race.json"))))
+                        command = [sys.executable, str(adapter)]
                     path = root / "rollback.json";path.write_text(json.dumps(config));path.chmod(0o600)
                     fixture = root / "fixture";fixture.mkdir()
                     credential = root / "credential.json"
@@ -78,7 +149,7 @@ class ServiceRecoveryTest(unittest.TestCase):
                     guard_config = root / "guard.json"
                     guard_config.write_text(json.dumps({"binary": str(current), "credential_file": str(credential),
                         "active_marker": str(active), "state_dir": str(root / "guard"), "url": health_url.removesuffix("/healthz"),
-                        "rollback_command": [sys.executable, str(DIRECTORY / "rollback.py"), str(path)]}))
+                        "rollback_command": [*command, str(path)]}))
                     guard_config.chmod(0o600)
                     driver = root / "hook.py"
                     driver.write_text(f"""import importlib.util,time
@@ -109,10 +180,12 @@ time.sleep(60)
                     self.assertEqual(rollback.identity(result["restored_pid"])["sha256"], rollback.binary_hash(old))
                     self.assertEqual(rollback.identity(result["restored_pid"])["binary"], str(old))
                     self.assertGreater(result["completed_at"] - result["stopped_at"], 3)
+                    if force_exit_race:
+                        self.assertEqual(json.loads((root / "exit-race.json").read_text())["executable_metadata"], "defunct")
                     print(json.dumps({"test_port": port, "prior_commit": "a42ad2c6e7ad137b6b113bcfb12978fd18ccebf5",
                         "restored_binary_sha256": result["restored_sha256"], "health": True,
                         "recovery_after_stop_seconds": round(result["completed_at"] - result["stopped_at"], 3),
-                        "hook_process_group_killed": True}))
+                        "hook_process_group_killed": True, "forced_macos_exit_race": force_exit_race}))
                 finally:
                     if hook is not None and hook.poll() is None:
                         os.killpg(hook.pid, signal.SIGKILL);hook.wait(timeout=2)
