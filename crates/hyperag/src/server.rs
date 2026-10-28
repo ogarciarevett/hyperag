@@ -190,8 +190,9 @@ struct QueryBody {
 #[serde(rename_all = "camelCase")]
 struct RetrieveBounds {
     limit: Option<usize>,
+    #[serde(default, deserialize_with = "scope_list")]
     scopes: Option<Vec<String>>,
-    #[serde(alias = "exclude_scopes")]
+    #[serde(default, alias = "exclude_scopes", deserialize_with = "scope_list")]
     exclude_scopes: Option<Vec<String>>,
     candidates_per_channel: Option<usize>,
     rerank_candidates: Option<usize>,
@@ -200,6 +201,14 @@ struct RetrieveBounds {
     channels: Option<crate::core::Channels>,
     max_tokens: Option<usize>,
     profile: Option<bool>,
+}
+
+fn scope_list<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<Vec<String>>, D::Error> {
+    let scopes = Vec::<String>::deserialize(d)?;
+    if scopes.iter().any(|scope| scope.is_empty()) {
+        return Err(serde::de::Error::custom("scope names must not be empty"));
+    }
+    Ok(Some(scopes))
 }
 
 fn bounded(b: RetrieveBounds) -> Result<RetrieveOptions, ApiError> {
@@ -420,6 +429,20 @@ async fn set_models(State(a): State<App>, Who(w): Who, Body(b): Body<ModelsBody>
 #[cfg(test)]
 mod rerank_request_tests {
     use super::*;
+    #[test]
+    fn scope_lists_reject_null_and_empty_names() {
+        for key in ["scopes", "excludeScopes", "exclude_scopes"] {
+            for value in [serde_json::json!(null), serde_json::json!([""]), serde_json::json!([null])] {
+                let mut body = serde_json::json!({"query": "fixture"});
+                body[key] = value;
+                assert!(serde_json::from_value::<QueryBody>(body).is_err(), "{key}");
+            }
+            let mut body = serde_json::json!({"query": "fixture"});
+            body[key] = serde_json::json!([]);
+            assert!(serde_json::from_value::<QueryBody>(body).is_ok());
+        }
+    }
+
     #[test]
     fn rerank_request_cap_is_forwarded_independently_and_bounded() {
         let request: QueryBody = serde_json::from_str(r#"{"query":"synthetic fixture","limit":5,"candidatesPerChannel":24,"rerankCandidates":8}"#).unwrap();
