@@ -33,7 +33,7 @@
 
 ## Pending
 
-- No test runs the two examples; they are run by hand against the compose stack.
+- The older `single-agent.ts` and `two-agents.ts` examples are run by hand. The seven `examples/readme/` modules run against isolated services in CI; remote embedding coverage uses a loopback fake.
 - Live calls to NVIDIA, Cloudflare or a hosted Hugging Face endpoint: not made.
 
 ## Known limits

@@ -75,6 +75,8 @@ jobs:
             sleep 2
           done
           echo "neo4j did not accept queries" && exit 1
+      - name: runnable README modules against temporary services
+        run: bun examples/readme/run.ts
       - run: bun test --timeout 180000
   rust:
     runs-on: ubuntu-24.04
