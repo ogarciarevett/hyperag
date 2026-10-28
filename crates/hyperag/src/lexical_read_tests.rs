@@ -501,9 +501,9 @@ async fn scope_filter_fixture(store: Store) -> anyhow::Result<()> {
     let embedder = crate::models::Embedder::from_spec(&spec).await?.unwrap();
     let space = store.ensure_space(embedder.describe()).await?;
     write(&store, "insert into memories(id,scope,kind,created_by,current_version) values
-        ('a','allowed-a','fact','fixture',1),('b','allowed-b','fact','fixture',1),('c','private','fact','fixture',1),('d','allowed-a','fact','fixture',1);
+        ('a','allowed-a','fact','fixture',1),('b','allowed-b','fact','fixture',1),('c','private','fact','fixture',1);
         insert into memory_versions(memory_id,version,text,source,author,content_hash) values
-        ('a',1,'alpha 2024','fixture','fixture','a'),('b',1,'alpha 2024','fixture','fixture','b'),('c',1,'alpha 2024','fixture','fixture','c'),('d',1,'connected','fixture','fixture','d')").await?;
+        ('a',1,'alpha 2024','fixture','fixture','a'),('b',1,'alpha 2024','fixture','fixture','b'),('c',1,'alpha 2024','fixture','fixture','c')").await?;
     store.grant("reader", "allowed-a", "read", "fixture").await?;
     store.grant("reader", "allowed-b", "read", "fixture").await?;
     store.put_vectors(&space, &[("a".into(),1,vec![1.0,0.0,0.0]),("b".into(),1,vec![1.0,0.0,0.0]),("c".into(),1,vec![1.0,0.0,0.0])]).await?;
@@ -530,6 +530,8 @@ async fn scope_filter_fixture(store: Store) -> anyhow::Result<()> {
             assert!(result.items[0].channels.contains_key("bm25") && result.items[0].channels.contains_key("vector"));
         }
         assert!(core.retrieve("reader", "alpha", &query(Some(vec!["private".into()]),None)).await?.items.is_empty());
+        write(&store, "insert into memories(id,scope,kind,created_by,current_version) values ('d','allowed-a','fact','fixture',1);
+            insert into memory_versions(memory_id,version,text,source,author,content_hash) values ('d',1,'connected','fixture','fixture','d')").await?;
         let channels = Some(Channels { graph: Some(true), temporal: Some(true), rerank: Some(false), ..Default::default() });
         let all = core.retrieve("reader", "alpha 2024", &RetrieveOptions { channels: channels.clone(), ..Default::default() }).await?;
         assert!(all.items.iter().any(|i| i.memory.id == "d" && i.channels.contains_key("graph")));
@@ -538,6 +540,7 @@ async fn scope_filter_fixture(store: Store) -> anyhow::Result<()> {
         assert_eq!(ids(&filtered), vec!["a"]);
         assert!(filtered.items[0].channels.contains_key("temporal"));
         assert!(!filtered.items[0].channels.contains_key("graph"));
+        write(&store, "delete from memories where id = 'd'").await?;
 
     }
     server.abort();
