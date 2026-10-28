@@ -429,6 +429,23 @@ async fn set_models(State(a): State<App>, Who(w): Who, Body(b): Body<ModelsBody>
 #[cfg(test)]
 mod rerank_request_tests {
     use super::*;
+    #[tokio::test]
+    async fn malformed_scope_lists_return_bad_request() {
+        use axum::extract::FromRequest;
+        for key in ["scopes", "excludeScopes", "exclude_scopes"] {
+            for value in [serde_json::json!(null), serde_json::json!([""]), serde_json::json!([null])] {
+                let mut body = serde_json::json!({"query": "fixture"});
+                body[key] = value;
+                let request = axum::http::Request::builder().body(axum::body::Body::from(body.to_string())).unwrap();
+                let response = match Body::<QueryBody>::from_request(request, &()).await {
+                    Err(error) => error.into_response(),
+                    Ok(_) => panic!("malformed {key} was accepted"),
+                };
+                assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+            }
+        }
+    }
+
     #[test]
     fn scope_lists_reject_null_and_empty_names() {
         for key in ["scopes", "excludeScopes", "exclude_scopes"] {
