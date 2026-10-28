@@ -52,6 +52,12 @@ pub struct SearchArgs {
     /// Most passages to return (default 8, at most 50).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub limit: Option<usize>,
+    /// Restrict to these readable scopes (empty means all).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scopes: Option<Vec<String>>,
+    /// Exclude these readable scopes.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub exclude_scopes: Option<Vec<String>>,
     /// Token budget for the packed context (default 1,000).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_tokens: Option<usize>,

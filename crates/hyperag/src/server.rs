@@ -190,6 +190,9 @@ struct QueryBody {
 #[serde(rename_all = "camelCase")]
 struct RetrieveBounds {
     limit: Option<usize>,
+    scopes: Option<Vec<String>>,
+    #[serde(alias = "exclude_scopes")]
+    exclude_scopes: Option<Vec<String>>,
     candidates_per_channel: Option<usize>,
     rerank_candidates: Option<usize>,
     as_of: Option<String>,
@@ -206,6 +209,8 @@ fn bounded(b: RetrieveBounds) -> Result<RetrieveOptions, ApiError> {
     };
     Ok(RetrieveOptions {
         limit: check(b.limit, "limit", 50)?,
+        scopes: b.scopes,
+        exclude_scopes: b.exclude_scopes,
         candidates_per_channel: check(b.candidates_per_channel, "candidatesPerChannel", 150)?,
         rerank_candidates: check(b.rerank_candidates, "rerankCandidates", 150)?,
         max_tokens: check(b.max_tokens, "maxTokens", 32_000)?,

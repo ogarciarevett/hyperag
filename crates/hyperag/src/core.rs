@@ -31,6 +31,9 @@ pub struct Channels {
 #[serde(rename_all = "camelCase")]
 pub struct RetrieveOptions {
     pub limit: Option<usize>,
+    pub scopes: Option<Vec<String>>,
+    #[serde(alias = "exclude_scopes")]
+    pub exclude_scopes: Option<Vec<String>>,
     pub candidates_per_channel: Option<usize>,
     /// Cross-encode this many fused candidates; overrides the environment default.
     pub rerank_candidates: Option<usize>,
@@ -166,6 +169,8 @@ impl RerankCache {
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Retrieval {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scope_filter_applied: Option<bool>,
     pub items: Vec<RetrievedItem>,
     /// True when no item clears the evidence bar: the caller should say it does not know.
     pub insufficient_evidence: bool,
@@ -634,7 +639,12 @@ impl Hyperag {
         let mut lexical = if on(ch.bm25) && crate::store::LexicalScorer::selected()? == crate::store::LexicalScorer::Tantivy {
             Some(timed(&mut timings, Stage::Lexical, crate::lexical_read::Read::open(&self.store.pool, principal, query, as_of)).await?)
         } else { None };
-        let readable = match &lexical { Some(read) => read.scopes.clone(), None => self.store.scopes(principal, "read").await? };
+        let mut readable = match &lexical { Some(read) => read.scopes.clone(), None => self.store.scopes(principal, "read").await? };
+        readable.retain(|scope| {
+            options.scopes.as_ref().is_none_or(|s| s.is_empty() || s.contains(scope))
+                && options.exclude_scopes.as_ref().is_none_or(|s| !s.contains(scope))
+        });
+        if let Some(read) = lexical.as_mut() { read.scopes = readable.clone(); }
         let (mut limitations, mut paths) = (vec![], vec![]);
         let mut lists: Vec<(&'static str, Vec<Hit>)> = vec![];
 
@@ -784,7 +794,7 @@ impl Hyperag {
             limitations.push("principal has no readable scope".into());
         }
         if let (Some(t), Some(started)) = (timings.as_mut(), started) { t.finish(started); }
-        Ok(Retrieval { timings_ms: timings, items, insufficient_evidence: insufficient, paths_used: paths, limitations, embedding_space: models.space.clone() })
+        Ok(Retrieval { scope_filter_applied: (options.scopes.is_some() || options.exclude_scopes.is_some()).then_some(true), timings_ms: timings, items, insufficient_evidence: insufficient, paths_used: paths, limitations, embedding_space: models.space.clone() })
     }
 
     fn has_evidence(&self, items: &[RetrievedItem], lists: &[(&str, Vec<Hit>)], reranked: bool) -> bool {
@@ -943,7 +953,7 @@ mod tests {
                 valid_from: None, valid_to: None, recorded_at: "t".into(), status: "active".into(), status_reason: None, superseded_by: None, metadata: Default::default() },
             score: 1.0, channels: Default::default(), via: None, rerank_score: None, dates: None,
         };
-        let r = Retrieval { items: vec![m("1", &"x".repeat(400)), m("2", "short")], insufficient_evidence: false, paths_used: vec![], limitations: vec![], embedding_space: None, timings_ms: None };
+        let r = Retrieval { scope_filter_applied: None, items: vec![m("1", &"x".repeat(400)), m("2", "short")], insufficient_evidence: false, paths_used: vec![], limitations: vec![], embedding_space: None, timings_ms: None };
         let c = build_context(r, 50);
         assert_eq!(c.citations.len(), 1);
         assert_eq!(c.citations[0].memory_id, "2");
@@ -1016,7 +1026,7 @@ mod profiling_tests {
         assert!(!defaults.profile.unwrap_or(false));
         let opts: RetrieveOptions = serde_json::from_str(r#"{"profile":true}"#).unwrap();
         assert_eq!(opts.profile, Some(true));
-        let mut response = Retrieval { items: vec![], insufficient_evidence: true, paths_used: vec![], limitations: vec![], embedding_space: None, timings_ms: None };
+        let mut response = Retrieval { scope_filter_applied: None, items: vec![], insufficient_evidence: true, paths_used: vec![], limitations: vec![], embedding_space: None, timings_ms: None };
         assert!(serde_json::to_value(&response).unwrap().get("timingsMs").is_none());
         response.timings_ms = Some(StageTimings::default());
         let value = serde_json::to_value(response).unwrap();

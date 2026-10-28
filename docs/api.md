@@ -26,6 +26,8 @@ HYPERAG_RERANKER=local bun src/main.ts
 | `POST /v1/grants`, `DELETE /v1/grants` | grant, revoke (admin) |
 | `GET /v1/whoami` | the verified principal |
 
+Search accepts `scopes` and `excludeScopes` (also `exclude_scopes`) lists on `/v1/retrieve` and `/v1/context`. The lists narrow the caller’s read grants before all retrieval channels; an empty list has no effect and exclusions win. Filtered requests return `scopeFilterApplied: true` in the retrieval object so clients can detect older servers.
+
 Ids in paths are percent-encoded (an explicit id is stored as `<scope>/<id>`). Bodies are limited to 1 MiB and validated; `limit` is at most 50, `candidatesPerChannel` 150, `maxTokens` 32,000.
 
 Errors: 401 unauthenticated, 403 forbidden, 404 not found (also for memories outside the caller's scopes), 409 version conflict, existing id or not active, 400 invalid input.
