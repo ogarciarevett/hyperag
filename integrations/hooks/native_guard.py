@@ -290,11 +290,10 @@ def _native(config, args, raw=b'', report=False, budget=.25, forward=False, trac
         return child.returncode, bytes(output), stderr, bytes(reported)
     finally:
         if child.poll() is None:
-            kill_time = time.time_ns() // 1_000_000
             child.kill();child.wait(timeout=1)
             if budget_kill:
                 _write(Path(config['state_dir']) / ('budget-kill-' + ack_id + '.json'),
-                       {'id': ack_id, 'time_ms': kill_time})
+                       {'id': ack_id, 'time_ms': time.time_ns() // 1_000_000})
         trace['_duration_ms'] = (time.monotonic() - trace['_started']) * 1000
         selector.close()
         for pipe in (child.stdin, child.stdout, child.stderr):
