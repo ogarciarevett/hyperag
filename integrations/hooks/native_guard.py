@@ -208,6 +208,10 @@ def _native(config, args, raw=b'', report=False, budget=.25, forward=False, trac
     trace = trace if trace is not None else _trace('native', 'native_command')
     deadline = time.monotonic() + max(0, budget)
     environment = {'PATH': os.defpath, **config.get('native_env', {}), 'HYPERAG_URL': config['url']}
+    ack_id = secrets.token_hex(16) if prompt_budget else None
+    if ack_id:
+        environment['HYPERAG_HOOK_ACK_ID'] = ack_id
+    budget_kill = False
     reader, writer = os.pipe() if report else (None, None)
     if report:
         environment['HYPERAG_HOOK_STARTED_AT'] = str(time.time() - (time.monotonic() - STARTED))
@@ -278,6 +282,7 @@ def _native(config, args, raw=b'', report=False, budget=.25, forward=False, trac
                     try:native_error = json.loads(reported).get('category') == 'error'
                     except (ValueError, AttributeError):pass  # A report interrupted by cancellation is not a hook error.
                 if prompt_budget and not stderr and not native_error:
+                    budget_kill = True
                     raise BudgetSkip()
                 raise TimeoutError('native deadline')
             if exited and not events:
@@ -285,7 +290,11 @@ def _native(config, args, raw=b'', report=False, budget=.25, forward=False, trac
         return child.returncode, bytes(output), stderr, bytes(reported)
     finally:
         if child.poll() is None:
+            kill_time = time.time_ns() // 1_000_000
             child.kill();child.wait(timeout=1)
+            if budget_kill:
+                _write(Path(config['state_dir']) / ('budget-kill-' + ack_id + '.json'),
+                       {'id': ack_id, 'time_ms': kill_time})
         trace['_duration_ms'] = (time.monotonic() - trace['_started']) * 1000
         selector.close()
         for pipe in (child.stdin, child.stdout, child.stderr):
@@ -306,7 +315,6 @@ def _status(config, trace=None, budget=.25):
     counters = [value.get('categories', {}), value.get('enqueue_errors', {}).get('categories', {})]
     for index, categories in enumerate(counters):
         for category, count in categories.items():
-            # Writer ACK failure occurs after admission; delivery counters remain authoritative.
             if count and category != 'skipped_ungranted' and not (index == 0 and category == 'ack_failure'):
                 raise WriterFailure(category)
     if value.get('blocked') or value.get('failed') or value.get('rejected') or value.get('enqueue_errors', {}).get('rejected'):
@@ -314,6 +322,40 @@ def _status(config, trace=None, budget=.25):
     # Authoritative delivery/drop evidence takes precedence over a configuration mismatch.
     if value.get('async_writes') is not True or value.get('token_file') is not True or value.get('async_active_marker') != config['active_marker']:
         raise ValueError('writer_mode_mismatch')
+    count = value.get('categories', {}).get('ack_failure', 0)
+    if count:
+        clients = value.get('ack_clients')
+        if (type(count) is not int or count < 1 or not isinstance(clients, list) or len(clients) != count
+                or type(value.get('accepted')) is not int or type(value.get('stored')) is not int
+                or value['accepted'] != value['stored']
+                or any(type(value.get(k)) is not int or value[k] != 0 for k in ('failed', 'rejected', 'cancelled'))):
+            raise WriterFailure('ack_failure')
+        directory = Path(config['state_dir'])
+        with _lock(directory / 'ack-client-gone.lock') as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            seen = set()
+            log = directory / 'ack-client-gone.jsonl'
+            if log.exists():
+                seen = {json.loads(line)['id'] for line in log.read_text().splitlines()}
+            ids, records = set(), []
+            for client in clients:
+                if not isinstance(client, dict):raise WriterFailure('ack_failure')
+                ident, timestamp = client.get('id'), client.get('time_ms')
+                if (not isinstance(ident, str) or len(ident) != 32 or any(c not in '0123456789abcdef' for c in ident)
+                        or ident in ids or type(timestamp) is not int or timestamp <= 0):
+                    raise WriterFailure('ack_failure')
+                ids.add(ident)
+                try:
+                    proof = json.loads((directory / ('budget-kill-' + ident + '.json')).read_text())
+                    if proof['id'] != ident or type(proof['time_ms']) is not int or not 0 < proof['time_ms'] < timestamp:
+                        raise ValueError('invalid budget proof')
+                except (OSError, ValueError, KeyError, TypeError):
+                    raise WriterFailure('ack_failure')
+                if ident not in seen:
+                    records.append({'category': 'ack_client_gone', 'id': ident, 'time_ms': timestamp,
+                                    'budget_kill_time_ms': proof['time_ms']})
+            for record in records:
+                _append(log, record)
     return value
 
 
