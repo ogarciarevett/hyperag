@@ -35,6 +35,7 @@ The installer downloads a prebuilt binary and checks its SHA-256. [Windows, Home
 ## Run a local stack
 
 The binary needs Postgres with pgvector. The full template also uses Neo4j.
+On macOS, keep OrbStack running while hyperag uses the local Docker database stack.
 The pinned source path below requires the `v0.2.1` tag, planned after
 [the git-package build fix](https://github.com/ogarciarevett/hyperag/pull/49) merges;
 it is not available until that tag is published. To run everything together then:

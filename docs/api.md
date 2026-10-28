@@ -33,6 +33,7 @@ Errors: 401 unauthenticated, 403 forbidden, 404 not found (also for memories out
 Local or remote deployment is configuration only: every store is a URL.
 
 The Rust service also has `POST /v1/memories/batch` (up to 512), `GET` and `POST /v1/models`, and `/healthz` without a token.
+`GET /healthz` checks Postgres with a one-second deadline: HTTP 200 and `{"ok":true}` when available, otherwise HTTP 503 and `{"ok":false}`. Pool acquisition for service operations is bounded to two seconds; this does not bound query or model execution time.
 
 ## TypeScript library
 
