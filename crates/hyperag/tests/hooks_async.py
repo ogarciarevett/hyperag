@@ -207,27 +207,6 @@ class AsyncHooks(unittest.TestCase):
         self.assertEqual(len(self.backend.stored), 1)
         self.assertEqual(self.status(), {})
 
-    def test_closed_ack_client_is_recorded_and_never_sent_to_backend(self):
-        self.backend.post_delay = 0
-        self.hook()
-        self.wait_for(lambda: self.status().get('stored') == 1)
-        ident = 'a' * 32
-        body = json.dumps({'scope': 'project:fixture', 'text': 'synthetic', 'source': 'fixture',
-                           'kind': 'fact', '_hook_ack_id': ident}).encode()
-        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
-            client.connect(str(self.queue() / 'q'))
-            client.sendall(struct.pack('!I', len(body)))
-            self.assertEqual(client.recv(1), b'\x00')
-            client.shutdown(socket.SHUT_RD)
-            client.sendall(body)
-        self.wait_for(lambda: self.status().get('categories', {}).get('ack_failure') == 1)
-        self.wait_for(lambda: self.status().get('stored') == 2)
-        state = self.status()
-        self.assertEqual(state['accepted'], state['stored'])
-        self.assertEqual(state['ack_clients'][0]['id'], ident)
-        self.assertGreater(state['ack_clients'][0]['time_ms'], 0)
-        self.assertNotIn('_hook_ack_id', self.backend.stored[-1])
-
     def test_async_requires_explicit_private_credential_file(self):
         self.config.write_text("\n".join(line for line in self.config.read_text().splitlines() if not line.startswith("token_file")))
         self.environment["HYPERAG_TOKEN"] = self.token

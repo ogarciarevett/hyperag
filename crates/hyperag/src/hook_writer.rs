@@ -72,12 +72,6 @@ struct State {
     stopped: bool,
     last_category: Option<Category>,
     categories: BTreeMap<Category, u64>,
-    ack_clients: Vec<AckClient>,
-}
-#[derive(Clone, Deserialize, Serialize)]
-struct AckClient {
-    id: String,
-    time_ms: u128,
 }
 impl State {
     fn record(&mut self, category: Category, count: u64) {
@@ -367,16 +361,11 @@ pub async fn skipped_scope(base: &str, token: &str) -> Result<()> {
     enqueue_error(&root(base, token)?, Category::SkippedUngranted).await
 }
 
-pub async fn enqueue(base: &str, token: &str, mut body: Value, marker: Option<&Path>) -> Result<bool> {
+pub async fn enqueue(base: &str, token: &str, body: Value, marker: Option<&Path>) -> Result<bool> {
     let root = root(base, token)?;
     if marker.is_some_and(|path| !path.exists()) {
         enqueue_error(&root, Category::Cancelled).await?;
         return Ok(false);
-    }
-    if let Ok(id) = std::env::var("HYPERAG_HOOK_ACK_ID") {
-        if id.len() == 32 && id.bytes().all(|b| b.is_ascii_hexdigit()) {
-            body["_hook_ack_id"] = Value::String(id);
-        }
     }
     let bytes = serde_json::to_vec(&body)?;
     if bytes.is_empty() || bytes.len() > BYTES {
@@ -458,7 +447,7 @@ async fn accept(
     stream.write_u8(0).await?; // Credit only: the final ACK below confirms enqueue.
     let mut body = vec![0; size];
     stream.read_exact(&mut body).await?;
-    let mut value: Value =
+    let value: Value =
         serde_json::from_slice(&body).map_err(|_| anyhow!("async queue frame invalid"))?;
     ensure!(
         value["scope"]
@@ -466,10 +455,6 @@ async fn accept(
             .is_some_and(|scope| scope.len() <= 1_024),
         "async queue scope invalid"
     );
-    let ack_id = value.as_object_mut().and_then(|object| object.remove("_hook_ack_id"))
-        .and_then(|value| value.as_str().map(str::to_owned))
-        .filter(|id| id.len() == 32 && id.bytes().all(|b| b.is_ascii_hexdigit()));
-    let body = serde_json::to_vec(&value)?;
     admit(
         root,
         shared,
@@ -480,19 +465,9 @@ async fn accept(
             _bytes: credit?,
         },
     )?;
-    if let Err(error) = stream.write_u8(0).await {
+    if stream.write_u8(0).await.is_err() {
         // The item is accepted; an ACK failure must not mark the write itself failed.
-        let time_ms = now_ms()?;
-        change(root, shared, |state| {
-            state.record(Category::AckFailure, 1);
-            if matches!(error.kind(), std::io::ErrorKind::BrokenPipe | std::io::ErrorKind::ConnectionReset) {
-                if let Some(id) = ack_id {
-                    if state.ack_clients.len() < EVENTS {
-                        state.ack_clients.push(AckClient { id, time_ms });
-                    }
-                }
-            }
-        })?;
+        change(root, shared, |state| state.record(Category::AckFailure, 1))?;
     }
     Ok(())
 }

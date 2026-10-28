@@ -79,31 +79,13 @@ class WatchdogClockTest(unittest.TestCase):
             guard._status({'active_marker': '/fixture-marker'})
         self.assertNotIsInstance(error.exception, guard.WriterFailure)
 
-    def test_ack_failure_after_admission_does_not_hide_delivery_failures(self):
-        ident = 'a' * 32
-        healthy = {'async_writes': True, 'token_file': True, 'async_active_marker': '/fixture-marker',
-                   'categories': {'ack_failure': 1}, 'ack_clients': [{'id': ident, 'time_ms': 200}],
-                   'accepted': 3, 'stored': 3, 'failed': 0, 'rejected': 0, 'cancelled': 0}
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            config = {'active_marker': '/fixture-marker', 'state_dir': directory}
-            proof = root / ('budget-kill-' + ident + '.json')
-            def check(value):
-                with patch.object(guard, '_native', return_value=(0, json.dumps(value).encode(), False, b'')):
-                    return guard._status(config)
-            with self.assertRaises(guard.WriterFailure):check(healthy)
-            proof.write_text(json.dumps({'id': ident, 'time_ms': 100}))
-            self.assertEqual(check(healthy), healthy)
-            self.assertEqual(check(healthy), healthy)
-            rows = [json.loads(row) for row in (root / 'ack-client-gone.jsonl').read_text().splitlines()]
-            self.assertEqual(rows, [{'category': 'ack_client_gone', 'id': ident, 'time_ms': 200, 'budget_kill_time_ms': 100}])
-            for extra in ({'failed': 1}, {'blocked': True}, {'rejected': 1}, {'cancelled': 1},
-                          {'stored': 2}, {'ack_clients': []}, {'accepted': None},
-                          {'categories': {'ack_failure': 2}}, {'categories': {'ack_failure': 1, 'backend': 1}},
-                          {'enqueue_errors': {'categories': {'ack_failure': 1}}}):
-                with self.subTest(extra=extra), self.assertRaises(guard.WriterFailure):check({**healthy, **extra})
-            proof.write_text(json.dumps({'id': ident, 'time_ms': 201}))
-            with self.assertRaises(guard.WriterFailure):check(healthy)
+    def test_ack_failure_trips_even_when_deliveries_are_reconciled(self):
+        status = {'async_writes': True, 'token_file': True, 'async_active_marker': '/fixture-marker',
+                  'categories': {'ack_failure': 1}, 'accepted': 3, 'stored': 3,
+                  'failed': 0, 'rejected': 0, 'cancelled': 0}
+        with patch.object(guard, '_native', return_value=(0, json.dumps(status).encode(), False, b'')), \
+                self.assertRaisesRegex(guard.WriterFailure, 'ack_failure'):
+            guard._status({'active_marker': '/fixture-marker'})
 
     def test_shared_clock_uses_raw_clock_not_process_relative_monotonic(self):
         with patch.object(guard.time, 'clock_gettime', return_value=123) as clock, \
