@@ -304,9 +304,10 @@ def _status(config, trace=None, budget=.25):
         raise ValueError('writer_status_error')
     value = json.loads(output)
     counters = [value.get('categories', {}), value.get('enqueue_errors', {}).get('categories', {})]
-    for categories in counters:
+    for index, categories in enumerate(counters):
         for category, count in categories.items():
-            if count and category != 'skipped_ungranted':
+            # Writer ACK failure occurs after admission; delivery counters remain authoritative.
+            if count and category != 'skipped_ungranted' and not (index == 0 and category == 'ack_failure'):
                 raise WriterFailure(category)
     if value.get('blocked') or value.get('failed') or value.get('rejected') or value.get('enqueue_errors', {}).get('rejected'):
         raise WriterFailure('writer_failure')
