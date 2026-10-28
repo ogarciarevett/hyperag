@@ -266,7 +266,7 @@ fn permission(p: &str) -> Result<&str, ApiError> {
 
 pub fn router(app: App) -> Router {
     Router::new()
-        .route("/healthz", get(|| async { Json(json!({ "ok": true })) }))
+        .route("/healthz", get(health))
         .route("/v1/whoami", get(|Who(who): Who| async move { Json(json!({ "principal": who })) }))
         .route("/v1/scopes", get(scopes))
         .route("/v1/memories", post(ingest))
@@ -286,6 +286,14 @@ pub fn router(app: App) -> Router {
         .method_not_allowed_fallback(no_route)
         .layer(DefaultBodyLimit::max(MAX_BODY_BYTES))
         .with_state(app)
+}
+
+async fn health(State(a): State<App>) -> (StatusCode, Json<Value>) {
+    let ok = matches!(tokio::time::timeout(
+        std::time::Duration::from_secs(1),
+        sqlx::query("select 1").execute(&a.hyperag.store.pool),
+    ).await, Ok(Ok(_)));
+    (if ok { StatusCode::OK } else { StatusCode::SERVICE_UNAVAILABLE }, Json(json!({ "ok": ok })))
 }
 
 async fn no_route(Who(_): Who) -> ApiError {

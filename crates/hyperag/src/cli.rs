@@ -135,6 +135,7 @@ pub async fn open() -> anyhow::Result<Hyperag> {
     let url = env("HYPERAG_PG_URL").ok_or_else(|| anyhow::anyhow!("HYPERAG_PG_URL is required"))?;
     let pool = PgPoolOptions::new()
         .max_connections(8)
+        .acquire_timeout(std::time::Duration::from_secs(2))
         // sqlx reuses prepared statements; a generic plan for the BM25 and vector queries was slower
         // than planning each call with its own scopes, as node-pg's unnamed statements do.
         .after_connect(|c, _| Box::pin(async move { sqlx::query("set plan_cache_mode = force_custom_plan").execute(c).await.map(|_| ()) }))
