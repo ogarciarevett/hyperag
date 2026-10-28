@@ -23,7 +23,7 @@ class WatchdogClockTest(unittest.TestCase):
                 trip.assert_not_called()
             row = json.loads((directory / 'calls.jsonl').read_text())
             self.assertEqual(row['latency_ms'], 250)
-            self.assertEqual(row['wall_ms'], 574.174)
+            self.assertEqual(row['wall_ms'], 624.174)
             self.assertEqual((summary['calls'], summary['budget_skips'], summary['errors']), (0, 1, 0))
             measured = [{**row, 'warmup': False} for _ in range(20)]
             result = guard.evaluate(measured)
@@ -39,7 +39,7 @@ class WatchdogClockTest(unittest.TestCase):
                 guard._record({'state_dir': name}, {'agent': 'claude-code', 'event': 'prompt', 'category': 'budget_skip', 'error': 'stderr'})
                 trip.assert_called_once()
             row = json.loads((Path(name) / 'calls.jsonl').read_text())
-            self.assertEqual(row['latency_ms'], 430)
+            self.assertEqual(row['latency_ms'], 480)
         rows = [{'latency_ms': 250, 'wall_ms': 260, 'category': 'budget_skip'} for _ in range(18)]
         self.assertEqual(guard.evaluate(rows + [{'latency_ms': 301}] * 2)['reason'], 'p95_limit')
 
@@ -61,8 +61,8 @@ class WatchdogClockTest(unittest.TestCase):
                     guard._hook(config, 'prompt', 'claude-code')
                 row = json.loads((root / 'calls.jsonl').read_text())
                 self.assertEqual(row['category'], category)
-                self.assertEqual(row['wall_ms'], 430)
-                self.assertEqual(row['latency_ms'], 430 if stderr else 250)
+                self.assertEqual(row['wall_ms'], 480)
+                self.assertEqual(row['latency_ms'], 480 if stderr else 250)
                 self.assertEqual(trip.call_count, int(stderr))
 
     def test_delivery_failure_precedes_simultaneous_mode_mismatch(self):

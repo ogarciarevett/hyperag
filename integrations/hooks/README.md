@@ -121,7 +121,7 @@ In-flight markers record PID, shared-clock start, wall-clock start for diagnosis
 and agent/event names only. Before a timeout, the watchdog probes PID liveness
 and rechecks that the marker still exists. Removed completion markers are ignored;
 a disappeared PID with a remaining marker is `foreground_lost`, not a timeout.
-The 1 s deadline and 30 ms latency margin are unchanged. Hosted tests run real
+The 1 s deadline is unchanged; the fixed latency margin is 80 ms (statistical calibration below). Hosted tests run real
 native calls and a detached watchdog with deliberately different process-local
 monotonic origins, plus marker-removal and dead-PID regressions. No activation
 or service rebuild is implied by this Python-only repair.
@@ -131,7 +131,7 @@ The native subprocess supervisor polls completion before applying its deadline.
 A supervisor that resumes after the child has already exited drains the completed
 result; it times out a child that is still running. Output, report and stderr
 streams remain size-bounded while draining. The foreground guard still applies
-its full-call 1000 ms limit and the approved all-call p95 policy with 30 ms margin.
+its full-call 1000 ms limit and the approved all-call p95 policy with 80 ms margin.
 Hosted tests force a successful status child to exit, pause its supervisor past
 250 ms, and require a successful result; a separate running child must still time
 out. The slow-fsync fixture now retains stage timings and category-only metadata
@@ -166,8 +166,49 @@ publishing heartbeats and supervising foreground calls during a slow probe; a
 pending probe never makes a healthy fast hook fail the heartbeat freshness check.
 Every foreground hook error or stderr still trips immediately. The full-hook
 1000 ms hard limit, one unscored warm-up, global p95 after 20 measured calls above
-300 ms, quiet skips and fixed 30 ms margin are unchanged. Probe durations are
+300 ms and quiet skips are unchanged; the calibrated fixed margin is 80 ms. Probe durations are
 excluded from user-hook p50/p95. Successful calls add no foreground fsync.
 
 This reading is approved by the chief. Deployment still requires merge and a
 fresh coordinator confirmation, then the same 50 controlled plus 50 organic watch.
+
+
+### Statistical tail calibration
+
+The fixed tail margin is **80 ms**. Selection uses three independent hosted
+200-call records and 100 retained Mac controlled calls: round
+`max(2 × worst hosted p99, 1.25 × retained Mac p99)` up to 10 ms. The references
+are in [the evidence record](../../docs/evidence/hooks-guard-tail-2026-10-27.json).
+The archived Mac p99 is62.139ms; selection gives80ms. Its maximum116.359ms and
+known hosted70.7/84.332ms outliers remain visible as diagnostics rather than an
+absolute maximum-based contract. Retained organic p95 projected with80ms is
+266.158–267.534ms; these are projections, not new live acceptance.
+
+CI uses600 paired real-binary calls (300 reads,300 prompts). For each event and
+the pooled cohort it requires **nearest-rank tail p99 ≤80ms** and **adjusted p95
+≥independently measured full-wall p95**; adjusted p95 must also stay below300ms.
+One isolated noisy wake-up may exceed the margin without breaking the p99 gate.
+A sustained overrun at the documented percentile fails; so does any observed
+p95 under-count even when p99 tails pass. Maxima are always reported. Passing
+these predicates establishes p95 coverage only for the observed paired cohorts;
+it is not a guarantee for future live calls or arbitrary scheduler delays. Real
+hook failures/stderr and hard1000ms enforcement remain unchanged. No activation
+is implied by calibration.
+
+The retained real-HOME controlled cohorts have independently timed parent calls
+paired by call index, agent and event, excluding warm-up. Values below are p95 ms;
+the80ms column is a shadow of the same calls, not a new80ms activation.
+
+| Controlled activation | Calls | Independent full wall | Guard30ms | Shadow80ms |
+|---|---:|---:|---:|---:|
+| 20261027T171704Z | 50 | 198.083 | 182.573 | 232.573 |
+| 20261027T212724Z | 50 | 87.678 | 104.348 | 154.348 |
+| 20261027T221607Z | 50 | 143.946 | 146.572 | 196.572 |
+
+The30ms sample under-counted the first cohort's p95; the80ms shadow covers all
+three observed controlled cohorts. Independent parent wall times were **not
+recorded for organic cohorts**. Their80ms projections do not establish organic
+p95 coverage. The evidence JSON records those missing values explicitly as null;
+no "never under-counts live latency" claim is made. The600-call hosted validation
+observed full-wall p95=73.982ms and adjusted p95=144.902ms; that result likewise
+applies to its measured fixture cohorts only.

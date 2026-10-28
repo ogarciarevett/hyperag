@@ -237,11 +237,12 @@ class AsyncHooks(unittest.TestCase):
             read_times.append(elapsed * 1000)
         self.hook();self.wait_for(lambda: self.status().get("stored") == 1)
         write_times = []
-        for _ in range(20):
+        for completed in range(2, 22):
             result, elapsed = self.hook()
             self.assertEqual(result.stderr, "")
             write_times.append(elapsed * 1000)
-        self.wait_for(lambda: self.status().get("stored") == 21)
+            # Keep this latency sample independent of the preceding delivery.
+            self.wait_for(lambda: self.status().get("stored") == completed)
         for cohort, samples in [("session-start", read_times), ("prompt", write_times)]:
             values = sorted(samples)
             p95 = values[math.ceil(.95 * len(values)) - 1]
