@@ -503,7 +503,7 @@ async fn scope_filter_fixture(store: Store) -> anyhow::Result<()> {
     write(&store, "insert into memories(id,scope,kind,created_by,current_version) values
         ('a','allowed-a','fact','fixture',1),('b','allowed-b','fact','fixture',1),('c','private','fact','fixture',1);
         insert into memory_versions(memory_id,version,text,source,author,content_hash) values
-        ('a',1,'alpha 2024','fixture','fixture','a'),('b',1,'alpha 2024','fixture','fixture','b'),('c',1,'alpha 2024','fixture','fixture','c')").await?;
+        ('a',1,'alpha 2024-05-20','fixture','fixture','a'),('b',1,'alpha 2024-05-20','fixture','fixture','b'),('c',1,'alpha 2024-05-20','fixture','fixture','c')").await?;
     store.grant("reader", "allowed-a", "read", "fixture").await?;
     store.grant("reader", "allowed-b", "read", "fixture").await?;
     store.put_vectors(&space, &[("a".into(),1,vec![1.0,0.0,0.0]),("b".into(),1,vec![1.0,0.0,0.0]),("c".into(),1,vec![1.0,0.0,0.0])]).await?;
@@ -533,10 +533,10 @@ async fn scope_filter_fixture(store: Store) -> anyhow::Result<()> {
         write(&store, "insert into memories(id,scope,kind,created_by,current_version) values ('d','allowed-a','fact','fixture',1);
             insert into memory_versions(memory_id,version,text,source,author,content_hash) values ('d',1,'connected','fixture','fixture','d')").await?;
         let channels = Some(Channels { graph: Some(true), temporal: Some(true), rerank: Some(false), ..Default::default() });
-        let all = core.retrieve("reader", "alpha 2024", &RetrieveOptions { channels: channels.clone(), ..Default::default() }).await?;
+        let all = core.retrieve("reader", "alpha 2024-05-20", &RetrieveOptions { channels: channels.clone(), ..Default::default() }).await?;
         assert!(all.items.iter().any(|i| i.memory.id == "d" && i.channels.contains_key("graph")));
         assert!(all.items.iter().any(|i| i.memory.id == "b" && i.channels.contains_key("temporal")));
-        let filtered = core.retrieve("reader", "alpha 2024", &RetrieveOptions { channels, exclude_scopes: Some(vec!["allowed-b".into()]), ..Default::default() }).await?;
+        let filtered = core.retrieve("reader", "alpha 2024-05-20", &RetrieveOptions { channels, exclude_scopes: Some(vec!["allowed-b".into()]), ..Default::default() }).await?;
         assert_eq!(ids(&filtered), vec!["a"]);
         assert!(filtered.items[0].channels.contains_key("temporal"));
         assert!(!filtered.items[0].channels.contains_key("graph"));
