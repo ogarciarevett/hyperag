@@ -2,9 +2,10 @@ import { afterAll,beforeAll,expect,test } from "bun:test";
 import { existsSync, readFileSync } from "node:fs";
 import { Pool } from "pg";
 import { freshDatabase } from "./helpers";
+import { extractRankable } from "./rust-sql";
 
 const code=readFileSync(new URL("../crates/hyperag/src/store.rs",import.meta.url),"utf8");
-const rankable=code.match(/const RANKABLE: &str = "([\s\S]*?)";/)![1]!;
+const rankable = extractRankable(code);
 const expand=(s:string)=>s.replaceAll("{RANKABLE}",rankable).replaceAll("{BM25_K1}","1.2").replaceAll("{BM25_B}","0.75");
 const legacy=expand(code.match(/fn bm25_sql\(\) -> String \{\s*format!\(\s*"([\s\S]*?)"\s*\)/)![1]!);
 const template=code.match(/const INDEXED_BM25_SQL: &str = r#"([\s\S]*?)"#;/)?.[1];

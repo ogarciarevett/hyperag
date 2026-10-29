@@ -17,6 +17,7 @@
   },
   "scripts": {
     "test": "bun test",
+    "test:db-free": "bun test test/readme-pool.test.ts test/rust-sql.test.ts scripts/*.test.ts eval/public/conversation-graph.test.ts eval/public/dates.test.ts eval/public/gpu-proxy.test.ts eval/public/memory-batches.test.ts eval/public/systems/*.test.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "build": "tsc -p tsconfig.build.json",
     "prepare": "tsc -p tsconfig.build.json",

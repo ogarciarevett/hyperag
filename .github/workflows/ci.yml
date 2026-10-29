@@ -36,6 +36,8 @@ jobs:
       - run: bun install --frozen-lockfile
       - run: bunx tsc --noEmit -p tsconfig.json
       - run: bun run build
+      - name: DB-free TypeScript regression suite
+        run: bun run test:db-free
       - run: node scripts/package-smoke.mjs . "$(npm pack --ignore-scripts --silent)"
       - name: git dependency install in a scratch consumer
         run: |
@@ -75,8 +77,6 @@ jobs:
             sleep 2
           done
           echo "neo4j did not accept queries" && exit 1
-      - name: README pool disconnect lifecycle regression
-        run: bun test test/readme-pool.test.ts
       - name: runnable README modules against temporary services
         run: bun examples/readme/run.ts
       - run: bun test --timeout 180000

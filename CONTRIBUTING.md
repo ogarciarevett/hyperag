@@ -28,3 +28,5 @@ Before publishing or editing a PR body, validate the draft against the current h
 Before pushing changes to the runnable README fixture or its database cleanup, run `bun test test/readme-pool.test.ts` and `bun examples/readme/run.ts` against the isolated local stack. Require both the example assertions and process exit status to pass; force-dropping a fixture database before all client disconnect events complete can fail after assertions print PASS.
 
 New commits must use the owner's GitHub noreply identity in repository-local Git configuration. Before pushing, audit both author and committer metadata and any message trailers for the newly authored commit range; do not rewrite historical feature commits as a metadata cleanup shortcut.
+
+Before pushing source or formatting changes, run `bun run test:db-free` as well as the relevant language checks. This service-free TypeScript suite includes temporary SQLite fixtures and loopback HTTP mocks; maintain its file list when adding tests. SQL fixture extraction must tolerate Rust formatter whitespace while preserving SQL literal bytes.
