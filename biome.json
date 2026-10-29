@@ -1,0 +1,13 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.6.4/schema.json",
+  "formatter": { "enabled": false },
+  "assist": { "enabled": false },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "preset": "none",
+      "style": { "noNestedTernary": "error" }
+    }
+  },
+  "files": { "includes": ["src/**", "test/**"] }
+}
