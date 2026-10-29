@@ -5,7 +5,7 @@ use serde_json::{Map, Value};
 /// null and empty names must fail rather than silently widening the readable scope set.
 pub(crate) fn deserialize_scope_list<'de, D: serde::Deserializer<'de>>(
     d: D,
-) -> Result<Option<Vec<String>>, D::Error> {
+) -> std::result::Result<Option<Vec<String>>, D::Error> {
     let scopes = Vec::<String>::deserialize(d)?;
     if scopes.iter().any(|scope| scope.is_empty()) {
         return Err(serde::de::Error::custom("scope names must not be empty"));
