@@ -18,13 +18,14 @@ macro_rules! sql {
     ($($t:tt)*) => { sqlx::AssertSqlSafe(format!($($t)*)) };
 }
 
-const MIGRATIONS: [&str; 6] = [
+const MIGRATIONS: [&str; 7] = [
     include_str!("../migrations/0001_init.sql"),
     include_str!("../migrations/0002_settings.sql"),
     include_str!("../migrations/0003_memory_text_limit.sql"),
     include_str!("../migrations/0004_lexical_cache.sql"),
     include_str!("../migrations/0005_lexical_postings.sql"),
     include_str!("../migrations/0006_lexical_index_outbox.sql"),
+    include_str!("../migrations/0007_lexical_term_stats_lexeme_index.sql"),
 ];
 
 // Legacy corpus BM25 remains available for runtime comparison and rollback.
@@ -89,11 +90,10 @@ df as (
    group by s.lexeme
 ),
 postings as (
-  select d.memory_id,d.version,extract(epoch from d.recorded_at)::float8 as at,
-         d.doc_len::float8 as dl,p.lexeme,p.tf::float8 as tf
+  select d.posting_id,d.doc_len::float8 as dl,p.lexeme,p.tf::float8 as tf
     from terms t join lexical_postings p using(lexeme)
     cross join lateral (
-      select memory_id,version,recorded_at,doc_len from lexical_documents d
+      select posting_id,doc_len from lexical_documents d
        where d.posting_id=p.posting_id and d.scope=p.scope and d.scope=any($1::text[])
          and d.version=d.current_version and d.status='active'
          and ($2::timestamptz is null or (d.valid_from <= $2 and d.valid_to > $2))
@@ -101,14 +101,20 @@ postings as (
     ) d
    where (select ok from ready) and p.scope=any($1::text[])
 ),
-indexed_result as (
-  select p.memory_id as id,p.at,
+-- Scores are grouped by the narrow numeric posting id, so the ordered aggregate sorts small rows;
+-- the per-term sum order stays fixed by lexeme, so scores are identical to the wide grouping.
+scored as (
+  select p.posting_id,
          sum(ln(1 + (st.n - df.df + 0.5) / (df.df + 0.5)) * (p.tf * ({BM25_K1} + 1))
              / (p.tf + {BM25_K1} * (1 - {BM25_B} + {BM25_B} * p.dl / greatest(st.avgdl, 1)))
              order by p.lexeme collate "C") as score
     from postings p join df using(lexeme) cross join stats st
-   group by p.memory_id,p.version,p.at
-   order by score desc,p.at desc,p.memory_id limit $4
+   group by p.posting_id
+),
+indexed_result as (
+  select d.memory_id as id,extract(epoch from d.recorded_at)::float8 as at,s.score
+    from scored s join lexical_documents d using(posting_id)
+   order by s.score desc,at desc,id limit $4
 ),
 legacy_result as (
   select l.* from ({legacy}) l where not (select ok from ready)
