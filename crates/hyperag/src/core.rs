@@ -12,9 +12,14 @@ use tokio::sync::RwLock;
 
 use crate::graph::Graph;
 use crate::models::{Embedder, Reranker};
-use crate::store::{CreateInput, History, Store, VectorRow, VersionInput, identity_hash, parse_time, space_id, version_hash};
+use crate::store::{
+    CreateInput, History, Store, VectorRow, VersionInput, identity_hash, parse_time, space_id,
+    version_hash,
+};
 use crate::temporal;
-use crate::types::{Error, Hit, Memory, MemoryUpdate, NewMemory, Relation, Result, WriteResult, not_found};
+use crate::types::{
+    Error, Hit, Memory, MemoryUpdate, NewMemory, Relation, Result, WriteResult, not_found,
+};
 
 #[derive(Clone, Debug, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -65,26 +70,50 @@ pub struct RetrievedItem {
     pub dates: Option<String>,
 }
 
-
 /// Cross-encode a bounded prefix after fusion; channel recall and the loaded pool stay unchanged.
-fn rerank_input(items: &[RetrievedItem], requested: Option<usize>, configured: Option<&str>) -> Result<Vec<String>> {
+fn rerank_input(
+    items: &[RetrievedItem],
+    requested: Option<usize>,
+    configured: Option<&str>,
+) -> Result<Vec<String>> {
     let count = match requested {
         Some(n) if (1..=150).contains(&n) => n,
-        Some(_) => return Err(Error::InvalidInput("rerankCandidates must be an integer from 1 to 150".into())),
+        Some(_) => {
+            return Err(Error::InvalidInput(
+                "rerankCandidates must be an integer from 1 to 150".into(),
+            ));
+        }
         None => match configured {
             None => items.len(),
-            Some(value) => value.parse::<usize>().ok().filter(|n| (1..=150).contains(n))
-                .ok_or_else(|| Error::InvalidInput("HYPERAG_RERANK_CANDIDATES must be an integer from 1 to 150".into()))?,
+            Some(value) => value
+                .parse::<usize>()
+                .ok()
+                .filter(|n| (1..=150).contains(n))
+                .ok_or_else(|| {
+                    Error::InvalidInput(
+                        "HYPERAG_RERANK_CANDIDATES must be an integer from 1 to 150".into(),
+                    )
+                })?,
         },
     };
-    Ok(items.iter().take(count).map(|i| i.memory.text.clone()).collect())
+    Ok(items
+        .iter()
+        .take(count)
+        .map(|i| i.memory.text.clone())
+        .collect())
 }
 
 fn apply_rerank_scores(items: &mut [RetrievedItem], scores: &[f32]) {
     let count = items.len().min(scores.len());
-    for (item, score) in items[..count].iter_mut().zip(scores) { item.rerank_score = Some(*score); }
+    for (item, score) in items[..count].iter_mut().zip(scores) {
+        item.rerank_score = Some(*score);
+    }
     // Unscored rows must retain fused order, including when all scored logits are negative.
-    items[..count].sort_by(|a, b| b.rerank_score.unwrap_or(0.0).total_cmp(&a.rerank_score.unwrap_or(0.0)));
+    items[..count].sort_by(|a, b| {
+        b.rerank_score
+            .unwrap_or(0.0)
+            .total_cmp(&a.rerank_score.unwrap_or(0.0))
+    });
 }
 
 pub const DEFAULT_RERANK_CACHE_SIZE: usize = 256;
@@ -100,21 +129,40 @@ pub fn parse_rerank_cache(configured: Option<&str>) -> Result<usize> {
     match configured.map(str::trim).filter(|v| !v.is_empty()) {
         None | Some("0" | "false" | "off" | "none") => Ok(0),
         Some("true" | "on") => Ok(DEFAULT_RERANK_CACHE_SIZE),
-        Some(v) => v.parse::<usize>().ok().filter(|&n| (1..=65_536).contains(&n))
-            .ok_or_else(|| Error::InvalidInput("HYPERAG_RERANK_CACHE must be false, true or an integer from 0 to 65536".into())),
+        Some(v) => v
+            .parse::<usize>()
+            .ok()
+            .filter(|&n| (1..=65_536).contains(&n))
+            .ok_or_else(|| {
+                Error::InvalidInput(
+                    "HYPERAG_RERANK_CACHE must be false, true or an integer from 0 to 65536".into(),
+                )
+            }),
     }
 }
 
 #[derive(Clone, Debug)]
-struct RerankCacheEntry { key: String, candidates: Vec<(String, i32)>, scores: Vec<f32> }
+struct RerankCacheEntry {
+    key: String,
+    candidates: Vec<(String, i32)>,
+    scores: Vec<f32>,
+}
 
 impl RerankCacheEntry {
     fn retained_bytes(&self) -> usize {
         self.candidates.iter().fold(
             std::mem::size_of::<Self>()
                 .saturating_add(self.key.capacity())
-                .saturating_add(self.candidates.capacity().saturating_mul(std::mem::size_of::<(String, i32)>()))
-                .saturating_add(self.scores.capacity().saturating_mul(std::mem::size_of::<f32>())),
+                .saturating_add(
+                    self.candidates
+                        .capacity()
+                        .saturating_mul(std::mem::size_of::<(String, i32)>()),
+                )
+                .saturating_add(
+                    self.scores
+                        .capacity()
+                        .saturating_mul(std::mem::size_of::<f32>()),
+                ),
             |bytes, (id, _)| bytes.saturating_add(id.capacity()),
         )
     }
@@ -122,45 +170,106 @@ impl RerankCacheEntry {
 
 /// LRU bounded by entry count and 8 MiB of retained storage, off when capacity is zero.
 #[derive(Debug, Default)]
-pub struct RerankCache { capacity: usize, entries: Mutex<VecDeque<RerankCacheEntry>> }
+pub struct RerankCache {
+    capacity: usize,
+    entries: Mutex<VecDeque<RerankCacheEntry>>,
+}
 
 impl RerankCache {
-    pub fn new(capacity: usize) -> Self { Self { capacity, entries: Mutex::new(VecDeque::new()) } }
-    pub fn capacity(&self) -> usize { self.capacity }
-    pub fn len(&self) -> usize { self.entries.lock().expect("rerank cache lock").len() }
-    pub fn is_empty(&self) -> bool { self.len() == 0 }
-    pub fn retained_bytes(&self) -> usize {
-        self.entries.lock().expect("rerank cache lock").iter().map(RerankCacheEntry::retained_bytes).sum()
+    pub fn new(capacity: usize) -> Self {
+        Self {
+            capacity,
+            entries: Mutex::new(VecDeque::new()),
+        }
     }
-    pub fn clear(&self) { self.entries.lock().expect("rerank cache lock").clear(); }
+    pub fn capacity(&self) -> usize {
+        self.capacity
+    }
+    pub fn len(&self) -> usize {
+        self.entries.lock().expect("rerank cache lock").len()
+    }
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+    pub fn retained_bytes(&self) -> usize {
+        self.entries
+            .lock()
+            .expect("rerank cache lock")
+            .iter()
+            .map(RerankCacheEntry::retained_bytes)
+            .sum()
+    }
+    pub fn clear(&self) {
+        self.entries.lock().expect("rerank cache lock").clear();
+    }
     pub fn invalidate(&self, id: &str, current_version: Option<i32>) {
-        if self.capacity == 0 { return; }
+        if self.capacity == 0 {
+            return;
+        }
         self.entries.lock().expect("rerank cache lock").retain(|e| {
-            !e.candidates.iter().any(|(cid, ver)| cid == id && current_version.is_none_or(|cur| *ver != cur))
+            !e.candidates
+                .iter()
+                .any(|(cid, ver)| cid == id && current_version.is_none_or(|cur| *ver != cur))
         });
     }
-    pub fn get(&self, model_id: &str, query: &str, candidates: &[(String, i32)]) -> Option<Vec<f32>> {
-        if self.capacity == 0 { return None; }
+    pub fn get(
+        &self,
+        model_id: &str,
+        query: &str,
+        candidates: &[(String, i32)],
+    ) -> Option<Vec<f32>> {
+        if self.capacity == 0 {
+            return None;
+        }
         let key = rerank_cache_key(model_id, query, candidates);
         let mut entries = self.entries.lock().expect("rerank cache lock");
-        entries.retain(|e| !e.candidates.iter().any(|(cid, ver)| candidates.iter().any(|(id, cur)| id == cid && cur != ver)));
+        entries.retain(|e| {
+            !e.candidates
+                .iter()
+                .any(|(cid, ver)| candidates.iter().any(|(id, cur)| id == cid && cur != ver))
+        });
         let idx = entries.iter().position(|e| e.key == key)?;
         let entry = entries.remove(idx).expect("indexed entry");
         let scores = entry.scores.clone();
         entries.push_back(entry);
         Some(scores)
     }
-    pub fn put(&self, model_id: &str, query: &str, candidates: Vec<(String, i32)>, scores: Vec<f32>) {
-        if self.capacity == 0 { return; }
+    pub fn put(
+        &self,
+        model_id: &str,
+        query: &str,
+        candidates: Vec<(String, i32)>,
+        scores: Vec<f32>,
+    ) {
+        if self.capacity == 0 {
+            return;
+        }
         let key = rerank_cache_key(model_id, query, &candidates);
-        let entry = RerankCacheEntry { key, candidates, scores };
+        let entry = RerankCacheEntry {
+            key,
+            candidates,
+            scores,
+        };
         let bytes = entry.retained_bytes();
-        if bytes > MAX_RERANK_CACHE_BYTES { return; }
+        if bytes > MAX_RERANK_CACHE_BYTES {
+            return;
+        }
         let mut entries = self.entries.lock().expect("rerank cache lock");
-        entries.retain(|e| e.key != entry.key && !e.candidates.iter().any(|(cid, ver)| entry.candidates.iter().any(|(id, cur)| id == cid && cur != ver)));
+        entries.retain(|e| {
+            e.key != entry.key
+                && !e.candidates.iter().any(|(cid, ver)| {
+                    entry
+                        .candidates
+                        .iter()
+                        .any(|(id, cur)| id == cid && cur != ver)
+                })
+        });
         let mut retained: usize = entries.iter().map(RerankCacheEntry::retained_bytes).sum();
         while entries.len() >= self.capacity || retained + bytes > MAX_RERANK_CACHE_BYTES {
-            retained -= entries.pop_front().expect("nonempty over-budget cache").retained_bytes();
+            retained -= entries
+                .pop_front()
+                .expect("nonempty over-budget cache")
+                .retained_bytes();
         }
         entries.push_back(entry);
     }
@@ -181,7 +290,6 @@ pub struct Retrieval {
     pub timings_ms: Option<StageTimings>,
 }
 
-
 /// Wall time in the serial retrieval stages, including dependency/model queue waits.
 #[derive(Clone, Debug, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -199,28 +307,56 @@ pub struct StageTimings {
 impl StageTimings {
     fn finish(&mut self, started: Instant) {
         self.total = started.elapsed().as_secs_f64() * 1000.0;
-        self.other = (self.total - self.embedding - self.lexical - self.vector - self.graph
-            - self.fusion - self.rerank - self.payload_load).max(0.0);
+        self.other = (self.total
+            - self.embedding
+            - self.lexical
+            - self.vector
+            - self.graph
+            - self.fusion
+            - self.rerank
+            - self.payload_load)
+            .max(0.0);
     }
 }
-enum Stage { Embedding, Lexical, Vector, Graph, Fusion, Rerank, PayloadLoad }
+enum Stage {
+    Embedding,
+    Lexical,
+    Vector,
+    Graph,
+    Fusion,
+    Rerank,
+    PayloadLoad,
+}
 fn record(timings: &mut Option<StageTimings>, stage: Stage, started: Option<Instant>) {
-    let (Some(t), Some(started)) = (timings, started) else { return };
+    let (Some(t), Some(started)) = (timings, started) else {
+        return;
+    };
     let slot = match stage {
-        Stage::Embedding => &mut t.embedding, Stage::Lexical => &mut t.lexical,
-        Stage::Vector => &mut t.vector, Stage::Graph => &mut t.graph,
-        Stage::Fusion => &mut t.fusion, Stage::Rerank => &mut t.rerank,
+        Stage::Embedding => &mut t.embedding,
+        Stage::Lexical => &mut t.lexical,
+        Stage::Vector => &mut t.vector,
+        Stage::Graph => &mut t.graph,
+        Stage::Fusion => &mut t.fusion,
+        Stage::Rerank => &mut t.rerank,
         Stage::PayloadLoad => &mut t.payload_load,
     };
     *slot += started.elapsed().as_secs_f64() * 1000.0;
 }
-async fn timed<T>(timings: &mut Option<StageTimings>, stage: Stage, operation: impl std::future::Future<Output = Result<T>>) -> Result<T> {
+async fn timed<T>(
+    timings: &mut Option<StageTimings>,
+    stage: Stage,
+    operation: impl std::future::Future<Output = Result<T>>,
+) -> Result<T> {
     let started = timings.as_ref().map(|_| Instant::now());
     let result = operation.await;
     record(timings, stage, started);
     result
 }
-fn measured<T>(timings: &mut Option<StageTimings>, stage: Stage, operation: impl FnOnce() -> T) -> T {
+fn measured<T>(
+    timings: &mut Option<StageTimings>,
+    stage: Stage,
+    operation: impl FnOnce() -> T,
+) -> T {
     let started = timings.as_ref().map(|_| Instant::now());
     let result = operation();
     record(timings, stage, started);
@@ -291,7 +427,17 @@ pub struct Config {
 
 impl Config {
     pub fn new(store: Store) -> Self {
-        Config { store, graph: None, embedder: None, reranker: None, admins: vec![], rrf_k: 60.0, min_rerank_score: 0.0, min_vector_score: 0.82, rerank_cache: None }
+        Config {
+            store,
+            graph: None,
+            embedder: None,
+            reranker: None,
+            admins: vec![],
+            rrf_k: 60.0,
+            min_rerank_score: 0.0,
+            min_vector_score: 0.82,
+            rerank_cache: None,
+        }
     }
 }
 
@@ -315,14 +461,26 @@ pub fn fuse(lists: &[&Vec<Hit>], k: f64) -> Vec<Hit> {
         for (index, hit) in list.iter().enumerate() {
             let entry = scores.entry(hit.id.clone()).or_insert_with(|| {
                 order.push(hit.id.clone());
-                Hit { id: hit.id.clone(), score: 0.0, at: 0.0 }
+                Hit {
+                    id: hit.id.clone(),
+                    score: 0.0,
+                    at: 0.0,
+                }
             });
             entry.score += 1.0 / (k + index as f64 + 1.0);
             entry.at = entry.at.max(hit.at);
         }
     }
-    let mut fused: Vec<Hit> = order.into_iter().filter_map(|id| scores.remove(&id)).collect();
-    fused.sort_by(|a, b| b.score.total_cmp(&a.score).then(b.at.total_cmp(&a.at)).then(a.id.cmp(&b.id)));
+    let mut fused: Vec<Hit> = order
+        .into_iter()
+        .filter_map(|id| scores.remove(&id))
+        .collect();
+    fused.sort_by(|a, b| {
+        b.score
+            .total_cmp(&a.score)
+            .then(b.at.total_cmp(&a.at))
+            .then(a.id.cmp(&b.id))
+    });
     fused
 }
 
@@ -337,13 +495,22 @@ pub fn build_context(retrieval: Retrieval, max_tokens: usize) -> Context {
     if retrieval.insufficient_evidence {
         let note = "No sufficient evidence was found for this question.".to_owned();
         let dropped = retrieval.items.len();
-        return Context { tokens: estimate_tokens(&note), text: note, citations: vec![], dropped, retrieval };
+        return Context {
+            tokens: estimate_tokens(&note),
+            text: note,
+            citations: vec![],
+            dropped,
+            retrieval,
+        };
     }
     let (mut parts, mut citations, mut tokens) = (vec![], vec![], 0);
     for item in &retrieval.items {
         let n = citations.len() + 1;
         let m = &item.memory;
-        let mut part = format!("[{n}] ({}, {}, v{}) {}", m.source, m.author, m.version, m.text);
+        let mut part = format!(
+            "[{n}] ({}, {}, v{}) {}",
+            m.source, m.author, m.version, m.text
+        );
         if let Some(d) = &item.dates {
             part.push_str(&format!(" [{d}]"));
         }
@@ -353,10 +520,23 @@ pub fn build_context(retrieval: Retrieval, max_tokens: usize) -> Context {
         }
         tokens += cost;
         parts.push(part);
-        citations.push(Citation { n, memory_id: m.id.clone(), version: m.version, source: m.source.clone(), author: m.author.clone(), scope: m.scope.clone() });
+        citations.push(Citation {
+            n,
+            memory_id: m.id.clone(),
+            version: m.version,
+            source: m.source.clone(),
+            author: m.author.clone(),
+            scope: m.scope.clone(),
+        });
     }
     let dropped = retrieval.items.len() - citations.len();
-    Context { text: parts.join("\n"), citations, tokens, dropped, retrieval }
+    Context {
+        text: parts.join("\n"),
+        citations,
+        tokens,
+        dropped,
+        retrieval,
+    }
 }
 
 fn refs<'a>(ls: &'a [(&str, Vec<Hit>)]) -> Vec<&'a Vec<Hit>> {
@@ -376,8 +556,14 @@ fn valid_new(input: &NewMemory) -> Result<()> {
     if input.text.trim().is_empty() {
         return Err(Error::InvalidInput("text is empty".into()));
     }
-    if input.id.as_deref().is_some_and(|id| id.is_empty() || id.contains('/')) {
-        return Err(Error::InvalidInput("an explicit id is non-empty and has no '/'".into()));
+    if input
+        .id
+        .as_deref()
+        .is_some_and(|id| id.is_empty() || id.contains('/'))
+    {
+        return Err(Error::InvalidInput(
+            "an explicit id is non-empty and has no '/'".into(),
+        ));
     }
     valid_dates(&input.valid_from, &input.valid_to)
 }
@@ -404,7 +590,11 @@ impl Hyperag {
                 }
                 let texts: Vec<String> = rows.iter().map(|r| r.2.clone()).collect();
                 let vectors = e.embed_documents(&texts).await?;
-                let put: Vec<(String, i32, Vec<f32>)> = rows.into_iter().zip(vectors).map(|((id, v, _), vec)| (id, v, vec)).collect();
+                let put: Vec<(String, i32, Vec<f32>)> = rows
+                    .into_iter()
+                    .zip(vectors)
+                    .map(|((id, v, _), vec)| (id, v, vec))
+                    .collect();
                 config.store.put_vectors(space, &put).await?;
             }
         }
@@ -415,7 +605,10 @@ impl Hyperag {
             Some(0) => 0,
             Some(size) => parse_rerank_cache(Some(&size.to_string()))?,
             None => {
-                let raw = match std::env::var("HYPERAG_RERANK_CACHE").ok().filter(|v| !v.is_empty()) {
+                let raw = match std::env::var("HYPERAG_RERANK_CACHE")
+                    .ok()
+                    .filter(|v| !v.is_empty())
+                {
                     Some(v) => Some(v),
                     None => config.store.setting("rerank_cache").await?,
                 };
@@ -426,7 +619,11 @@ impl Hyperag {
             store: config.store,
             graph: config.graph,
             rerank_cache: RerankCache::new(cache_size),
-            models: RwLock::new(Models { embedder: config.embedder.map(Arc::new), reranker: config.reranker.map(Arc::new), space }),
+            models: RwLock::new(Models {
+                embedder: config.embedder.map(Arc::new),
+                reranker: config.reranker.map(Arc::new),
+                space,
+            }),
             admins: config.admins,
             rrf_k: config.rrf_k,
             min_rerank_score: config.min_rerank_score,
@@ -438,25 +635,47 @@ impl Hyperag {
         if self.admins.iter().any(|a| a == actor) {
             Ok(())
         } else {
-            Err(Error::Forbidden("only an admin manages grants and models".into()))
+            Err(Error::Forbidden(
+                "only an admin manages grants and models".into(),
+            ))
         }
     }
 
-    pub async fn grant(&self, admin: &str, principal: &str, scope: &str, permission: &str) -> Result<()> {
+    pub async fn grant(
+        &self,
+        admin: &str,
+        principal: &str,
+        scope: &str,
+        permission: &str,
+    ) -> Result<()> {
         self.must_admin(admin)?;
         self.store.grant(principal, scope, permission, admin).await
     }
 
-    pub async fn revoke(&self, admin: &str, principal: &str, scope: &str, permission: &str) -> Result<()> {
+    pub async fn revoke(
+        &self,
+        admin: &str,
+        principal: &str,
+        scope: &str,
+        permission: &str,
+    ) -> Result<()> {
         self.must_admin(admin)?;
         self.store.revoke(principal, scope, permission, admin).await
     }
 
     async fn must_write(&self, principal: &str, scope: &str) -> Result<()> {
-        if self.store.scopes(principal, "write").await?.iter().any(|s| s == scope) {
+        if self
+            .store
+            .scopes(principal, "write")
+            .await?
+            .iter()
+            .any(|s| s == scope)
+        {
             Ok(())
         } else {
-            Err(Error::Forbidden(format!("no write access to scope {scope}")))
+            Err(Error::Forbidden(format!(
+                "no write access to scope {scope}"
+            )))
         }
     }
 
@@ -478,24 +697,43 @@ impl Hyperag {
     /// Callers hold the models read lock across embedding and the write, so a model switch (which
     /// takes the write lock for its last catch-up pass) never misses a memory written meanwhile.
     async fn vectors_of(models: &Models, texts: &[String]) -> Result<Option<Vec<VectorRow>>> {
-        let (Some(e), Some(space)) = (&models.embedder, &models.space) else { return Ok(None) };
+        let (Some(e), Some(space)) = (&models.embedder, &models.space) else {
+            return Ok(None);
+        };
         if &space_id(e.describe()) != space {
-            return Err(Error::EmbeddingSpaceMismatch("embedder changed after init".into()));
+            return Err(Error::EmbeddingSpaceMismatch(
+                "embedder changed after init".into(),
+            ));
         }
         let vectors = e.embed_documents(texts).await?;
-        Ok(Some(vectors.into_iter().map(|values| VectorRow { space: space.clone(), values }).collect()))
+        Ok(Some(
+            vectors
+                .into_iter()
+                .map(|values| VectorRow {
+                    space: space.clone(),
+                    values,
+                })
+                .collect(),
+        ))
     }
 
     pub async fn ingest(&self, principal: &str, input: NewMemory) -> Result<WriteResult> {
         valid_new(&input)?;
         self.must_write(principal, &input.scope).await?;
         let models = self.models.read().await;
-        let vector = Self::vectors_of(&models, std::slice::from_ref(&input.text)).await?.and_then(|mut v| v.pop());
+        let vector = Self::vectors_of(&models, std::slice::from_ref(&input.text))
+            .await?
+            .and_then(|mut v| v.pop());
         self.ingest_with(principal, input, vector).await
     }
 
     /// Many memories with one embedding call per batch; same checks and result as `ingest` each.
-    pub async fn ingest_many(&self, principal: &str, inputs: Vec<NewMemory>, batch: usize) -> Result<Vec<WriteResult>> {
+    pub async fn ingest_many(
+        &self,
+        principal: &str,
+        inputs: Vec<NewMemory>,
+        batch: usize,
+    ) -> Result<Vec<WriteResult>> {
         for i in &inputs {
             valid_new(i)?;
         }
@@ -511,7 +749,9 @@ impl Hyperag {
         while inputs.peek().is_some() {
             let chunk: Vec<NewMemory> = inputs.by_ref().take(batch.max(1)).collect();
             let texts: Vec<String> = chunk.iter().map(|c| c.text.clone()).collect();
-            let mut vectors = Self::vectors_of(&models, &texts).await?.map(|v| v.into_iter());
+            let mut vectors = Self::vectors_of(&models, &texts)
+                .await?
+                .map(|v| v.into_iter());
             for input in chunk {
                 let vector = vectors.as_mut().and_then(|v| v.next());
                 results.push(self.ingest_with(principal, input, vector).await?);
@@ -520,14 +760,22 @@ impl Hyperag {
         Ok(results)
     }
 
-    async fn ingest_with(&self, principal: &str, input: NewMemory, vector: Option<VectorRow>) -> Result<WriteResult> {
+    async fn ingest_with(
+        &self,
+        principal: &str,
+        input: NewMemory,
+        vector: Option<VectorRow>,
+    ) -> Result<WriteResult> {
         let mut old_scopes = vec![];
         for old in &input.supersedes {
             old_scopes.push(self.writable_scope_of(principal, old).await?);
         }
         // An explicit id is namespaced by its scope, so a colliding id never reveals another scope's memory.
         let id = match &input.id {
-            None => format!("m_{}", identity_hash(&input.scope, &input.source, &input.text)),
+            None => format!(
+                "m_{}",
+                identity_hash(&input.scope, &input.source, &input.text)
+            ),
             Some(given) => format!("{}/{given}", input.scope),
         };
         let version = VersionInput {
@@ -539,32 +787,77 @@ impl Hyperag {
         };
         let hash = version_hash(&input.scope, &version);
         let kind = input.kind.clone().unwrap_or_else(|| "document".into());
-        let create = CreateInput { id: &id, scope: &input.scope, kind: &kind, supersedes: &input.supersedes, idempotency_key: &input.idempotency_key, version };
-        let result = self.store.create(principal, &create, &hash, vector.as_ref()).await?;
+        let create = CreateInput {
+            id: &id,
+            scope: &input.scope,
+            kind: &kind,
+            supersedes: &input.supersedes,
+            idempotency_key: &input.idempotency_key,
+            version,
+        };
+        let result = self
+            .store
+            .create(principal, &create, &hash, vector.as_ref())
+            .await?;
         for old in &input.supersedes {
             self.rerank_cache.invalidate(old, None);
         }
         // Graph writes are MERGEs, so they also run on a replay: a retry repairs a graph write that
         // failed. A replay of a memory deleted since then writes nothing.
-        let live = result.created || self.store.scope_of(std::slice::from_ref(&result.id)).await?.contains_key(&result.id);
+        let live = result.created
+            || self
+                .store
+                .scope_of(std::slice::from_ref(&result.id))
+                .await?
+                .contains_key(&result.id);
         if let (Some(g), true) = (&self.graph, live) {
             g.upsert_memory(&result.id, &input.scope).await?;
             for (old, old_scope) in input.supersedes.iter().zip(&old_scopes) {
-                let rel = Relation { from: result.id.clone(), to: old.clone(), kind: "SUPERSEDES".into(), created_by: principal.into(), created_at: now() };
+                let rel = Relation {
+                    from: result.id.clone(),
+                    to: old.clone(),
+                    kind: "SUPERSEDES".into(),
+                    created_by: principal.into(),
+                    created_at: now(),
+                };
                 g.relate(&rel, &input.scope, old_scope).await?;
             }
         }
         Ok(result)
     }
 
-    pub async fn update(&self, principal: &str, id: &str, input: MemoryUpdate) -> Result<WriteResult> {
+    pub async fn update(
+        &self,
+        principal: &str,
+        id: &str,
+        input: MemoryUpdate,
+    ) -> Result<WriteResult> {
         valid_dates(&input.valid_from, &input.valid_to)?;
         let scope = self.writable_scope_of(principal, id).await?;
         let models = self.models.read().await;
-        let vector = Self::vectors_of(&models, std::slice::from_ref(&input.text)).await?.and_then(|mut v| v.pop());
-        let version = VersionInput { text: input.text, source: input.source, valid_from: input.valid_from, valid_to: input.valid_to, metadata: input.metadata };
+        let vector = Self::vectors_of(&models, std::slice::from_ref(&input.text))
+            .await?
+            .and_then(|mut v| v.pop());
+        let version = VersionInput {
+            text: input.text,
+            source: input.source,
+            valid_from: input.valid_from,
+            valid_to: input.valid_to,
+            metadata: input.metadata,
+        };
         let hash = version_hash(&scope, &version);
-        let result = self.store.update(principal, id, &version, input.expected_version, &input.idempotency_key, &hash, vector.as_ref()).await?;
+        let result = self
+            .store
+            .update(
+                principal,
+                id,
+                &version,
+                input.expected_version,
+                &input.idempotency_key,
+                &hash,
+                vector.as_ref(),
+            )
+            .await?;
         self.rerank_cache.invalidate(id, Some(result.version));
         Ok(result)
     }
@@ -581,7 +874,13 @@ impl Hyperag {
     /// memory repeats only the graph step, so a retry finishes a graph delete that failed.
     pub async fn delete(&self, principal: &str, id: &str, reason: &str) -> Result<()> {
         if let Some(tomb) = self.store.history(id).await? {
-            if tomb.deleted.is_some() && self.store.scopes(principal, "write").await?.contains(&tomb.scope) {
+            if tomb.deleted.is_some()
+                && self
+                    .store
+                    .scopes(principal, "write")
+                    .await?
+                    .contains(&tomb.scope)
+            {
                 if let Some(g) = &self.graph {
                     g.delete_memory(id).await?;
                 }
@@ -599,90 +898,182 @@ impl Hyperag {
 
     /// A typed edge between two memories: write on the source's scope, read on the target's.
     pub async fn relate(&self, principal: &str, from: &str, to: &str, kind: &str) -> Result<()> {
-        let g = self.graph.as_ref().ok_or_else(|| Error::InvalidInput("no graph store configured".into()))?;
+        let g = self
+            .graph
+            .as_ref()
+            .ok_or_else(|| Error::InvalidInput("no graph store configured".into()))?;
         let valid = kind.len() <= 64
             && kind.chars().next().is_some_and(|c| c.is_ascii_uppercase())
-            && kind.chars().all(|c| c.is_ascii_uppercase() || c.is_ascii_digit() || c == '_');
+            && kind
+                .chars()
+                .all(|c| c.is_ascii_uppercase() || c.is_ascii_digit() || c == '_');
         if !valid {
-            return Err(Error::InvalidInput("relation type must be UPPER_SNAKE_CASE".into()));
+            return Err(Error::InvalidInput(
+                "relation type must be UPPER_SNAKE_CASE".into(),
+            ));
         }
         let from_scope = self.writable_scope_of(principal, from).await?;
         let to_scope = self.readable_scope_of(principal, to).await?;
-        let rel = Relation { from: from.into(), to: to.into(), kind: kind.into(), created_by: principal.into(), created_at: now() };
+        let rel = Relation {
+            from: from.into(),
+            to: to.into(),
+            kind: kind.into(),
+            created_by: principal.into(),
+            created_at: now(),
+        };
         g.relate(&rel, &from_scope, &to_scope).await
     }
 
     /// Edges whose both ends are readable and not deleted in Postgres, whatever the graph still holds.
     pub async fn relations(&self, principal: &str, id: &str) -> Result<Vec<Relation>> {
-        let g = self.graph.as_ref().ok_or_else(|| Error::InvalidInput("no graph store configured".into()))?;
+        let g = self
+            .graph
+            .as_ref()
+            .ok_or_else(|| Error::InvalidInput("no graph store configured".into()))?;
         let readable = self.store.scopes(principal, "read").await?;
         let rels = g.relations(id, &readable).await?;
-        let ends: Vec<String> = rels.iter().flat_map(|r| [r.from.clone(), r.to.clone()]).collect();
+        let ends: Vec<String> = rels
+            .iter()
+            .flat_map(|r| [r.from.clone(), r.to.clone()])
+            .collect();
         let live = self.store.scope_of(&ends).await?;
         let ok = |id: &str| live.get(id).is_some_and(|s| readable.contains(s));
-        Ok(rels.into_iter().filter(|r| ok(&r.from) && ok(&r.to)).collect())
+        Ok(rels
+            .into_iter()
+            .filter(|r| ok(&r.from) && ok(&r.to))
+            .collect())
     }
 
-    pub async fn retrieve(&self, principal: &str, query: &str, options: &RetrieveOptions) -> Result<Retrieval> {
+    pub async fn retrieve(
+        &self,
+        principal: &str,
+        query: &str,
+        options: &RetrieveOptions,
+    ) -> Result<Retrieval> {
         let mut timings = options.profile.unwrap_or(false).then(StageTimings::default);
         let started = timings.as_ref().map(|_| Instant::now());
         let limit = options.limit.unwrap_or(8);
         let candidates = options.candidates_per_channel.unwrap_or(24) as i64;
         let as_of = match &options.as_of {
             None => None,
-            Some(t) => Some(parse_time(t).ok_or_else(|| Error::InvalidInput(format!("not a date: {t}")))?),
+            Some(t) => {
+                Some(parse_time(t).ok_or_else(|| Error::InvalidInput(format!("not a date: {t}")))?)
+            }
         };
         let ch = options.channels.clone().unwrap_or_default();
         let on = |c: Option<bool>| c.unwrap_or(true);
         // Match the model switch's model-before-pool lock order.
         let models = self.models.read().await;
-        let mut lexical = if on(ch.bm25) && crate::store::LexicalScorer::selected()? == crate::store::LexicalScorer::Tantivy {
-            Some(timed(&mut timings, Stage::Lexical, crate::lexical_read::Read::open(&self.store.pool, principal, query, as_of)).await?)
-        } else { None };
-        let mut readable = match &lexical { Some(read) => read.scopes.clone(), None => self.store.scopes(principal, "read").await? };
+        let mut lexical = if on(ch.bm25)
+            && crate::store::LexicalScorer::selected()? == crate::store::LexicalScorer::Tantivy
+        {
+            Some(
+                timed(
+                    &mut timings,
+                    Stage::Lexical,
+                    crate::lexical_read::Read::open(&self.store.pool, principal, query, as_of),
+                )
+                .await?,
+            )
+        } else {
+            None
+        };
+        let mut readable = match &lexical {
+            Some(read) => read.scopes.clone(),
+            None => self.store.scopes(principal, "read").await?,
+        };
         readable.retain(|scope| {
-            options.scopes.as_ref().is_none_or(|s| s.is_empty() || s.contains(scope))
-                && options.exclude_scopes.as_ref().is_none_or(|s| !s.contains(scope))
+            options
+                .scopes
+                .as_ref()
+                .is_none_or(|s| s.is_empty() || s.contains(scope))
+                && options
+                    .exclude_scopes
+                    .as_ref()
+                    .is_none_or(|s| !s.contains(scope))
         });
-        if let Some(read) = lexical.as_mut() { read.scopes = readable.clone(); }
+        if let Some(read) = lexical.as_mut() {
+            read.scopes = readable.clone();
+        }
         let (mut limitations, mut paths) = (vec![], vec![]);
         let mut lists: Vec<(&'static str, Vec<Hit>)> = vec![];
 
         if on(ch.bm25) {
             let hits = match lexical.as_mut() {
-                Some(read) => timed(&mut timings, Stage::Lexical, read.search(&self.store.lexical_reader, candidates)).await?,
-                None => timed(&mut timings, Stage::Lexical, self.store.bm25(&readable, query, candidates, as_of)).await?,
+                Some(read) => {
+                    timed(
+                        &mut timings,
+                        Stage::Lexical,
+                        read.search(&self.store.lexical_reader, candidates),
+                    )
+                    .await?
+                }
+                None => {
+                    timed(
+                        &mut timings,
+                        Stage::Lexical,
+                        self.store.bm25(&readable, query, candidates, as_of),
+                    )
+                    .await?
+                }
             };
             lists.push(("bm25", hits));
             paths.push("bm25".to_owned());
         }
         if on(ch.vector) {
             match (&models.embedder, &models.space) {
-                (Some(e), Some(space)) => match timed(&mut timings, Stage::Embedding, e.embed_query(query)).await {
-                    Ok(q) => match timed(&mut timings, Stage::Vector, async {
-                        match lexical.as_mut() {
-                            Some(read) => read.vector(space, &q, candidates).await,
-                            None => self.store.vector(space, &readable, &q, candidates, as_of).await,
-                        }
-                    }).await {
-                        Ok(hits) => {
-                            lists.push(("vector", hits));
-                            paths.push("vector".to_owned());
-                        }
+                (Some(e), Some(space)) => {
+                    match timed(&mut timings, Stage::Embedding, e.embed_query(query)).await {
+                        Ok(q) => match timed(&mut timings, Stage::Vector, async {
+                            match lexical.as_mut() {
+                                Some(read) => read.vector(space, &q, candidates).await,
+                                None => {
+                                    self.store
+                                        .vector(space, &readable, &q, candidates, as_of)
+                                        .await
+                                }
+                            }
+                        })
+                        .await
+                        {
+                            Ok(hits) => {
+                                lists.push(("vector", hits));
+                                paths.push("vector".to_owned());
+                            }
+                            Err(err) => limitations.push(format!("vector channel failed: {err}")),
+                        },
                         Err(err) => limitations.push(format!("vector channel failed: {err}")),
-                    },
-                    Err(err) => limitations.push(format!("vector channel failed: {err}")),
-                },
+                    }
+                }
                 _ => limitations.push("no embedder configured: lexical retrieval only".into()),
             }
         }
-        let seeds: Vec<String> = measured(&mut timings, Stage::Fusion, || fuse(&refs(&lists), self.rrf_k)).into_iter().take(8).map(|h| h.id).collect();
+        let seeds: Vec<String> = measured(&mut timings, Stage::Fusion, || {
+            fuse(&refs(&lists), self.rrf_k)
+        })
+        .into_iter()
+        .take(8)
+        .map(|h| h.id)
+        .collect();
         let mut via: HashMap<String, Vec<String>> = HashMap::new();
         if on(ch.graph) {
             match &self.graph {
-                Some(g) => match timed(&mut timings, Stage::Graph, g.expand(&seeds, &readable, 2, candidates)).await {
+                Some(g) => match timed(
+                    &mut timings,
+                    Stage::Graph,
+                    g.expand(&seeds, &readable, 2, candidates),
+                )
+                .await
+                {
                     Ok(expanded) => {
-                        let hits = expanded.iter().map(|e| Hit { id: e.id.clone(), score: e.paths, at: 0.0 }).collect();
+                        let hits = expanded
+                            .iter()
+                            .map(|e| Hit {
+                                id: e.id.clone(),
+                                score: e.paths,
+                                at: 0.0,
+                            })
+                            .collect();
                         for e in expanded {
                             via.insert(e.id, e.via);
                         }
@@ -697,52 +1088,96 @@ impl Hyperag {
 
         if ch.temporal.unwrap_or(false) {
             let anchor = match &options.anchor {
-                Some(t) => parse_time(t).ok_or_else(|| Error::InvalidInput(format!("not a date: {t}")))?,
+                Some(t) => {
+                    parse_time(t).ok_or_else(|| Error::InvalidInput(format!("not a date: {t}")))?
+                }
                 None => as_of.unwrap_or_else(chrono::Utc::now),
             }
             .date_naive();
-            let anchor = temporal::plain(anchor).ok_or_else(|| Error::InvalidInput("anchor year must be from 1 to 9999".into()))?;
+            let anchor = temporal::plain(anchor)
+                .ok_or_else(|| Error::InvalidInput("anchor year must be from 1 to 9999".into()))?;
             let asked = temporal::spans(query, anchor);
             if !asked.is_empty() || temporal::intent(query).is_some() {
                 // shortcut: ranks only the fused candidates, not the whole scope; store spans at ingest if dev shows misses.
-                let order = measured(&mut timings, Stage::Fusion, || fuse(&refs(&lists), self.rrf_k));
-                let ids: Vec<String> = order.iter().take(candidates as usize).map(|h| h.id.clone()).collect();
+                let order = measured(&mut timings, Stage::Fusion, || {
+                    fuse(&refs(&lists), self.rrf_k)
+                });
+                let ids: Vec<String> = order
+                    .iter()
+                    .take(candidates as usize)
+                    .map(|h| h.id.clone())
+                    .collect();
                 let loaded = match lexical.as_mut() {
                     Some(read) => timed(&mut timings, Stage::PayloadLoad, read.load(&ids)).await?,
-                    None => timed(&mut timings, Stage::PayloadLoad, self.store.load(&ids, &readable, as_of)).await?,
+                    None => {
+                        timed(
+                            &mut timings,
+                            Stage::PayloadLoad,
+                            self.store.load(&ids, &readable, as_of),
+                        )
+                        .await?
+                    }
                 };
                 let keep: HashMap<&str, bool> = loaded
                     .iter()
                     .map(|m| {
                         let (_, said) = temporal::mentioned(m);
                         // A question with a time: memories that talk about that time. Without one: memories that talk about any time.
-                        let hit = if asked.is_empty() { !said.is_empty() } else { said.iter().any(|s| asked.iter().any(|q| temporal::overlaps(s, q))) };
+                        let hit = if asked.is_empty() {
+                            !said.is_empty()
+                        } else {
+                            said.iter()
+                                .any(|s| asked.iter().any(|q| temporal::overlaps(s, q)))
+                        };
                         (m.id.as_str(), hit)
                     })
                     .collect();
-                let hits: Vec<Hit> = order.into_iter().filter(|h| keep.get(h.id.as_str()).copied().unwrap_or(false)).collect();
+                let hits: Vec<Hit> = order
+                    .into_iter()
+                    .filter(|h| keep.get(h.id.as_str()).copied().unwrap_or(false))
+                    .collect();
                 lists.push(("temporal", hits));
                 paths.push("temporal".to_owned());
             }
         }
 
-        let fused = measured(&mut timings, Stage::Fusion, || fuse(&refs(&lists), self.rrf_k));
+        let fused = measured(&mut timings, Stage::Fusion, || {
+            fuse(&refs(&lists), self.rrf_k)
+        });
         let rerank = on(ch.rerank) && models.reranker.is_some();
-        let pool = if rerank { limit.max(candidates as usize) } else { limit };
+        let pool = if rerank {
+            limit.max(candidates as usize)
+        } else {
+            limit
+        };
         // Graph hits and stale candidates are re-checked against the store with the same filters.
         let ids: Vec<String> = fused.iter().take(pool).map(|h| h.id.clone()).collect();
         let memories = match lexical.as_mut() {
             Some(read) => timed(&mut timings, Stage::PayloadLoad, read.load(&ids)).await?,
-            None => timed(&mut timings, Stage::PayloadLoad, self.store.load(&ids, &readable, as_of)).await?,
+            None => {
+                timed(
+                    &mut timings,
+                    Stage::PayloadLoad,
+                    self.store.load(&ids, &readable, as_of),
+                )
+                .await?
+            }
         };
-        if let Some(read) = lexical { read.close().await?; }
-        let fused_score: HashMap<&str, f64> = fused.iter().map(|h| (h.id.as_str(), h.score)).collect();
+        if let Some(read) = lexical {
+            read.close().await?;
+        }
+        let fused_score: HashMap<&str, f64> =
+            fused.iter().map(|h| (h.id.as_str(), h.score)).collect();
         let mut items: Vec<RetrievedItem> = memories
             .into_iter()
             .map(|memory| {
                 let channels = lists
                     .iter()
-                    .filter_map(|(name, l)| l.iter().position(|h| h.id == memory.id).map(|at| (name.to_string(), at + 1)))
+                    .filter_map(|(name, l)| {
+                        l.iter()
+                            .position(|h| h.id == memory.id)
+                            .map(|at| (name.to_string(), at + 1))
+                    })
                     .collect();
                 RetrievedItem {
                     score: fused_score.get(memory.id.as_str()).copied().unwrap_or(0.0),
@@ -759,14 +1194,23 @@ impl Hyperag {
         if let (true, Some(r)) = (rerank && !items.is_empty(), &models.reranker) {
             let cap = std::env::var("HYPERAG_RERANK_CANDIDATES").ok();
             let docs = rerank_input(&items, options.rerank_candidates, cap.as_deref())?;
-            let candidates: Vec<(String, i32)> = items.iter().take(docs.len()).map(|i| (i.memory.id.clone(), i.memory.version)).collect();
-            let model_id = if r.spec.is_empty() { r.name.as_str() } else { r.spec.as_str() };
+            let candidates: Vec<(String, i32)> = items
+                .iter()
+                .take(docs.len())
+                .map(|i| (i.memory.id.clone(), i.memory.version))
+                .collect();
+            let model_id = if r.spec.is_empty() {
+                r.name.as_str()
+            } else {
+                r.spec.as_str()
+            };
             let scored = timed(&mut timings, Stage::Rerank, async {
                 if let Some(scores) = self.rerank_cache.get(model_id, query, &candidates) {
                     return Ok(scores);
                 }
                 let scores = r.rerank(query, &docs).await?;
-                self.rerank_cache.put(model_id, query, candidates, scores.clone());
+                self.rerank_cache
+                    .put(model_id, query, candidates, scores.clone());
                 Ok(scores)
             })
             .await;
@@ -788,41 +1232,89 @@ impl Hyperag {
 
         let insufficient = !self.has_evidence(&items, &lists, reranked);
         if insufficient {
-            limitations.push("insufficient evidence: no result clears the evidence threshold".into());
+            limitations
+                .push("insufficient evidence: no result clears the evidence threshold".into());
         }
         if readable.is_empty() {
             limitations.push("principal has no readable scope".into());
         }
-        if let (Some(t), Some(started)) = (timings.as_mut(), started) { t.finish(started); }
-        Ok(Retrieval { scope_filter_applied: (options.scopes.is_some() || options.exclude_scopes.is_some()).then_some(true), timings_ms: timings, items, insufficient_evidence: insufficient, paths_used: paths, limitations, embedding_space: models.space.clone() })
+        if let (Some(t), Some(started)) = (timings.as_mut(), started) {
+            t.finish(started);
+        }
+        Ok(Retrieval {
+            scope_filter_applied: (options.scopes.is_some() || options.exclude_scopes.is_some())
+                .then_some(true),
+            timings_ms: timings,
+            items,
+            insufficient_evidence: insufficient,
+            paths_used: paths,
+            limitations,
+            embedding_space: models.space.clone(),
+        })
     }
 
-    fn has_evidence(&self, items: &[RetrievedItem], lists: &[(&str, Vec<Hit>)], reranked: bool) -> bool {
-        let Some(top) = items.first() else { return false };
+    fn has_evidence(
+        &self,
+        items: &[RetrievedItem],
+        lists: &[(&str, Vec<Hit>)],
+        reranked: bool,
+    ) -> bool {
+        let Some(top) = items.first() else {
+            return false;
+        };
         if reranked {
             return top.rerank_score.unwrap_or(f32::NEG_INFINITY) >= self.min_rerank_score;
         }
         // Lexical-only retrieval cannot abstain: any shared word is a match.
-        let Some((_, vector)) = lists.iter().find(|(n, _)| *n == "vector") else { return true };
+        let Some((_, vector)) = lists.iter().find(|(n, _)| *n == "vector") else {
+            return true;
+        };
         vector.iter().map(|h| h.score).fold(0.0, f64::max) >= self.min_vector_score
     }
 
     /// Retrieval packed into a token budget, each passage numbered and cited.
-    pub async fn context(&self, principal: &str, query: &str, options: &RetrieveOptions) -> Result<Context> {
+    pub async fn context(
+        &self,
+        principal: &str,
+        query: &str,
+        options: &RetrieveOptions,
+    ) -> Result<Context> {
         let retrieval = self.retrieve(principal, query, options).await?;
-        Ok(build_context(retrieval, options.max_tokens.unwrap_or(1_000)))
+        Ok(build_context(
+            retrieval,
+            options.max_tokens.unwrap_or(1_000),
+        ))
     }
 
     /// The newest memories of one readable scope, newest first, packed into `max_bytes` of text:
     /// what an agent sees when a session starts. An unreadable scope is `not_found`.
-    pub async fn recent(&self, principal: &str, scope: &str, limit: usize, max_bytes: usize) -> Result<Recent> {
-        if !self.store.scopes(principal, "read").await?.iter().any(|s| s == scope) {
+    pub async fn recent(
+        &self,
+        principal: &str,
+        scope: &str,
+        limit: usize,
+        max_bytes: usize,
+    ) -> Result<Recent> {
+        if !self
+            .store
+            .scopes(principal, "read")
+            .await?
+            .iter()
+            .any(|s| s == scope)
+        {
             return Err(Error::NotFound(format!("scope {scope} not found")));
         }
         let memories = self.store.recent(scope, limit.clamp(1, 200) as i64).await?;
         let (mut text, mut items) = (String::new(), vec![]);
         for m in memories {
-            let line = format!("- [{}] ({}, {}, {}) {}\n", m.id, m.kind, m.source, &m.recorded_at[..m.recorded_at.len().min(10)], m.text.replace('\n', " "));
+            let line = format!(
+                "- [{}] ({}, {}, {}) {}\n",
+                m.id,
+                m.kind,
+                m.source,
+                &m.recorded_at[..m.recorded_at.len().min(10)],
+                m.text.replace('\n', " ")
+            );
             // A memory too large for what is left is skipped, so it does not hide older ones.
             if text.len() + line.len() > max_bytes {
                 continue;
@@ -830,7 +1322,11 @@ impl Hyperag {
             text.push_str(&line);
             items.push(m);
         }
-        Ok(Recent { scope: scope.to_owned(), text, items })
+        Ok(Recent {
+            scope: scope.to_owned(),
+            text,
+            items,
+        })
     }
 
     /// Where a memory came from: every version, who wrote it, what corrected it, its relations.
@@ -845,7 +1341,17 @@ impl Hyperag {
             _ => Some(vec![]),
         };
         // Ids of memories the reader cannot read are hidden, so explain is no cross-scope oracle.
-        let linked_ids: Vec<String> = history.corrects.iter().cloned().chain(history.versions.iter().filter_map(|v| v.superseded_by.clone())).collect();
+        let linked_ids: Vec<String> = history
+            .corrects
+            .iter()
+            .cloned()
+            .chain(
+                history
+                    .versions
+                    .iter()
+                    .filter_map(|v| v.superseded_by.clone()),
+            )
+            .collect();
         let linked = self.store.scope_of(&linked_ids).await?;
         let visible = |other: &str| linked.get(other).is_some_and(|s| readable.contains(s));
         history.corrects.retain(|c| visible(c));
@@ -868,7 +1374,11 @@ impl Hyperag {
             }
             let texts: Vec<String> = rows.iter().map(|r| r.2.clone()).collect();
             let vectors = embedder.embed_documents(&texts).await?;
-            let put: Vec<(String, i32, Vec<f32>)> = rows.into_iter().zip(vectors).map(|((id, v, _), vec)| (id, v, vec)).collect();
+            let put: Vec<(String, i32, Vec<f32>)> = rows
+                .into_iter()
+                .zip(vectors)
+                .map(|((id, v, _), vec)| (id, v, vec))
+                .collect();
             embedded += put.len();
             self.store.put_vectors(&space, &put).await?;
         }
@@ -885,7 +1395,12 @@ impl Hyperag {
 
     /// Switches the live models. A new embedding gets its own index, filled before the switch, so
     /// queries never mix spaces; documents, BM25 and the graph stay. The choice is persisted.
-    pub async fn set_models(&self, admin: &str, embedding: Option<Embedder>, reranker: Option<Option<Reranker>>) -> Result<()> {
+    pub async fn set_models(
+        &self,
+        admin: &str,
+        embedding: Option<Embedder>,
+        reranker: Option<Option<Reranker>>,
+    ) -> Result<()> {
         self.must_admin(admin)?;
         if let Some(e) = embedding {
             // Most of the reindex runs while writes continue; the write lock then stops new writes
@@ -898,7 +1413,12 @@ impl Hyperag {
             models.space = Some(space);
         }
         if let Some(r) = reranker {
-            self.store.set_setting("reranker", r.as_ref().map(|r| r.spec.as_str()).unwrap_or("none")).await?;
+            self.store
+                .set_setting(
+                    "reranker",
+                    r.as_ref().map(|r| r.spec.as_str()).unwrap_or("none"),
+                )
+                .await?;
             let mut models = self.models.write().await;
             models.reranker = r.map(Arc::new);
             // Retrieval holds the read lock through cache insertion, so old scorers cannot refill it.
@@ -919,7 +1439,11 @@ impl Hyperag {
 
     pub async fn active_models(&self) -> (Option<String>, Option<String>, Option<String>) {
         let m = self.models.read().await;
-        (m.embedder.as_ref().map(|e| e.spec.clone()), m.space.clone(), m.reranker.as_ref().map(|r| r.spec.clone()))
+        (
+            m.embedder.as_ref().map(|e| e.spec.clone()),
+            m.space.clone(),
+            m.reranker.as_ref().map(|r| r.spec.clone()),
+        )
     }
 }
 
@@ -932,7 +1456,11 @@ mod tests {
     use super::*;
 
     fn hit(id: &str, at: f64) -> Hit {
-        Hit { id: id.into(), score: 0.0, at }
+        Hit {
+            id: id.into(),
+            score: 0.0,
+            at,
+        }
     }
 
     #[test]
@@ -949,11 +1477,37 @@ mod tests {
     #[test]
     fn context_skips_what_does_not_fit() {
         let m = |id: &str, text: &str| RetrievedItem {
-            memory: Memory { id: id.into(), scope: "s".into(), kind: "k".into(), version: 1, text: text.into(), source: "src".into(), author: "a".into(),
-                valid_from: None, valid_to: None, recorded_at: "t".into(), status: "active".into(), status_reason: None, superseded_by: None, metadata: Default::default() },
-            score: 1.0, channels: Default::default(), via: None, rerank_score: None, dates: None,
+            memory: Memory {
+                id: id.into(),
+                scope: "s".into(),
+                kind: "k".into(),
+                version: 1,
+                text: text.into(),
+                source: "src".into(),
+                author: "a".into(),
+                valid_from: None,
+                valid_to: None,
+                recorded_at: "t".into(),
+                status: "active".into(),
+                status_reason: None,
+                superseded_by: None,
+                metadata: Default::default(),
+            },
+            score: 1.0,
+            channels: Default::default(),
+            via: None,
+            rerank_score: None,
+            dates: None,
         };
-        let r = Retrieval { scope_filter_applied: None, items: vec![m("1", &"x".repeat(400)), m("2", "short")], insufficient_evidence: false, paths_used: vec![], limitations: vec![], embedding_space: None, timings_ms: None };
+        let r = Retrieval {
+            scope_filter_applied: None,
+            items: vec![m("1", &"x".repeat(400)), m("2", "short")],
+            insufficient_evidence: false,
+            paths_used: vec![],
+            limitations: vec![],
+            embedding_space: None,
+            timings_ms: None,
+        };
         let c = build_context(r, 50);
         assert_eq!(c.citations.len(), 1);
         assert_eq!(c.citations[0].memory_id, "2");
@@ -962,58 +1516,122 @@ mod tests {
 
     fn rerank_item(id: String) -> RetrievedItem {
         RetrievedItem {
-            memory: Memory { id: id.clone(), scope: "fixture".into(), kind: "fact".into(), version: 1, text: id,
-                source: "synthetic".into(), author: "fixture".into(), valid_from: None, valid_to: None,
-                recorded_at: "2026-01-01".into(), status: "active".into(), status_reason: None,
-                superseded_by: None, metadata: Default::default() },
-            score: 0.0, channels: Default::default(), via: None, rerank_score: None, dates: None,
+            memory: Memory {
+                id: id.clone(),
+                scope: "fixture".into(),
+                kind: "fact".into(),
+                version: 1,
+                text: id,
+                source: "synthetic".into(),
+                author: "fixture".into(),
+                valid_from: None,
+                valid_to: None,
+                recorded_at: "2026-01-01".into(),
+                status: "active".into(),
+                status_reason: None,
+                superseded_by: None,
+                metadata: Default::default(),
+            },
+            score: 0.0,
+            channels: Default::default(),
+            via: None,
+            rerank_score: None,
+            dates: None,
         }
     }
 
     #[test]
     fn rerank_cap_preserves_channel_recall_and_only_sorts_the_scored_prefix() {
-        let channel = |prefix: &str| (1..=24).map(|n| hit(&if n == 9 { "needle".into() } else { format!("{prefix}-{n}") }, 0.0)).collect::<Vec<_>>();
+        let channel = |prefix: &str| {
+            (1..=24)
+                .map(|n| {
+                    hit(
+                        &if n == 9 {
+                            "needle".into()
+                        } else {
+                            format!("{prefix}-{n}")
+                        },
+                        0.0,
+                    )
+                })
+                .collect::<Vec<_>>()
+        };
         let (a, b) = (channel("a"), channel("b"));
-        let mut items = fuse(&[&a, &b], 60.0).into_iter().take(24).map(|h| rerank_item(h.id)).collect::<Vec<_>>();
+        let mut items = fuse(&[&a, &b], 60.0)
+            .into_iter()
+            .take(24)
+            .map(|h| rerank_item(h.id))
+            .collect::<Vec<_>>();
         // The agreement at rank9 would be lost by reducing either channel to8 candidates.
         let docs = rerank_input(&items, Some(8), Some("10")).unwrap();
         assert_eq!(docs.len(), 8);
         assert_eq!(docs[0], "needle");
-        let tail = items[8..].iter().map(|i| i.memory.id.clone()).collect::<Vec<_>>();
+        let tail = items[8..]
+            .iter()
+            .map(|i| i.memory.id.clone())
+            .collect::<Vec<_>>();
         let scores = [-8.0, -7.0, -6.0, -5.0, -4.0, -3.0, -2.0, -1.0];
         apply_rerank_scores(&mut items, &scores);
         assert_eq!(items[0].memory.id, docs[7]);
         assert!(items[..8].iter().all(|i| i.rerank_score.is_some()));
         assert!(items[8..].iter().all(|i| i.rerank_score.is_none()));
-        assert_eq!(items[8..].iter().map(|i| i.memory.id.clone()).collect::<Vec<_>>(), tail);
+        assert_eq!(
+            items[8..]
+                .iter()
+                .map(|i| i.memory.id.clone())
+                .collect::<Vec<_>>(),
+            tail
+        );
     }
 
     #[test]
     fn rerank_cap_defaults_to_all_and_rejects_invalid_configuration() {
-        let items = (1..=24).map(|n| rerank_item(format!("doc-{n}"))).collect::<Vec<_>>();
+        let items = (1..=24)
+            .map(|n| rerank_item(format!("doc-{n}")))
+            .collect::<Vec<_>>();
         assert_eq!(rerank_input(&items, None, None).unwrap().len(), 24);
         assert_eq!(rerank_input(&items, None, Some("150")).unwrap().len(), 24);
         assert_eq!(rerank_input(&items, None, Some("10")).unwrap().len(), 10);
-        for invalid in ["0", "151", "invalid", "-8"] { assert!(rerank_input(&items, None, Some(invalid)).is_err()); }
+        for invalid in ["0", "151", "invalid", "-8"] {
+            assert!(rerank_input(&items, None, Some(invalid)).is_err());
+        }
     }
 
     #[test]
     fn rerank_default_preserves_full_pool_sorting() {
-        let mut items = (1..=24).map(|n| rerank_item(format!("doc-{n}"))).collect::<Vec<_>>();
+        let mut items = (1..=24)
+            .map(|n| rerank_item(format!("doc-{n}")))
+            .collect::<Vec<_>>();
         let scores = (1..=24).map(|n| n as f32).collect::<Vec<_>>();
         apply_rerank_scores(&mut items, &scores);
         assert_eq!(items[0].memory.id, "doc-24");
         assert!(items.iter().all(|i| i.rerank_score.is_some()));
-        assert!(items.windows(2).all(|p| p[0].rerank_score >= p[1].rerank_score));
+        assert!(
+            items
+                .windows(2)
+                .all(|p| p[0].rerank_score >= p[1].rerank_score)
+        );
     }
 
     #[test]
     fn rerank_request_overrides_environment_and_has_the_same_bounds() {
-        let items = (1..=24).map(|n| rerank_item(format!("doc-{n}"))).collect::<Vec<_>>();
+        let items = (1..=24)
+            .map(|n| rerank_item(format!("doc-{n}")))
+            .collect::<Vec<_>>();
         assert_eq!(rerank_input(&items, Some(8), Some("10")).unwrap().len(), 8);
-        assert_eq!(rerank_input(&items, Some(10), Some("invalid")).unwrap().len(), 10);
-        assert_eq!(rerank_input(&items, Some(150), Some("1")).unwrap().len(), 24);
-        for n in [0,151] { assert!(rerank_input(&items, Some(n), Some("8")).is_err()); }
+        assert_eq!(
+            rerank_input(&items, Some(10), Some("invalid"))
+                .unwrap()
+                .len(),
+            10
+        );
+        assert_eq!(
+            rerank_input(&items, Some(150), Some("1")).unwrap().len(),
+            24
+        );
+        for n in [0, 151] {
+            assert!(rerank_input(&items, Some(n), Some("8")).is_err());
+        }
     }
 }
 
@@ -1026,8 +1644,21 @@ mod profiling_tests {
         assert!(!defaults.profile.unwrap_or(false));
         let opts: RetrieveOptions = serde_json::from_str(r#"{"profile":true}"#).unwrap();
         assert_eq!(opts.profile, Some(true));
-        let mut response = Retrieval { scope_filter_applied: None, items: vec![], insufficient_evidence: true, paths_used: vec![], limitations: vec![], embedding_space: None, timings_ms: None };
-        assert!(serde_json::to_value(&response).unwrap().get("timingsMs").is_none());
+        let mut response = Retrieval {
+            scope_filter_applied: None,
+            items: vec![],
+            insufficient_evidence: true,
+            paths_used: vec![],
+            limitations: vec![],
+            embedding_space: None,
+            timings_ms: None,
+        };
+        assert!(
+            serde_json::to_value(&response)
+                .unwrap()
+                .get("timingsMs")
+                .is_none()
+        );
         response.timings_ms = Some(StageTimings::default());
         let value = serde_json::to_value(response).unwrap();
         let object = value["timingsMs"].as_object().unwrap();
@@ -1042,12 +1673,15 @@ mod profiling_tests {
         let value = timed(&mut timings, Stage::Lexical, async {
             tokio::time::sleep(std::time::Duration::from_millis(3)).await;
             Ok::<_, Error>(17)
-        }).await.unwrap();
+        })
+        .await
+        .unwrap();
         assert_eq!(value, 17);
         let error = timed(&mut timings, Stage::Vector, async {
             tokio::time::sleep(std::time::Duration::from_millis(3)).await;
             Err::<(), _>(Error::InvalidInput("synthetic fixture".into()))
-        }).await;
+        })
+        .await;
         assert!(matches!(error, Err(Error::InvalidInput(_))));
         let t = timings.as_mut().unwrap();
         t.finish(started);
@@ -1066,7 +1700,9 @@ mod profiling_tests {
         let value = timed(&mut timings, Stage::Embedding, async {
             calls.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             Ok::<_, Error>("fixture")
-        }).await.unwrap();
+        })
+        .await
+        .unwrap();
         assert_eq!(value, "fixture");
         assert_eq!(calls.load(std::sync::atomic::Ordering::Relaxed), 1);
         assert!(timings.is_none());
@@ -1075,15 +1711,17 @@ mod profiling_tests {
     fn synchronous_fusion_records_once_and_leaves_other_stages_zero() {
         let mut timings = Some(StageTimings::default());
         let calls = std::cell::Cell::new(0);
-        let result = measured(&mut timings, Stage::Fusion, || { calls.set(calls.get()+1); 42 });
-        assert_eq!((result,calls.get()),(42,1));
-        let t=timings.unwrap();
-        assert!(t.fusion>=0.0);
-        assert_eq!(t.payload_load,0.0);
-        assert_eq!(t.graph,0.0);
-        assert_eq!(t.rerank,0.0);
+        let result = measured(&mut timings, Stage::Fusion, || {
+            calls.set(calls.get() + 1);
+            42
+        });
+        assert_eq!((result, calls.get()), (42, 1));
+        let t = timings.unwrap();
+        assert!(t.fusion >= 0.0);
+        assert_eq!(t.payload_load, 0.0);
+        assert_eq!(t.graph, 0.0);
+        assert_eq!(t.rerank, 0.0);
     }
-
 }
 
 #[cfg(test)]
@@ -1095,12 +1733,26 @@ mod rerank_cache_tests {
 
     #[test]
     fn rerank_cache_defaults_off_and_validates_setting() {
-        for off in [None, Some(""), Some("0"), Some("false"), Some("off"), Some("none")] {
+        for off in [
+            None,
+            Some(""),
+            Some("0"),
+            Some("false"),
+            Some("off"),
+            Some("none"),
+        ] {
             assert_eq!(parse_rerank_cache(off).unwrap(), 0);
         }
-        for on in [Some("true"), Some("on")] { assert_eq!(parse_rerank_cache(on).unwrap(), DEFAULT_RERANK_CACHE_SIZE); }
+        for on in [Some("true"), Some("on")] {
+            assert_eq!(parse_rerank_cache(on).unwrap(), DEFAULT_RERANK_CACHE_SIZE);
+        }
         assert_eq!(parse_rerank_cache(Some("16")).unwrap(), 16);
-        for bad in ["-1", "65537", "invalid"] { assert!(matches!(parse_rerank_cache(Some(bad)), Err(Error::InvalidInput(_)))); }
+        for bad in ["-1", "65537", "invalid"] {
+            assert!(matches!(
+                parse_rerank_cache(Some(bad)),
+                Err(Error::InvalidInput(_))
+            ));
+        }
         let disabled = RerankCache::default();
         assert_eq!(disabled.capacity(), 0);
         disabled.put("m", "q", vec![("a".into(), 1)], vec![1.0]);
@@ -1109,13 +1761,52 @@ mod rerank_cache_tests {
 
     #[test]
     fn rerank_cache_key_hashes_model_query_and_candidate_versions() {
-        let base = rerank_cache_key("model-a", "query-1", &[("doc-1".into(), 1), ("doc-2".into(), 2)]);
+        let base = rerank_cache_key(
+            "model-a",
+            "query-1",
+            &[("doc-1".into(), 1), ("doc-2".into(), 2)],
+        );
         assert_eq!(base.len(), 64);
-        assert_eq!(base, rerank_cache_key("model-a", "query-1", &[("doc-1".into(), 1), ("doc-2".into(), 2)]));
-        assert_ne!(base, rerank_cache_key("model-b", "query-1", &[("doc-1".into(), 1), ("doc-2".into(), 2)]));
-        assert_ne!(base, rerank_cache_key("model-a", "query-2", &[("doc-1".into(), 1), ("doc-2".into(), 2)]));
-        assert_ne!(base, rerank_cache_key("model-a", "query-1", &[("doc-1".into(), 2), ("doc-2".into(), 2)]));
-        assert_ne!(base, rerank_cache_key("model-a", "query-1", &[("doc-2".into(), 2), ("doc-1".into(), 1)]));
+        assert_eq!(
+            base,
+            rerank_cache_key(
+                "model-a",
+                "query-1",
+                &[("doc-1".into(), 1), ("doc-2".into(), 2)]
+            )
+        );
+        assert_ne!(
+            base,
+            rerank_cache_key(
+                "model-b",
+                "query-1",
+                &[("doc-1".into(), 1), ("doc-2".into(), 2)]
+            )
+        );
+        assert_ne!(
+            base,
+            rerank_cache_key(
+                "model-a",
+                "query-2",
+                &[("doc-1".into(), 1), ("doc-2".into(), 2)]
+            )
+        );
+        assert_ne!(
+            base,
+            rerank_cache_key(
+                "model-a",
+                "query-1",
+                &[("doc-1".into(), 2), ("doc-2".into(), 2)]
+            )
+        );
+        assert_ne!(
+            base,
+            rerank_cache_key(
+                "model-a",
+                "query-1",
+                &[("doc-2".into(), 2), ("doc-1".into(), 1)]
+            )
+        );
     }
 
     #[test]
@@ -1134,9 +1825,21 @@ mod rerank_cache_tests {
         // Touch q1 so q2 becomes least-recently-used before inserting q3.
         assert_eq!(cache.get("m1", "q1", &c1), Some(vec![0.2, 0.9]));
         cache.put("m1", "q3", c3.clone(), vec![0.4, 0.5]);
-        assert_eq!((cache.len(), cache.get("m1", "q1", &c1), cache.get("m1", "q2", &c2), cache.get("m1", "q3", &c3)), (2, Some(vec![0.2, 0.9]), None, Some(vec![0.4, 0.5])));
+        assert_eq!(
+            (
+                cache.len(),
+                cache.get("m1", "q1", &c1),
+                cache.get("m1", "q2", &c2),
+                cache.get("m1", "q3", &c3)
+            ),
+            (2, Some(vec![0.2, 0.9]), None, Some(vec![0.4, 0.5]))
+        );
         // A candidate version change invalidates entries referencing the older version.
-        assert!(cache.get("m1", "q1", &[("a".into(), 2), ("b".into(), 1)]).is_none());
+        assert!(
+            cache
+                .get("m1", "q1", &[("a".into(), 2), ("b".into(), 1)])
+                .is_none()
+        );
         assert!(cache.get("m1", "q1", &c1).is_none());
         assert_eq!(cache.get("m1", "q3", &c3), Some(vec![0.4, 0.5]));
         cache.invalidate("c", Some(2));
@@ -1149,15 +1852,43 @@ mod rerank_cache_tests {
         let small = vec![("small".to_owned(), 1)];
         cache.put("m", "small", small.clone(), vec![1.0]);
         let before = cache.retained_bytes();
-        cache.put("m", "large-id", vec![("x".repeat(MAX_RERANK_CACHE_BYTES), 1)], vec![1.0]);
-        cache.put("m", "many-ids", vec![(String::new(), 1); MAX_RERANK_CACHE_BYTES / std::mem::size_of::<(String, i32)>() + 1], vec![]);
-        cache.put("m", "many-scores", vec![], vec![1.0; MAX_RERANK_CACHE_BYTES / 4 + 1]);
+        cache.put(
+            "m",
+            "large-id",
+            vec![("x".repeat(MAX_RERANK_CACHE_BYTES), 1)],
+            vec![1.0],
+        );
+        cache.put(
+            "m",
+            "many-ids",
+            vec![
+                (String::new(), 1);
+                MAX_RERANK_CACHE_BYTES / std::mem::size_of::<(String, i32)>() + 1
+            ],
+            vec![],
+        );
+        cache.put(
+            "m",
+            "many-scores",
+            vec![],
+            vec![1.0; MAX_RERANK_CACHE_BYTES / 4 + 1],
+        );
         // Spare allocation is retained too, even when the logical payload is tiny.
         let mut spare = String::with_capacity(MAX_RERANK_CACHE_BYTES);
         spare.push('x');
         cache.put("m", "spare-id", vec![(spare, 1)], vec![1.0]);
-        cache.put("m", "spare-candidates", Vec::with_capacity(MAX_RERANK_CACHE_BYTES / std::mem::size_of::<(String, i32)>() + 1), vec![]);
-        cache.put("m", "spare-scores", vec![], Vec::with_capacity(MAX_RERANK_CACHE_BYTES / 4 + 1));
+        cache.put(
+            "m",
+            "spare-candidates",
+            Vec::with_capacity(MAX_RERANK_CACHE_BYTES / std::mem::size_of::<(String, i32)>() + 1),
+            vec![],
+        );
+        cache.put(
+            "m",
+            "spare-scores",
+            vec![],
+            Vec::with_capacity(MAX_RERANK_CACHE_BYTES / 4 + 1),
+        );
         assert_eq!((cache.len(), cache.retained_bytes()), (1, before));
         assert_eq!(cache.get("m", "small", &small), Some(vec![1.0]));
         cache.clear();
@@ -1184,24 +1915,92 @@ mod rerank_cache_tests {
 
     #[tokio::test]
     async fn retrieve_cache_invalidates_on_version_change_and_same_spec_model_switch() {
-        let url = std::env::var("HYPERAG_PG_URL").unwrap_or_else(|_| "postgres://hyperag:fake-test-only@127.0.0.1:55432/hyperag".into());
+        let url = std::env::var("HYPERAG_PG_URL")
+            .unwrap_or_else(|_| "postgres://hyperag:fake-test-only@127.0.0.1:55432/hyperag".into());
         let opts = PgConnectOptions::from_str(&url).unwrap();
-        let admin = PgPoolOptions::new().max_connections(1).connect_with(opts.clone()).await.unwrap();
-        let name = format!("rcache_{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos());
-        sqlx::raw_sql(sqlx::AssertSqlSafe(format!("create database {name}"))).execute(&admin).await.unwrap();
-        let pool = PgPoolOptions::new().max_connections(2).connect_with(opts.database(&name)).await.unwrap();
+        let admin = PgPoolOptions::new()
+            .max_connections(1)
+            .connect_with(opts.clone())
+            .await
+            .unwrap();
+        let name = format!(
+            "rcache_{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        );
+        sqlx::raw_sql(sqlx::AssertSqlSafe(format!("create database {name}")))
+            .execute(&admin)
+            .await
+            .unwrap();
+        let pool = PgPoolOptions::new()
+            .max_connections(2)
+            .connect_with(opts.database(&name))
+            .await
+            .unwrap();
         let calls = Arc::new(AtomicUsize::new(0));
-        let make_reranker = |counter: Arc<AtomicUsize>| Reranker::custom("fixture-reranker", "hf:fixture/reranker", move |_q, docs| {
-            counter.fetch_add(1, Ordering::SeqCst);
-            Ok(docs.iter().enumerate().map(|(idx, text)| if text.contains("winner") { 5.0 } else { 1.0 - idx as f32 * 0.1 }).collect())
-        });
+        let make_reranker = |counter: Arc<AtomicUsize>| {
+            Reranker::custom(
+                "fixture-reranker",
+                "hf:fixture/reranker",
+                move |_q, docs| {
+                    counter.fetch_add(1, Ordering::SeqCst);
+                    Ok(docs
+                        .iter()
+                        .enumerate()
+                        .map(|(idx, text)| {
+                            if text.contains("winner") {
+                                5.0
+                            } else {
+                                1.0 - idx as f32 * 0.1
+                            }
+                        })
+                        .collect())
+                },
+            )
+        };
         let mut off_cfg = Config::new(Store::new(pool.clone()));
         off_cfg.reranker = Some(make_reranker(calls.clone()));
         let off = Hyperag::init(off_cfg).await.unwrap();
         off.store.grant("u", "s", "read", "admin").await.unwrap();
         off.store.grant("u", "s", "write", "admin").await.unwrap();
-        let m1 = off.ingest("u", NewMemory { scope: "s".into(), source: "test".into(), text: "alpha distract passage".into(), id: Some("m1".into()), kind: None, supersedes: vec![], valid_from: None, valid_to: None, metadata: None, idempotency_key: None }).await.unwrap();
-        let _m2 = off.ingest("u", NewMemory { scope: "s".into(), source: "test".into(), text: "alpha beta winner passage".into(), id: Some("m2".into()), kind: None, supersedes: vec![], valid_from: None, valid_to: None, metadata: None, idempotency_key: None }).await.unwrap();
+        let m1 = off
+            .ingest(
+                "u",
+                NewMemory {
+                    scope: "s".into(),
+                    source: "test".into(),
+                    text: "alpha distract passage".into(),
+                    id: Some("m1".into()),
+                    kind: None,
+                    supersedes: vec![],
+                    valid_from: None,
+                    valid_to: None,
+                    metadata: None,
+                    idempotency_key: None,
+                },
+            )
+            .await
+            .unwrap();
+        let _m2 = off
+            .ingest(
+                "u",
+                NewMemory {
+                    scope: "s".into(),
+                    source: "test".into(),
+                    text: "alpha beta winner passage".into(),
+                    id: Some("m2".into()),
+                    kind: None,
+                    supersedes: vec![],
+                    valid_from: None,
+                    valid_to: None,
+                    metadata: None,
+                    idempotency_key: None,
+                },
+            )
+            .await
+            .unwrap();
         let ropts = RetrieveOptions::default();
         off.retrieve("u", "alpha", &ropts).await.unwrap();
         off.retrieve("u", "alpha", &ropts).await.unwrap();
@@ -1216,26 +2015,59 @@ mod rerank_cache_tests {
         assert_eq!(on.rerank_cache.capacity(), 2);
         let r1 = on.retrieve("u", "alpha", &ropts).await.unwrap();
         let r2 = on.retrieve("u", "alpha", &ropts).await.unwrap();
-        assert_eq!((calls.load(Ordering::SeqCst), &r1.items[0].memory.id, r1.items[0].rerank_score), (1, &r2.items[0].memory.id, Some(5.0)));
+        assert_eq!(
+            (
+                calls.load(Ordering::SeqCst),
+                &r1.items[0].memory.id,
+                r1.items[0].rerank_score
+            ),
+            (1, &r2.items[0].memory.id, Some(5.0))
+        );
         on.retrieve("u", "alpha passage", &ropts).await.unwrap();
         on.retrieve("u", "alpha", &ropts).await.unwrap();
         on.retrieve("u", "passage alpha", &ropts).await.unwrap();
         on.retrieve("u", "alpha", &ropts).await.unwrap();
         on.retrieve("u", "alpha passage", &ropts).await.unwrap();
         assert_eq!(calls.load(Ordering::SeqCst), 4);
-        on.update("u", &m1.id, MemoryUpdate { text: "alpha updated passage".into(), source: "test".into(), expected_version: 1, valid_from: None, valid_to: None, metadata: None, idempotency_key: None }).await.unwrap();
+        on.update(
+            "u",
+            &m1.id,
+            MemoryUpdate {
+                text: "alpha updated passage".into(),
+                source: "test".into(),
+                expected_version: 1,
+                valid_from: None,
+                valid_to: None,
+                metadata: None,
+                idempotency_key: None,
+            },
+        )
+        .await
+        .unwrap();
         on.retrieve("u", "alpha passage", &ropts).await.unwrap();
         assert_eq!(calls.load(Ordering::SeqCst), 5);
         let switched_calls = Arc::new(AtomicUsize::new(0));
         let counter = switched_calls.clone();
-        let replacement = Reranker::custom("fixture-revision-b", "hf:fixture/reranker", move |_q, docs| {
-            counter.fetch_add(1, Ordering::SeqCst);
-            Ok(docs.iter().map(|text| if text.contains("winner") { -5.0 } else { 9.0 }).collect())
-        });
-        on.set_models("admin", None, Some(Some(replacement))).await.unwrap();
+        let replacement = Reranker::custom(
+            "fixture-revision-b",
+            "hf:fixture/reranker",
+            move |_q, docs| {
+                counter.fetch_add(1, Ordering::SeqCst);
+                Ok(docs
+                    .iter()
+                    .map(|text| if text.contains("winner") { -5.0 } else { 9.0 })
+                    .collect())
+            },
+        );
+        on.set_models("admin", None, Some(Some(replacement)))
+            .await
+            .unwrap();
         assert!(on.rerank_cache.is_empty());
         let switched = on.retrieve("u", "alpha passage", &ropts).await.unwrap();
-        assert_eq!((&switched.items[0].memory.id, switched.items[0].rerank_score), (&m1.id, Some(9.0)));
+        assert_eq!(
+            (&switched.items[0].memory.id, switched.items[0].rerank_score),
+            (&m1.id, Some(9.0))
+        );
         assert_eq!(switched.items[1].rerank_score, Some(-5.0));
         on.retrieve("u", "alpha passage", &ropts).await.unwrap();
         assert_eq!(switched_calls.load(Ordering::SeqCst), 1);
@@ -1245,7 +2077,12 @@ mod rerank_cache_tests {
         drop(off);
         drop(on);
         pool.close().await;
-        sqlx::raw_sql(sqlx::AssertSqlSafe(format!("drop database {name} with (force)"))).execute(&admin).await.unwrap();
+        sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
+            "drop database {name} with (force)"
+        )))
+        .execute(&admin)
+        .await
+        .unwrap();
         admin.close().await;
     }
 }

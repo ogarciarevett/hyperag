@@ -136,7 +136,10 @@ impl Generation {
         let mut metadata = index.load_metas()?;
         metadata.payload = Some(serde_json::to_string(&manifest)?);
         fs::write(path.join("meta.json"), serde_json::to_vec(&metadata)?)?;
-        fs::set_permissions(path.join("meta.json"), fs::metadata(base.join("meta.json"))?.permissions())?;
+        fs::set_permissions(
+            path.join("meta.json"),
+            fs::metadata(base.join("meta.json"))?.permissions(),
+        )?;
         let mut buffer = vec![0; 256 * 1024];
         // shortcut: copy base files once; use reflinks if measured copy cost warrants it.
         for entry in fs::read_dir(base)? {

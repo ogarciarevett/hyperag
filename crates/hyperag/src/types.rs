@@ -107,13 +107,20 @@ pub enum Error {
     #[error("{0}")]
     NotFound(String),
     #[error("{message}")]
-    VersionConflict { message: String, current_version: i32 },
+    VersionConflict {
+        message: String,
+        current_version: i32,
+    },
     #[error("{message}")]
     AlreadyExists { message: String, deleted: bool },
     #[error("{0}")]
     InvalidInput(String),
     #[error("{message}")]
-    NotActive { message: String, status: String, memory_id: Option<String> },
+    NotActive {
+        message: String,
+        status: String,
+        memory_id: Option<String>,
+    },
     #[error("{0}")]
     EmbeddingSpaceMismatch(String),
     #[error(transparent)]

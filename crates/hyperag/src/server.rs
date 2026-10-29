@@ -30,8 +30,13 @@ impl Tokens {
         let map: HashMap<String, String> = serde_json::from_str(raw)?;
         let mut out = vec![];
         for (hash, who) in map {
-            let bytes = hex::decode(&hash).ok().filter(|b| b.len() == 32 && hash.chars().all(|c| !c.is_ascii_uppercase()));
-            anyhow::ensure!(bytes.is_some() && !who.is_empty(), "tokens file must map sha256 hex strings to principal names");
+            let bytes = hex::decode(&hash)
+                .ok()
+                .filter(|b| b.len() == 32 && hash.chars().all(|c| !c.is_ascii_uppercase()));
+            anyhow::ensure!(
+                bytes.is_some() && !who.is_empty(),
+                "tokens file must map sha256 hex strings to principal names"
+            );
             out.push((bytes.unwrap().try_into().unwrap(), who));
         }
         Ok(Tokens(out))
@@ -66,7 +71,10 @@ impl TokenFile {
             }
             std::fs::write(&path, "{}")?;
         }
-        let file = TokenFile { path, loaded: std::sync::RwLock::new((None, Tokens::default())) };
+        let file = TokenFile {
+            path,
+            loaded: std::sync::RwLock::new((None, Tokens::default())),
+        };
         file.reload()?;
         Ok(file)
     }
@@ -114,18 +122,27 @@ impl IntoResponse for ApiError {
         let status = match &e {
             Error::Forbidden(_) => StatusCode::FORBIDDEN,
             Error::NotFound(_) => StatusCode::NOT_FOUND,
-            Error::VersionConflict { .. } | Error::AlreadyExists { .. } | Error::NotActive { .. } | Error::EmbeddingSpaceMismatch(_) => StatusCode::CONFLICT,
+            Error::VersionConflict { .. }
+            | Error::AlreadyExists { .. }
+            | Error::NotActive { .. }
+            | Error::EmbeddingSpaceMismatch(_) => StatusCode::CONFLICT,
             Error::InvalidInput(_) => StatusCode::BAD_REQUEST,
             Error::Database(_) | Error::Dependency(_) => StatusCode::INTERNAL_SERVER_ERROR,
         };
         let mut body = json!({ "code": e.code() });
         match &e {
-            Error::Database(_) | Error::Dependency(_) => tracing::error!("hyperag request failed: {e}"),
-            Error::VersionConflict { current_version, .. } => {
+            Error::Database(_) | Error::Dependency(_) => {
+                tracing::error!("hyperag request failed: {e}")
+            }
+            Error::VersionConflict {
+                current_version, ..
+            } => {
                 body["message"] = json!(e.to_string());
                 body["currentVersion"] = json!(current_version);
             }
-            Error::NotActive { status, memory_id, .. } => {
+            Error::NotActive {
+                status, memory_id, ..
+            } => {
                 body["message"] = json!(e.to_string());
                 body["status"] = json!(status);
                 if let Some(id) = memory_id {
@@ -148,17 +165,29 @@ pub struct Who(pub String);
 
 impl axum::extract::FromRequestParts<App> for Who {
     type Rejection = Response;
-    async fn from_request_parts(parts: &mut axum::http::request::Parts, app: &App) -> Result<Self, Self::Rejection> {
+    async fn from_request_parts(
+        parts: &mut axum::http::request::Parts,
+        app: &App,
+    ) -> Result<Self, Self::Rejection> {
         principal_of(&parts.headers, &app.tokens)
             .map(Who)
-            .ok_or_else(|| (StatusCode::UNAUTHORIZED, Json(json!({ "error": { "code": "unauthenticated" } }))).into_response())
+            .ok_or_else(|| {
+                (
+                    StatusCode::UNAUTHORIZED,
+                    Json(json!({ "error": { "code": "unauthenticated" } })),
+                )
+                    .into_response()
+            })
     }
 }
 
 /// The token of an `Authorization: Bearer <token>` header; the scheme is case-insensitive (RFC 6750).
 pub fn bearer(header: &str) -> Option<&str> {
     let (scheme, token) = header.split_once(' ')?;
-    scheme.eq_ignore_ascii_case("bearer").then_some(token.trim()).filter(|t| !t.is_empty())
+    scheme
+        .eq_ignore_ascii_case("bearer")
+        .then_some(token.trim())
+        .filter(|t| !t.is_empty())
 }
 
 fn principal_of(headers: &HeaderMap, tokens: &TokenFile) -> Option<String> {
@@ -174,8 +203,14 @@ impl<T: serde::de::DeserializeOwned, S: Send + Sync> axum::extract::FromRequest<
         let bytes = axum::body::Bytes::from_request(req, state)
             .await
             .map_err(|_| Error::InvalidInput("body too large or unreadable".into()))?;
-        let text = if bytes.is_empty() { &b"{}"[..] } else { &bytes[..] };
-        serde_json::from_slice(text).map(Body).map_err(|e| ApiError(Error::InvalidInput(format!("invalid body: {e}"))))
+        let text = if bytes.is_empty() {
+            &b"{}"[..]
+        } else {
+            &bytes[..]
+        };
+        serde_json::from_slice(text)
+            .map(Body)
+            .map_err(|e| ApiError(Error::InvalidInput(format!("invalid body: {e}"))))
     }
 }
 
@@ -192,7 +227,11 @@ struct RetrieveBounds {
     limit: Option<usize>,
     #[serde(default, deserialize_with = "crate::types::deserialize_scope_list")]
     scopes: Option<Vec<String>>,
-    #[serde(default, alias = "exclude_scopes", deserialize_with = "crate::types::deserialize_scope_list")]
+    #[serde(
+        default,
+        alias = "exclude_scopes",
+        deserialize_with = "crate::types::deserialize_scope_list"
+    )]
     exclude_scopes: Option<Vec<String>>,
     candidates_per_channel: Option<usize>,
     rerank_candidates: Option<usize>,
@@ -205,7 +244,9 @@ struct RetrieveBounds {
 
 fn bounded(b: RetrieveBounds) -> Result<RetrieveOptions, ApiError> {
     let check = |v: Option<usize>, key: &str, max: usize| match v {
-        Some(n) if n < 1 || n > max => Err(ApiError(Error::InvalidInput(format!("{key} must be an integer from 1 to {max}")))),
+        Some(n) if n < 1 || n > max => Err(ApiError(Error::InvalidInput(format!(
+            "{key} must be an integer from 1 to {max}"
+        )))),
         _ => Ok(v),
     };
     Ok(RetrieveOptions {
@@ -263,21 +304,37 @@ fn required(fields: &[(&str, &str)]) -> Result<(), ApiError> {
 }
 
 fn new_memory_ok(m: &NewMemory) -> Result<(), ApiError> {
-    required(&[("scope", &m.scope), ("text", &m.text), ("source", &m.source)])
+    required(&[
+        ("scope", &m.scope),
+        ("text", &m.text),
+        ("source", &m.source),
+    ])
 }
 
 fn permission(p: &str) -> Result<&str, ApiError> {
-    if p == "read" || p == "write" { Ok(p) } else { Err(ApiError(Error::InvalidInput("permission is read or write".into()))) }
+    if p == "read" || p == "write" {
+        Ok(p)
+    } else {
+        Err(ApiError(Error::InvalidInput(
+            "permission is read or write".into(),
+        )))
+    }
 }
 
 pub fn router(app: App) -> Router {
     Router::new()
         .route("/healthz", get(health))
-        .route("/v1/whoami", get(|Who(who): Who| async move { Json(json!({ "principal": who })) }))
+        .route(
+            "/v1/whoami",
+            get(|Who(who): Who| async move { Json(json!({ "principal": who })) }),
+        )
         .route("/v1/scopes", get(scopes))
         .route("/v1/memories", post(ingest))
         .route("/v1/memories/batch", post(ingest_batch))
-        .route("/v1/memories/{id}", axum::routing::patch(update).delete(delete))
+        .route(
+            "/v1/memories/{id}",
+            axum::routing::patch(update).delete(delete),
+        )
         .route("/v1/memories/{id}/invalidate", post(invalidate))
         .route("/v1/memories/{id}/explain", get(explain))
         .route("/v1/memories/{id}/relations", get(relations))
@@ -295,11 +352,22 @@ pub fn router(app: App) -> Router {
 }
 
 async fn health(State(a): State<App>) -> (StatusCode, Json<Value>) {
-    let ok = matches!(tokio::time::timeout(
-        std::time::Duration::from_secs(1),
-        sqlx::query("select 1").execute(&a.hyperag.store.pool),
-    ).await, Ok(Ok(_)));
-    (if ok { StatusCode::OK } else { StatusCode::SERVICE_UNAVAILABLE }, Json(json!({ "ok": ok })))
+    let ok = matches!(
+        tokio::time::timeout(
+            std::time::Duration::from_secs(1),
+            sqlx::query("select 1").execute(&a.hyperag.store.pool),
+        )
+        .await,
+        Ok(Ok(_))
+    );
+    (
+        if ok {
+            StatusCode::OK
+        } else {
+            StatusCode::SERVICE_UNAVAILABLE
+        },
+        Json(json!({ "ok": ok })),
+    )
 }
 
 async fn no_route(Who(_): Who) -> ApiError {
@@ -307,8 +375,10 @@ async fn no_route(Who(_): Who) -> ApiError {
 }
 
 async fn scopes(State(a): State<App>, Who(w): Who) -> R {
-    Ok(Json(json!({ "read": a.hyperag.store.scopes(&w, "read").await?,
-        "write": a.hyperag.store.scopes(&w, "write").await? })))
+    Ok(Json(
+        json!({ "read": a.hyperag.store.scopes(&w, "read").await?,
+        "write": a.hyperag.store.scopes(&w, "write").await? }),
+    ))
 }
 
 async fn ingest(State(a): State<App>, Who(w): Who, Body(b): Body<NewMemory>) -> R {
@@ -321,25 +391,52 @@ async fn ingest_batch(State(a): State<App>, Who(w): Who, Body(b): Body<BatchBody
         new_memory_ok(m)?;
     }
     if b.memories.len() > 512 {
-        return Err(ApiError(Error::InvalidInput("at most 512 memories per batch".into())));
+        return Err(ApiError(Error::InvalidInput(
+            "at most 512 memories per batch".into(),
+        )));
     }
-    Ok(Json(json!(a.hyperag.ingest_many(&w, b.memories, 32).await?)))
+    Ok(Json(json!(
+        a.hyperag.ingest_many(&w, b.memories, 32).await?
+    )))
 }
 
-async fn update(State(a): State<App>, Who(w): Who, Path(id): Path<String>, Body(b): Body<MemoryUpdate>) -> R {
+async fn update(
+    State(a): State<App>,
+    Who(w): Who,
+    Path(id): Path<String>,
+    Body(b): Body<MemoryUpdate>,
+) -> R {
     required(&[("text", &b.text), ("source", &b.source)])?;
     if b.expected_version < 1 {
-        return Err(ApiError(Error::InvalidInput("expectedVersion must be a positive integer".into())));
+        return Err(ApiError(Error::InvalidInput(
+            "expectedVersion must be a positive integer".into(),
+        )));
     }
     Ok(Json(json!(a.hyperag.update(&w, &id, b).await?)))
 }
 
-async fn delete(State(a): State<App>, Who(w): Who, Path(id): Path<String>, Query(q): Query<HashMap<String, String>>) -> R {
-    a.hyperag.delete(&w, &id, q.get("reason").map(String::as_str).unwrap_or("deleted")).await?;
+async fn delete(
+    State(a): State<App>,
+    Who(w): Who,
+    Path(id): Path<String>,
+    Query(q): Query<HashMap<String, String>>,
+) -> R {
+    a.hyperag
+        .delete(
+            &w,
+            &id,
+            q.get("reason").map(String::as_str).unwrap_or("deleted"),
+        )
+        .await?;
     Ok(Json(json!({ "deleted": id })))
 }
 
-async fn invalidate(State(a): State<App>, Who(w): Who, Path(id): Path<String>, Body(b): Body<Reason>) -> R {
+async fn invalidate(
+    State(a): State<App>,
+    Who(w): Who,
+    Path(id): Path<String>,
+    Body(b): Body<Reason>,
+) -> R {
     required(&[("reason", &b.reason)])?;
     a.hyperag.invalidate(&w, &id, &b.reason).await?;
     Ok(Json(json!({ "invalidated": id })))
@@ -361,23 +458,35 @@ async fn relate(State(a): State<App>, Who(w): Who, Body(b): Body<RelateBody>) ->
 
 async fn retrieve(State(a): State<App>, Who(w): Who, Body(b): Body<QueryBody>) -> R {
     required(&[("query", &b.query)])?;
-    Ok(Json(json!(a.hyperag.retrieve(&w, &b.query, &bounded(b.options)?).await?)))
+    Ok(Json(json!(
+        a.hyperag
+            .retrieve(&w, &b.query, &bounded(b.options)?)
+            .await?
+    )))
 }
 
 async fn context(State(a): State<App>, Who(w): Who, Body(b): Body<QueryBody>) -> R {
     required(&[("query", &b.query)])?;
-    Ok(Json(json!(a.hyperag.context(&w, &b.query, &bounded(b.options)?).await?)))
+    Ok(Json(json!(
+        a.hyperag
+            .context(&w, &b.query, &bounded(b.options)?)
+            .await?
+    )))
 }
 
 async fn grant(State(a): State<App>, Who(w): Who, Body(b): Body<GrantBody>) -> R {
     required(&[("principal", &b.principal), ("scope", &b.scope)])?;
-    a.hyperag.grant(&w, &b.principal, &b.scope, permission(&b.permission)?).await?;
+    a.hyperag
+        .grant(&w, &b.principal, &b.scope, permission(&b.permission)?)
+        .await?;
     Ok(Json(json!({ "ok": true })))
 }
 
 async fn revoke(State(a): State<App>, Who(w): Who, Body(b): Body<GrantBody>) -> R {
     required(&[("principal", &b.principal), ("scope", &b.scope)])?;
-    a.hyperag.revoke(&w, &b.principal, &b.scope, permission(&b.permission)?).await?;
+    a.hyperag
+        .revoke(&w, &b.principal, &b.scope, permission(&b.permission)?)
+        .await?;
     Ok(Json(json!({ "ok": true })))
 }
 
@@ -391,7 +500,9 @@ pub async fn models_view(h: &Hyperag) -> Result<Value, Error> {
         .map(|(id, s, vectors)| json!({ "id": id, "active": Some(&id) == space.as_ref(), "model": s.model, "revision": s.revision,
             "dimensions": s.dimensions, "normalized": s.normalized, "preprocessing": s.preprocessing, "vectors": vectors }))
         .collect();
-    Ok(json!({ "embedding": embedding.unwrap_or_else(|| "none".into()), "reranker": reranker.unwrap_or_else(|| "none".into()), "spaces": spaces }))
+    Ok(
+        json!({ "embedding": embedding.unwrap_or_else(|| "none".into()), "reranker": reranker.unwrap_or_else(|| "none".into()), "spaces": spaces }),
+    )
 }
 
 #[derive(Deserialize)]
@@ -404,7 +515,15 @@ struct RecentQuery {
 
 async fn recent(State(a): State<App>, Who(w): Who, Query(q): Query<RecentQuery>) -> R {
     required(&[("scope", &q.scope)])?;
-    let r = a.hyperag.recent(&w, &q.scope, q.limit.unwrap_or(30), q.max_bytes.unwrap_or(16_384).min(65_536)).await?;
+    let r = a
+        .hyperag
+        .recent(
+            &w,
+            &q.scope,
+            q.limit.unwrap_or(30),
+            q.max_bytes.unwrap_or(16_384).min(65_536),
+        )
+        .await?;
     Ok(Json(json!(r)))
 }
 
@@ -414,7 +533,13 @@ async fn models(State(a): State<App>, Who(_): Who) -> R {
 
 /// A model switch from the service: admin only, one string per model.
 async fn set_models(State(a): State<App>, Who(w): Who, Body(b): Body<ModelsBody>) -> R {
-    crate::cli::switch(&a.hyperag, &w, b.embedding.as_deref(), b.reranker.as_deref()).await?;
+    crate::cli::switch(
+        &a.hyperag,
+        &w,
+        b.embedding.as_deref(),
+        b.reranker.as_deref(),
+    )
+    .await?;
     Ok(Json(models_view(&a.hyperag).await?))
 }
 
@@ -425,10 +550,16 @@ mod rerank_request_tests {
     async fn malformed_scope_lists_return_bad_request() {
         use axum::extract::FromRequest;
         for key in ["scopes", "excludeScopes", "exclude_scopes"] {
-            for value in [serde_json::json!(null), serde_json::json!([""]), serde_json::json!([null])] {
+            for value in [
+                serde_json::json!(null),
+                serde_json::json!([""]),
+                serde_json::json!([null]),
+            ] {
                 let mut body = serde_json::json!({"query": "fixture"});
                 body[key] = value;
-                let request = axum::http::Request::builder().body(axum::body::Body::from(body.to_string())).unwrap();
+                let request = axum::http::Request::builder()
+                    .body(axum::body::Body::from(body.to_string()))
+                    .unwrap();
                 let response = match Body::<QueryBody>::from_request(request, &()).await {
                     Err(error) => error.into_response(),
                     Ok(_) => panic!("malformed {key} was accepted"),
@@ -441,7 +572,11 @@ mod rerank_request_tests {
     #[test]
     fn scope_lists_reject_null_and_empty_names() {
         for key in ["scopes", "excludeScopes", "exclude_scopes"] {
-            for value in [serde_json::json!(null), serde_json::json!([""]), serde_json::json!([null])] {
+            for value in [
+                serde_json::json!(null),
+                serde_json::json!([""]),
+                serde_json::json!([null]),
+            ] {
                 let mut body = serde_json::json!({"query": "fixture"});
                 body[key] = value;
                 assert!(serde_json::from_value::<QueryBody>(body).is_err(), "{key}");
@@ -460,9 +595,17 @@ mod rerank_request_tests {
         assert_eq!(options.candidates_per_channel, Some(24));
         assert_eq!(options.limit, Some(5));
         let default: QueryBody = serde_json::from_str(r#"{"query":"synthetic fixture"}"#).unwrap();
-        assert_eq!(bounded(default.options).unwrap_or_else(|_| panic!("valid default rejected")).rerank_candidates, None);
-        for n in [0,151] {
-            let request: QueryBody = serde_json::from_value(serde_json::json!({"query":"synthetic fixture","rerankCandidates":n})).unwrap();
+        assert_eq!(
+            bounded(default.options)
+                .unwrap_or_else(|_| panic!("valid default rejected"))
+                .rerank_candidates,
+            None
+        );
+        for n in [0, 151] {
+            let request: QueryBody = serde_json::from_value(
+                serde_json::json!({"query":"synthetic fixture","rerankCandidates":n}),
+            )
+            .unwrap();
             assert!(bounded(request.options).is_err());
         }
     }
@@ -475,11 +618,21 @@ mod profiling_tests {
     #[test]
     fn http_passes_profile_through_bounded_options_and_defaults_off() {
         let plain: QueryBody = serde_json::from_str(r#"{"query":"synthetic fixture"}"#).unwrap();
-        assert!(!bounded(plain.options).ok().unwrap().profile.unwrap_or(false));
-        let profiled: QueryBody = serde_json::from_str(r#"{"query":"synthetic fixture","profile":true,"limit":5}"#).unwrap();
+        assert!(
+            !bounded(plain.options)
+                .ok()
+                .unwrap()
+                .profile
+                .unwrap_or(false)
+        );
+        let profiled: QueryBody =
+            serde_json::from_str(r#"{"query":"synthetic fixture","profile":true,"limit":5}"#)
+                .unwrap();
         let options = bounded(profiled.options).ok().unwrap();
         assert_eq!(options.profile, Some(true));
         assert_eq!(options.limit, Some(5));
-        assert!(serde_json::from_str::<QueryBody>(r#"{"query":"fixture","profile":"yes"}"#).is_err());
+        assert!(
+            serde_json::from_str::<QueryBody>(r#"{"query":"fixture","profile":"yes"}"#).is_err()
+        );
     }
 }

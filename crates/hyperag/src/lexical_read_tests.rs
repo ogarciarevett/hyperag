@@ -479,21 +479,36 @@ async fn exercise(store: Store) -> anyhow::Result<()> {
 
 #[tokio::test]
 async fn scope_filters_narrow_both_channels_without_expanding_grants() -> anyhow::Result<()> {
-    isolated("lexical_read::tests::scope_filters_narrow_both_channels_without_expanding_grants", scope_filter_fixture).await
+    isolated(
+        "lexical_read::tests::scope_filters_narrow_both_channels_without_expanding_grants",
+        scope_filter_fixture,
+    )
+    .await
 }
 
 async fn scope_filter_fixture(store: Store) -> anyhow::Result<()> {
     use axum::{Json, Router, routing::post};
-    let app = Router::new().route("/v1/embeddings", post(|| async {
-        Json(serde_json::json!({"data":[{"index":0,"embedding":[1.0,0.0,0.0]}]}))
-    })).route("/db/neo4j/query/v2", post(|Json(body): Json<serde_json::Value>| async move {
-        // Fixture graph: a -- b -- d, with b in the excluded scope.
-        let readable = body["parameters"]["readable"].as_array();
-        let rows = if readable.is_some_and(|r| r.contains(&serde_json::json!("allowed-b"))) {
-            serde_json::json!([["d", 1, ["a"]]])
-        } else { serde_json::json!([]) };
-        Json(serde_json::json!({"data": {"values": rows}}))
-    }));
+    let app = Router::new()
+        .route(
+            "/v1/embeddings",
+            post(|| async {
+                Json(serde_json::json!({"data":[{"index":0,"embedding":[1.0,0.0,0.0]}]}))
+            }),
+        )
+        .route(
+            "/db/neo4j/query/v2",
+            post(|Json(body): Json<serde_json::Value>| async move {
+                // Fixture graph: a -- b -- d, with b in the excluded scope.
+                let readable = body["parameters"]["readable"].as_array();
+                let rows = if readable.is_some_and(|r| r.contains(&serde_json::json!("allowed-b")))
+                {
+                    serde_json::json!([["d", 1, ["a"]]])
+                } else {
+                    serde_json::json!([])
+                };
+                Json(serde_json::json!({"data": {"values": rows}}))
+            }),
+        );
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
     let addr = listener.local_addr()?;
     let spec = format!("http:http://{addr}?model=fixture&dims=3");
@@ -504,44 +519,131 @@ async fn scope_filter_fixture(store: Store) -> anyhow::Result<()> {
         ('a','allowed-a','fact','fixture',1),('b','allowed-b','fact','fixture',1),('c','private','fact','fixture',1);
         insert into memory_versions(memory_id,version,text,source,author,content_hash) values
         ('a',1,'alpha 2024-05-20','fixture','fixture','a'),('b',1,'alpha 2024-05-20','fixture','fixture','b'),('c',1,'alpha 2024-05-20','fixture','fixture','c')").await?;
-    store.grant("reader", "allowed-a", "read", "fixture").await?;
-    store.grant("reader", "allowed-b", "read", "fixture").await?;
-    store.put_vectors(&space, &[("a".into(),1,vec![1.0,0.0,0.0]),("b".into(),1,vec![1.0,0.0,0.0]),("c".into(),1,vec![1.0,0.0,0.0])]).await?;
+    store
+        .grant("reader", "allowed-a", "read", "fixture")
+        .await?;
+    store
+        .grant("reader", "allowed-b", "read", "fixture")
+        .await?;
+    store
+        .put_vectors(
+            &space,
+            &[
+                ("a".into(), 1, vec![1.0, 0.0, 0.0]),
+                ("b".into(), 1, vec![1.0, 0.0, 0.0]),
+                ("c".into(), 1, vec![1.0, 0.0, 0.0]),
+            ],
+        )
+        .await?;
     let scratch = tempfile::tempdir()?;
     let mut consumer = Consumer::open(&scratch.path().join("index"))?;
     consumer.update(&store.pool).await?;
     for reader in [ReaderHandle::default(), consumer.reader()] {
-        let mut attached = store.clone(); attached.lexical_reader = reader;
-        let mut config = Config::new(attached); config.embedder = crate::models::Embedder::from_spec(&spec).await?;
-        config.graph = Some(crate::graph::Graph::new(&format!("http://{addr}"), "fixture", "fixture", None));
+        let mut attached = store.clone();
+        attached.lexical_reader = reader;
+        let mut config = Config::new(attached);
+        config.embedder = crate::models::Embedder::from_spec(&spec).await?;
+        config.graph = Some(crate::graph::Graph::new(
+            &format!("http://{addr}"),
+            "fixture",
+            "fixture",
+            None,
+        ));
         let core = Hyperag::init(config).await?;
-        let query = |scopes: Option<Vec<String>>, exclude_scopes: Option<Vec<String>>| RetrieveOptions {
-            scopes, exclude_scopes, channels: Some(Channels { graph: Some(false), rerank: Some(false), ..Default::default() }), ..Default::default()
+        let query =
+            |scopes: Option<Vec<String>>, exclude_scopes: Option<Vec<String>>| RetrieveOptions {
+                scopes,
+                exclude_scopes,
+                channels: Some(Channels {
+                    graph: Some(false),
+                    rerank: Some(false),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            };
+        let default = core.retrieve("reader", "alpha", &query(None, None)).await?;
+        let empty = core
+            .retrieve("reader", "alpha", &query(Some(vec![]), Some(vec![])))
+            .await?;
+        let ids = |r: &crate::core::Retrieval| {
+            r.items
+                .iter()
+                .map(|i| i.memory.id.clone())
+                .collect::<Vec<_>>()
         };
-        let default = core.retrieve("reader", "alpha", &query(None,None)).await?;
-        let empty = core.retrieve("reader", "alpha", &query(Some(vec![]),Some(vec![]))).await?;
-        let ids = |r: &crate::core::Retrieval| r.items.iter().map(|i| i.memory.id.clone()).collect::<Vec<_>>();
         assert_eq!(ids(&default), ids(&empty));
         assert_eq!(default.items.len(), 2);
-        for item in &default.items { assert!(item.channels.contains_key("bm25") && item.channels.contains_key("vector")); }
-        for options in [query(Some(vec!["allowed-a".into(),"private".into()]), None), query(None,Some(vec!["allowed-b".into()])), query(Some(vec!["allowed-a".into(),"allowed-b".into()]),Some(vec!["allowed-b".into()]))] {
+        for item in &default.items {
+            assert!(item.channels.contains_key("bm25") && item.channels.contains_key("vector"));
+        }
+        for options in [
+            query(Some(vec!["allowed-a".into(), "private".into()]), None),
+            query(None, Some(vec!["allowed-b".into()])),
+            query(
+                Some(vec!["allowed-a".into(), "allowed-b".into()]),
+                Some(vec!["allowed-b".into()]),
+            ),
+        ] {
             let result = core.retrieve("reader", "alpha", &options).await?;
             assert_eq!(ids(&result), vec!["a"]);
-            assert!(result.items[0].channels.contains_key("bm25") && result.items[0].channels.contains_key("vector"));
+            assert!(
+                result.items[0].channels.contains_key("bm25")
+                    && result.items[0].channels.contains_key("vector")
+            );
         }
-        assert!(core.retrieve("reader", "alpha", &query(Some(vec!["private".into()]),None)).await?.items.is_empty());
+        assert!(
+            core.retrieve(
+                "reader",
+                "alpha",
+                &query(Some(vec!["private".into()]), None)
+            )
+            .await?
+            .items
+            .is_empty()
+        );
         write(&store, "insert into memories(id,scope,kind,created_by,current_version) values ('d','allowed-a','fact','fixture',1);
             insert into memory_versions(memory_id,version,text,source,author,content_hash) values ('d',1,'connected','fixture','fixture','d')").await?;
-        let channels = Some(Channels { graph: Some(true), temporal: Some(true), rerank: Some(false), ..Default::default() });
-        let all = core.retrieve("reader", "alpha 2024-05-20", &RetrieveOptions { channels: channels.clone(), ..Default::default() }).await?;
-        assert!(all.items.iter().any(|i| i.memory.id == "d" && i.channels.contains_key("graph")));
-        assert!(all.items.iter().any(|i| i.memory.id == "b" && i.channels.contains_key("temporal")));
-        let filtered = core.retrieve("reader", "alpha 2024-05-20", &RetrieveOptions { channels, exclude_scopes: Some(vec!["allowed-b".into()]), ..Default::default() }).await?;
+        let channels = Some(Channels {
+            graph: Some(true),
+            temporal: Some(true),
+            rerank: Some(false),
+            ..Default::default()
+        });
+        let all = core
+            .retrieve(
+                "reader",
+                "alpha 2024-05-20",
+                &RetrieveOptions {
+                    channels: channels.clone(),
+                    ..Default::default()
+                },
+            )
+            .await?;
+        assert!(
+            all.items
+                .iter()
+                .any(|i| i.memory.id == "d" && i.channels.contains_key("graph"))
+        );
+        assert!(
+            all.items
+                .iter()
+                .any(|i| i.memory.id == "b" && i.channels.contains_key("temporal"))
+        );
+        let filtered = core
+            .retrieve(
+                "reader",
+                "alpha 2024-05-20",
+                &RetrieveOptions {
+                    channels,
+                    exclude_scopes: Some(vec!["allowed-b".into()]),
+                    ..Default::default()
+                },
+            )
+            .await?;
         assert_eq!(ids(&filtered), vec!["a"]);
         assert!(filtered.items[0].channels.contains_key("temporal"));
         assert!(!filtered.items[0].channels.contains_key("graph"));
         write(&store, "delete from memories where id = 'd'").await?;
-
     }
     server.abort();
     Ok(())
