@@ -1,56 +1,101 @@
+import { z } from "zod";
+
 import type { Embedder, EmbeddingSpace, Reranker } from "../types.js";
 
-/**
- * LOCAL EMBEDDINGS through transformers.js (ONNX Runtime, CPU). No network call after the model is
- * downloaded once from the Hugging Face hub into the local cache. The default is
- * multilingual-e5-small (English and Spanish), which expects `query: ` and `passage: ` prefixes.
- */
-export function createLocalEmbedder(
-  options: Readonly<{
-    model?: string;
-    revision?: string;
-    dimensions?: number;
-    dtype?: "fp32" | "q8";
-    /** `mean` for e5 models, `cls` for BGE models, as each model card specifies. */
-    pooling?: "mean" | "cls";
-    queryPrefix?: string;
-    documentPrefix?: string;
-    /** ONNX intra-op threads; unset leaves the runtime default (all cores). */
+const LocalOptions = z
+  .object({
+    profile: z.enum(["gemma2", "e5-small"]).optional(),
+    model: z.string().min(1).optional(),
+    revision: z.string().min(1).optional(),
+    dimensions: z.number().int().positive().optional(),
+    dtype: z.enum(["fp32", "q8"]).optional(),
+    pooling: z.enum(["mean", "cls", "none"]).optional(),
+    queryPrefix: z.string().optional(),
+    documentPrefix: z.string().optional(),
+    threads: z.number().int().min(1).max(64).optional(),
+  })
+  .strict()
+  .refine((o) => {
+    if (isGemma(o))
+      return (
+        (o.model === undefined || o.model === GEMMA2) &&
+        (o.dimensions === undefined || o.dimensions === 768) &&
+        (o.pooling === undefined || o.pooling === "none")
+      );
+    return (
+      o.pooling !== "none" &&
+      (o.profile !== "e5-small" || o.model === undefined || o.model === E5)
+    );
+  });
+
+const GEMMA2 = "onnx-community/embeddinggemma-2-ONNX";
+const GEMMA2_REVISION = "daa72c51243991dfcaf9f9137d2c573d8f7790c0";
+const E5 = "Xenova/multilingual-e5-small";
+const E5_REVISION = "761b726dd34fb83930e26aab4e9ac3899aa1fa78";
+const isGemma = (o: { profile?: string; model?: string }) =>
+  o.profile === "gemma2" || (o.profile === undefined && o.model === GEMMA2);
+
+/** External inference boundary; injection allows offline contract tests and preloaded runtimes. */
+export type LocalEmbeddingLoader = (
+  profile: Readonly<{
+    model: string;
+    revision: string;
+    dtype: "fp32" | "q8";
+    pooling: "mean" | "cls" | "none";
+    output: "sentence_embedding" | null;
     threads?: number;
-  }> = {},
+  }>,
+) => Promise<(texts: string[]) => Promise<number[][]>>;
+
+/** Local pinned ONNX profiles. Legacy selection stays default until measured promotion. */
+export function createLocalEmbedder(
+  options: z.input<typeof LocalOptions> = {},
+  loadModel: LocalEmbeddingLoader = loadLocalModel,
 ): Embedder {
-  const model = options.model ?? "Xenova/multilingual-e5-small";
-  const revision = options.revision ?? "761b726dd34fb83930e26aab4e9ac3899aa1fa78";
-  const dtype = options.dtype ?? "q8";
-  const queryPrefix = options.queryPrefix ?? "query: ";
-  const documentPrefix = options.documentPrefix ?? "passage: ";
-  const pooling = options.pooling ?? "mean";
+  const parsed = LocalOptions.safeParse(options);
+  if (!parsed.success) throw new Error("embedder_invalid_config");
+  const o = parsed.data;
+  const gemma = isGemma(o);
+  const model = o.model ?? (gemma ? GEMMA2 : E5);
+  const revision = o.revision ?? (gemma ? GEMMA2_REVISION : E5_REVISION);
+  const dtype = o.dtype ?? "q8";
+  const queryPrefix =
+    o.queryPrefix ?? (gemma ? "task: search result | query: " : "query: ");
+  const documentPrefix =
+    o.documentPrefix ?? (gemma ? "title: none | text: " : "passage: ");
+  const pooling = o.pooling ?? (gemma ? "none" : "mean");
+  const output = gemma ? "sentence_embedding" : null;
   const space: EmbeddingSpace = {
     model: `${model}#${dtype}`,
     revision,
-    dimensions: options.dimensions ?? 384,
+    dimensions: o.dimensions ?? (gemma ? 768 : 384),
     normalized: true,
-    preprocessing: `${pooling} pooling; prefixes query=${JSON.stringify(queryPrefix)} document=${JSON.stringify(documentPrefix)}`,
+    preprocessing: gemma
+      ? `model output ${output}; prompts query=${JSON.stringify(queryPrefix)} document=${JSON.stringify(documentPrefix)}`
+      : `${pooling} pooling; prefixes query=${JSON.stringify(queryPrefix)} document=${JSON.stringify(documentPrefix)}`,
   };
-  let extractor: Promise<(texts: string[], o: object) => Promise<{ tolist(): number[][] }>> | undefined;
-  const load = () => {
-    extractor ??= import("@huggingface/transformers").then(
-      ({ pipeline }) =>
-        pipeline("feature-extraction", model, { revision, dtype, ...sessionOptions(options.threads) }) as unknown as Promise<
-          (texts: string[], o: object) => Promise<{ tolist(): number[][] }>
-        >,
-    );
-    return extractor;
-  };
+  let extractor: ReturnType<LocalEmbeddingLoader> | undefined;
   async function embed(texts: string[]): Promise<number[][]> {
-    const fe = await load();
     const vectors: number[][] = [];
-    // Batches of 16 keep peak memory flat on long corpora.
-    for (let i = 0; i < texts.length; i += 16) {
-      const out = await fe(texts.slice(i, i + 16), { pooling, normalize: true });
-      vectors.push(...out.tolist());
+    try {
+      extractor ??= loadModel({
+        model,
+        revision,
+        dtype,
+        pooling,
+        output,
+        threads: o.threads ?? (gemma ? 4 : undefined),
+      });
+      const fe = await extractor;
+      for (let i = 0; i < texts.length; i += 16)
+        vectors.push(...(await fe(texts.slice(i, i + 16))));
+    } catch {
+      throw new Error("embedder_failed: local inference");
     }
-    return checked(space, vectors, texts.length);
+    const checkedVectors = checked(space, vectors, texts.length);
+    if (checkedVectors.some((v) => Math.abs(Math.hypot(...v) - 1) > 0.001))
+      throw new Error("embedder_failed: local output is not normalized");
+    return checkedVectors;
   }
   return {
     embedDocuments: (texts) => embed(texts.map((t) => documentPrefix + t)),
@@ -58,6 +103,49 @@ export function createLocalEmbedder(
     describeModel: () => space,
   };
 }
+
+const loadLocalModel: LocalEmbeddingLoader = async (profile) => {
+  const t = await import("@huggingface/transformers");
+  const options = {
+    revision: profile.revision,
+    dtype: profile.dtype,
+    ...sessionOptions(profile.threads),
+  };
+  if (profile.output === "sentence_embedding") {
+    const config = await t.AutoConfig.from_pretrained(profile.model, {
+      revision: profile.revision,
+    });
+    // The generic pipeline loads all modalities and does not read sentence_embedding in 4.3.1.
+    const modalities = config as unknown as Record<string, unknown>;
+    modalities.vision_config = null;
+    modalities.audio_config = null;
+    const tokenizer = await t.AutoTokenizer.from_pretrained(profile.model, {
+      revision: profile.revision,
+    });
+    const encoder = await t.AutoModel.from_pretrained(profile.model, {
+      ...options,
+      config,
+    });
+    return async (texts) => {
+      const result = await encoder(
+        tokenizer(texts, { padding: true, truncation: true, max_length: 8192 }),
+      );
+      const embedding = result.sentence_embedding;
+      if (!embedding)
+        throw new Error("embedder_failed: missing sentence_embedding");
+      return embedding.normalize(2, -1).tolist() as number[][];
+    };
+  }
+  const pipeline = await t.pipeline(
+    "feature-extraction",
+    profile.model,
+    options,
+  );
+  return async (texts) =>
+    (
+      await pipeline(texts, { pooling: profile.pooling, normalize: true })
+    ).tolist() as number[][];
+};
 
 /**
  * AN OPENAI-COMPATIBLE `/v1/embeddings` ENDPOINT: NVIDIA NIM / API catalog, Hugging Face Text
@@ -86,24 +174,40 @@ export function createOpenAICompatibleEmbedder(
     preprocessing: `query=${JSON.stringify(options.queryBody ?? {})} document=${JSON.stringify(options.documentBody ?? {})}`,
   };
   const doFetch = options.fetch ?? fetch;
-  async function embed(input: readonly string[], extra: Record<string, unknown> | undefined) {
-    const response = await doFetch(`${options.baseUrl.replace(/\/+$/u, "")}/v1/embeddings`, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        ...(options.apiKey === undefined ? {} : { authorization: `Bearer ${options.apiKey}` }),
+  async function embed(
+    input: readonly string[],
+    extra: Record<string, unknown> | undefined,
+  ) {
+    const response = await doFetch(
+      `${options.baseUrl.replace(/\/+$/u, "")}/v1/embeddings`,
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          ...(options.apiKey === undefined
+            ? {}
+            : { authorization: `Bearer ${options.apiKey}` }),
+        },
+        body: JSON.stringify({ model: options.model, input, ...extra }),
+        signal: AbortSignal.timeout(30_000),
       },
-      body: JSON.stringify({ model: options.model, input, ...extra }),
-      signal: AbortSignal.timeout(30_000),
-    });
-    if (!response.ok) throw new Error(`embedder_failed: http_${response.status}`);
-    const body = (await response.json()) as { data?: Array<{ index: number; embedding: number[] }> };
+    );
+    if (!response.ok)
+      throw new Error(`embedder_failed: http_${response.status}`);
+    const body = (await response.json()) as {
+      data?: Array<{ index: number; embedding: number[] }>;
+    };
     const rows = [...(body.data ?? [])].sort((a, b) => a.index - b.index);
-    return checked(space, rows.map((r) => r.embedding), input.length);
+    return checked(
+      space,
+      rows.map((r) => r.embedding),
+      input.length,
+    );
   }
   return {
     embedDocuments: (texts) => embed(texts, options.documentBody),
-    embedQuery: async (q) => (await embed([q], options.queryBody))[0] as number[],
+    embedQuery: async (q) =>
+      (await embed([q], options.queryBody))[0] as number[],
     describeModel: () => space,
   };
 }
@@ -132,13 +236,20 @@ export function createCloudflareEmbedder(
   };
   const doFetch = options.fetch ?? fetch;
   async function embed(text: readonly string[]) {
-    const response = await doFetch(`${base}/accounts/${options.accountId}/ai/run/${options.model}`, {
-      method: "POST",
-      headers: { "content-type": "application/json", authorization: `Bearer ${options.apiToken}` },
-      body: JSON.stringify({ text }),
-      signal: AbortSignal.timeout(30_000),
-    });
-    if (!response.ok) throw new Error(`embedder_failed: http_${response.status}`);
+    const response = await doFetch(
+      `${base}/accounts/${options.accountId}/ai/run/${options.model}`,
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${options.apiToken}`,
+        },
+        body: JSON.stringify({ text }),
+        signal: AbortSignal.timeout(30_000),
+      },
+    );
+    if (!response.ok)
+      throw new Error(`embedder_failed: http_${response.status}`);
     const body = (await response.json()) as { result?: { data?: number[][] } };
     return checked(space, body.result?.data ?? [], text.length);
   }
@@ -150,23 +261,38 @@ export function createCloudflareEmbedder(
 }
 
 /** One vector per input, each of the declared dimension, or the call failed. */
-function checked(space: EmbeddingSpace, vectors: number[][], count: number): number[][] {
-  if (vectors.length !== count) throw new Error("embedder_failed: wrong vector count");
+function checked(
+  space: EmbeddingSpace,
+  vectors: number[][],
+  count: number,
+): number[][] {
+  if (vectors.length !== count)
+    throw new Error("embedder_failed: wrong vector count");
   for (const v of vectors)
     if (v.length !== space.dimensions || !v.every(Number.isFinite))
-      throw new Error(`embedder_failed: expected ${space.dimensions} finite dimensions`);
+      throw new Error(
+        `embedder_failed: expected ${space.dimensions} finite dimensions`,
+      );
   return vectors;
 }
 
 const sessionOptions = (threads?: number) =>
-  threads ? { session_options: { intraOpNumThreads: threads, interOpNumThreads: 1 } } : {};
+  threads
+    ? { session_options: { intraOpNumThreads: threads, interOpNumThreads: 1 } }
+    : {};
 
 /** A LOCAL CROSS-ENCODER through transformers.js; the default is bge-reranker-base. */
 export function createLocalReranker(
-  options: Readonly<{ model?: string; revision?: string; dtype?: "fp32" | "q8"; threads?: number }> = {},
+  options: Readonly<{
+    model?: string;
+    revision?: string;
+    dtype?: "fp32" | "q8";
+    threads?: number;
+  }> = {},
 ): Reranker {
   const model = options.model ?? "Xenova/bge-reranker-base";
-  const revision = options.revision ?? "280bcc27a84e0b898c251e06fddb25171bd9b101";
+  const revision =
+    options.revision ?? "280bcc27a84e0b898c251e06fddb25171bd9b101";
   const dtype = options.dtype ?? "q8";
   type Loaded = {
     tokenizer: (a: string[], o: object) => unknown;
@@ -175,12 +301,17 @@ export function createLocalReranker(
   let loaded: Promise<Loaded> | undefined;
   const load = () => {
     loaded ??= import("@huggingface/transformers").then(async (t) => ({
-      tokenizer: (await t.AutoTokenizer.from_pretrained(model, { revision })) as unknown as Loaded["tokenizer"],
-      model: (await t.AutoModelForSequenceClassification.from_pretrained(model, {
+      tokenizer: (await t.AutoTokenizer.from_pretrained(model, {
         revision,
-        dtype,
-        ...sessionOptions(options.threads),
-      })) as unknown as Loaded["model"],
+      })) as unknown as Loaded["tokenizer"],
+      model: (await t.AutoModelForSequenceClassification.from_pretrained(
+        model,
+        {
+          revision,
+          dtype,
+          ...sessionOptions(options.threads),
+        },
+      )) as unknown as Loaded["model"],
     }));
     return loaded;
   };
