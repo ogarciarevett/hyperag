@@ -19,12 +19,15 @@ use crate::store::Store;
 use crate::types::{Error, Result};
 
 /// The default template: EmbeddingGemma 2 (local, q8, 768 dims) and bge-reranker-v2-m3 (local, q8).
-pub const DEFAULT_EMBEDDING: &str =
-    "hf:onnx-community/embeddinggemma-2-ONNX?revision=daa72c51243991dfcaf9f9137d2c573d8f7790c0&dtype=q8&pooling=none&output=sentence_embedding&dims=768";
+pub const DEFAULT_EMBEDDING: &str = "hf:onnx-community/embeddinggemma-2-ONNX?revision=daa72c51243991dfcaf9f9137d2c573d8f7790c0&dtype=q8&pooling=none&output=sentence_embedding&dims=768";
 pub const DEFAULT_RERANKER: &str = "hf:onnx-community/bge-reranker-v2-m3-ONNX?revision=6f5ff65298512715a1e669753bc754d2bc8f367b&dtype=q8";
 
 #[derive(Parser)]
-#[command(name = "hyperag", version, about = "Shared memory and retrieval for AI agents")]
+#[command(
+    name = "hyperag",
+    version,
+    about = "Shared memory and retrieval for AI agents"
+)]
 pub struct Cli {
     #[command(subcommand)]
     pub command: Command,
@@ -63,7 +66,11 @@ pub enum Command {
     /// Create a token for a principal: prints the token once and adds its hash to the tokens file.
     Token {
         principal: String,
-        #[arg(long, env = "HYPERAG_TOKENS_FILE", default_value = "config/tokens.json")]
+        #[arg(
+            long,
+            env = "HYPERAG_TOKENS_FILE",
+            default_value = "config/tokens.json"
+        )]
         file: std::path::PathBuf,
     },
     /// Write everything the store and graph know to one portable file (JSON Lines, no vectors).
@@ -138,26 +145,51 @@ pub async fn open() -> anyhow::Result<Hyperag> {
         .acquire_timeout(std::time::Duration::from_secs(2))
         // sqlx reuses prepared statements; a generic plan for the BM25 and vector queries was slower
         // than planning each call with its own scopes, as node-pg's unnamed statements do.
-        .after_connect(|c, _| Box::pin(async move { sqlx::query("set plan_cache_mode = force_custom_plan").execute(c).await.map(|_| ()) }))
+        .after_connect(|c, _| {
+            Box::pin(async move {
+                sqlx::query("set plan_cache_mode = force_custom_plan")
+                    .execute(c)
+                    .await
+                    .map(|_| ())
+            })
+        })
         .connect(&url)
         .await?;
     let store = Store::new(pool);
     store.migrate().await?;
     let embedding = match env("HYPERAG_EMBEDDING") {
         Some(s) => s,
-        None => store.setting("embedding").await?.unwrap_or_else(|| DEFAULT_EMBEDDING.into()),
+        None => store
+            .setting("embedding")
+            .await?
+            .unwrap_or_else(|| DEFAULT_EMBEDDING.into()),
     };
     let reranker = match env("HYPERAG_RERANKER") {
         Some(s) => s,
-        None => store.setting("reranker").await?.unwrap_or_else(|| DEFAULT_RERANKER.into()),
+        None => store
+            .setting("reranker")
+            .await?
+            .unwrap_or_else(|| DEFAULT_RERANKER.into()),
     };
     let mut config = Config::new(store);
     config.embedder = Embedder::from_spec(&embedding).await?;
     config.reranker = Reranker::from_spec(&reranker).await?;
     config.graph = env("HYPERAG_NEO4J_URL").map(|u| {
-        Graph::new(&u, &env("HYPERAG_NEO4J_USER").unwrap_or_else(|| "neo4j".into()), &env("HYPERAG_NEO4J_PASSWORD").unwrap_or_default(), None)
+        Graph::new(
+            &u,
+            &env("HYPERAG_NEO4J_USER").unwrap_or_else(|| "neo4j".into()),
+            &env("HYPERAG_NEO4J_PASSWORD").unwrap_or_default(),
+            None,
+        )
     });
-    config.admins = env("HYPERAG_ADMINS").map(|a| a.split(',').map(str::to_owned).filter(|s| !s.is_empty()).collect()).unwrap_or_default();
+    config.admins = env("HYPERAG_ADMINS")
+        .map(|a| {
+            a.split(',')
+                .map(str::to_owned)
+                .filter(|s| !s.is_empty())
+                .collect()
+        })
+        .unwrap_or_default();
     Ok(Hyperag::init(config).await?)
 }
 
@@ -170,7 +202,10 @@ pub struct Service {
 impl Service {
     /// Called only after HTTP requests have drained.
     pub async fn close(self) -> anyhow::Result<()> {
-        let result = match self.writer { Some(writer) => writer.close().await, None => Ok(()) };
+        let result = match self.writer {
+            Some(writer) => writer.close().await,
+            None => Ok(()),
+        };
         self.hyperag.store.pool.close().await;
         result
     }
@@ -178,34 +213,55 @@ impl Service {
 
 pub async fn open_service() -> anyhow::Result<Service> {
     let mut hyperag = open().await?;
-    let writer = if crate::store::LexicalScorer::selected()? == crate::store::LexicalScorer::Tantivy {
-        let database_id: String = sqlx::query_scalar("select database_id::text from lexical_index_state")
-            .fetch_one(&hyperag.store.pool).await?;
+    let writer = if crate::store::LexicalScorer::selected()? == crate::store::LexicalScorer::Tantivy
+    {
+        let database_id: String =
+            sqlx::query_scalar("select database_id::text from lexical_index_state")
+                .fetch_one(&hyperag.store.pool)
+                .await?;
         let configured = std::env::var_os("HYPERAG_LEXICAL_INDEX_ROOT")
-            .filter(|root| !root.is_empty()).map(std::path::PathBuf::from);
+            .filter(|root| !root.is_empty())
+            .map(std::path::PathBuf::from);
         let home = std::env::var_os("HOME").map(std::path::PathBuf::from);
-        let root = crate::lexical_root::resolve(configured.as_deref(), home.as_deref(), &database_id)?;
+        let root =
+            crate::lexical_root::resolve(configured.as_deref(), home.as_deref(), &database_id)?;
         let consumer = crate::lexical_consumer::Consumer::open(&root)?;
         hyperag.store.lexical_reader = consumer.reader();
-        Some(crate::lexical_worker::Worker::start(consumer, hyperag.store.pool.clone()))
-    } else { None };
-    Ok(Service { hyperag: std::sync::Arc::new(hyperag), writer })
+        Some(crate::lexical_worker::Worker::start(
+            consumer,
+            hyperag.store.pool.clone(),
+        ))
+    } else {
+        None
+    };
+    Ok(Service {
+        hyperag: std::sync::Arc::new(hyperag),
+        writer,
+    })
 }
 
 /// One switch, used by the CLI, the service and MCP. `None` leaves that model as it is.
-pub async fn switch(h: &Hyperag, actor: &str, embedding: Option<&str>, reranker: Option<&str>) -> Result<()> {
+pub async fn switch(
+    h: &Hyperag,
+    actor: &str,
+    embedding: Option<&str>,
+    reranker: Option<&str>,
+) -> Result<()> {
     // Admin first: parsing a spec may download and load a model.
     h.must_admin(actor)?;
     match embedding {
         Some("none") => h.clear_embedding(actor).await?,
         Some(spec) => {
-            let e = Embedder::from_spec(spec).await?.ok_or_else(|| Error::InvalidInput("no embedder".into()))?;
+            let e = Embedder::from_spec(spec)
+                .await?
+                .ok_or_else(|| Error::InvalidInput("no embedder".into()))?;
             h.set_models(actor, Some(e), None).await?
         }
         None => {}
     }
     if let Some(spec) = reranker {
-        h.set_models(actor, None, Some(Reranker::from_spec(spec).await?)).await?;
+        h.set_models(actor, None, Some(Reranker::from_spec(spec).await?))
+            .await?;
     }
     Ok(())
 }

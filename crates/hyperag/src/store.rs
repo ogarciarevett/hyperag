@@ -33,12 +33,14 @@ const BM25_K1: f64 = 1.2;
 const BM25_B: f64 = 0.75;
 
 /// The rows a caller may rank: current, active, not deleted, in a readable scope, valid at `asOf`.
-pub(super) const RANKABLE: &str = "m.deleted_at IS NULL AND v.version = m.current_version AND v.status = 'active'
+pub(super) const RANKABLE: &str =
+    "m.deleted_at IS NULL AND v.version = m.current_version AND v.status = 'active'
   AND m.scope = ANY($1::text[])
   AND ($2::timestamptz IS NULL OR ((v.valid_from IS NULL OR v.valid_from <= $2)
        AND (v.valid_to IS NULL OR v.valid_to > $2)))";
 
-pub(super) const VERSION_COLUMNS: &str = "m.id, m.scope, m.kind, v.version, v.text, v.source, v.author, v.valid_from,
+pub(super) const VERSION_COLUMNS: &str =
+    "m.id, m.scope, m.kind, v.version, v.text, v.source, v.author, v.valid_from,
   v.valid_to, v.recorded_at, v.status, v.status_reason, v.superseded_by, v.metadata";
 
 /// BM25 over the caller's readable corpus only (see the TypeScript store for the full rationale).
@@ -124,7 +126,8 @@ union all select id,at,score from legacy_result
 order by score desc,at desc,id limit $4"#;
 
 fn indexed_bm25_sql() -> String {
-    INDEXED_BM25_SQL.replace("{legacy}", &bm25_sql())
+    INDEXED_BM25_SQL
+        .replace("{legacy}", &bm25_sql())
         .replace("{RANKABLE}", RANKABLE)
         .replace("{BM25_K1}", &BM25_K1.to_string())
         .replace("{BM25_B}", &BM25_B.to_string())
@@ -170,7 +173,12 @@ select id, at, score from candidates
 }
 
 #[derive(Debug, PartialEq)]
-pub(super) enum LexicalScorer { Bm25, Fast, IndexedBm25, Tantivy }
+pub(super) enum LexicalScorer {
+    Bm25,
+    Fast,
+    IndexedBm25,
+    Tantivy,
+}
 
 impl LexicalScorer {
     fn parse(value: Option<&str>) -> Result<Self> {
@@ -179,7 +187,9 @@ impl LexicalScorer {
             Some("fast") => Ok(Self::Fast),
             Some("indexed-bm25") => Ok(Self::IndexedBm25),
             Some("tantivy") => Ok(Self::Tantivy),
-            _ => Err(Error::InvalidInput("HYPERAG_LEXICAL_SCORER must be bm25, fast, indexed-bm25 or tantivy".into())),
+            _ => Err(Error::InvalidInput(
+                "HYPERAG_LEXICAL_SCORER must be bm25, fast, indexed-bm25 or tantivy".into(),
+            )),
         }
     }
     pub(super) fn selected() -> Result<Self> {
@@ -222,13 +232,24 @@ pub fn version_hash(scope: &str, v: &VersionInput) -> String {
 
 /// RFC 3339, or a date or date-time without a zone (read as UTC).
 pub fn parse_time(t: &str) -> Option<DateTime<Utc>> {
-    DateTime::parse_from_rfc3339(t).ok().map(|d| d.with_timezone(&Utc)).or_else(|| {
-        ["%Y-%m-%dT%H:%M:%S%.f", "%Y-%m-%d %H:%M:%S%.f", "%Y-%m-%dT%H:%M"]
+    DateTime::parse_from_rfc3339(t)
+        .ok()
+        .map(|d| d.with_timezone(&Utc))
+        .or_else(|| {
+            [
+                "%Y-%m-%dT%H:%M:%S%.f",
+                "%Y-%m-%d %H:%M:%S%.f",
+                "%Y-%m-%dT%H:%M",
+            ]
             .iter()
             .find_map(|f| chrono::NaiveDateTime::parse_from_str(t, f).ok())
-            .or_else(|| chrono::NaiveDate::parse_from_str(t, "%Y-%m-%d").ok().and_then(|d| d.and_hms_opt(0, 0, 0)))
+            .or_else(|| {
+                chrono::NaiveDate::parse_from_str(t, "%Y-%m-%d")
+                    .ok()
+                    .and_then(|d| d.and_hms_opt(0, 0, 0))
+            })
             .map(|d| d.and_utc())
-    })
+        })
 }
 
 /// The same text as JavaScript's `Date.toISOString()`.
@@ -279,7 +300,11 @@ pub struct Store {
 }
 
 fn vector_table(space: &str) -> Result<String> {
-    if space.len() == 16 && space.bytes().all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase()) {
+    if space.len() == 16
+        && space
+            .bytes()
+            .all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase())
+    {
         Ok(format!("vectors_{space}"))
     } else {
         Err(Error::InvalidInput("bad embedding space id".into()))
@@ -287,7 +312,9 @@ fn vector_table(space: &str) -> Result<String> {
 }
 
 pub(super) fn memory_of(r: &PgRow) -> Result<Memory> {
-    let t = |c: &str| -> Result<Option<String>> { Ok(r.try_get::<Option<DateTime<Utc>>, _>(c)?.map(iso_ms)) };
+    let t = |c: &str| -> Result<Option<String>> {
+        Ok(r.try_get::<Option<DateTime<Utc>>, _>(c)?.map(iso_ms))
+    };
     let metadata: Value = r.try_get("metadata")?;
     Ok(Memory {
         id: r.try_get("id")?,
@@ -313,7 +340,9 @@ pub(super) fn memory_of(r: &PgRow) -> Result<Memory> {
 fn time_param(t: &Option<String>) -> Result<Option<DateTime<Utc>>> {
     match t {
         None => Ok(None),
-        Some(s) => parse_time(s).map(Some).ok_or_else(|| Error::InvalidInput(format!("not a date: {s}"))),
+        Some(s) => parse_time(s)
+            .map(Some)
+            .ok_or_else(|| Error::InvalidInput(format!("not a date: {s}"))),
     }
 }
 
@@ -355,17 +384,31 @@ async fn insert_version(
     Ok(())
 }
 
-async fn idempotent(c: &mut Transaction<'_, Postgres>, principal: &str, key: &Option<String>) -> Result<Option<WriteResult>> {
+async fn idempotent(
+    c: &mut Transaction<'_, Postgres>,
+    principal: &str,
+    key: &Option<String>,
+) -> Result<Option<WriteResult>> {
     let Some(key) = key else { return Ok(None) };
     let row = sqlx::query("select memory_id, version from idempotent_writes where principal = $1 and idempotency_key = $2")
         .bind(principal)
         .bind(key)
         .fetch_optional(&mut **c)
         .await?;
-    Ok(row.map(|r| WriteResult { id: r.get("memory_id"), version: r.get("version"), created: false }))
+    Ok(row.map(|r| WriteResult {
+        id: r.get("memory_id"),
+        version: r.get("version"),
+        created: false,
+    }))
 }
 
-async fn remember(c: &mut Transaction<'_, Postgres>, principal: &str, key: &Option<String>, id: &str, version: i32) -> Result<()> {
+async fn remember(
+    c: &mut Transaction<'_, Postgres>,
+    principal: &str,
+    key: &Option<String>,
+    id: &str,
+    version: i32,
+) -> Result<()> {
     if let Some(key) = key {
         sqlx::query("insert into idempotent_writes (idempotency_key, principal, memory_id, version) values ($1, $2, $3, $4)")
             .bind(key)
@@ -389,13 +432,18 @@ pub struct CreateInput<'a> {
 
 impl Store {
     pub fn new(pool: PgPool) -> Self {
-        Store { pool, lexical_reader: Default::default() }
+        Store {
+            pool,
+            lexical_reader: Default::default(),
+        }
     }
 
     /// Acquire before any source row/table lock; shared with triggers and bounded backfill.
     pub(crate) async fn begin_write(&self) -> Result<Transaction<'_, Postgres>> {
         let mut tx = self.pool.begin().await?;
-        sqlx::query("select pg_advisory_xact_lock(1213811052,1)").execute(&mut *tx).await?;
+        sqlx::query("select pg_advisory_xact_lock(1213811052,1)")
+            .execute(&mut *tx)
+            .await?;
         Ok(tx)
     }
 
@@ -410,14 +458,22 @@ impl Store {
     }
 
     pub async fn scopes(&self, principal: &str, permission: &str) -> Result<Vec<String>> {
-        Ok(sqlx::query_scalar("select scope from grants where principal = $1 and permission = $2 order by scope")
-            .bind(principal)
-            .bind(permission)
-            .fetch_all(&self.pool)
-            .await?)
+        Ok(sqlx::query_scalar(
+            "select scope from grants where principal = $1 and permission = $2 order by scope",
+        )
+        .bind(principal)
+        .bind(permission)
+        .fetch_all(&self.pool)
+        .await?)
     }
 
-    pub async fn grant(&self, principal: &str, scope: &str, permission: &str, by: &str) -> Result<()> {
+    pub async fn grant(
+        &self,
+        principal: &str,
+        scope: &str,
+        permission: &str,
+        by: &str,
+    ) -> Result<()> {
         let mut c = self.begin_write().await?;
         sqlx::query("insert into grants (principal, scope, permission, granted_by) values ($1, $2, $3, $4) on conflict do nothing")
             .bind(principal).bind(scope).bind(permission).bind(by).execute(&mut *c).await?;
@@ -427,10 +483,20 @@ impl Store {
         Ok(())
     }
 
-    pub async fn revoke(&self, principal: &str, scope: &str, permission: &str, by: &str) -> Result<()> {
+    pub async fn revoke(
+        &self,
+        principal: &str,
+        scope: &str,
+        permission: &str,
+        by: &str,
+    ) -> Result<()> {
         let mut c = self.begin_write().await?;
         sqlx::query("delete from grants where principal = $1 and scope = $2 and permission = $3")
-            .bind(principal).bind(scope).bind(permission).execute(&mut *c).await?;
+            .bind(principal)
+            .bind(scope)
+            .bind(permission)
+            .execute(&mut *c)
+            .await?;
         sqlx::query("insert into grant_log (principal, scope, permission, action, actor) values ($1, $2, $3, 'revoke', $4)")
             .bind(principal).bind(scope).bind(permission).bind(by).execute(&mut *c).await?;
         c.commit().await?;
@@ -465,14 +531,22 @@ impl Store {
 
     /// Scopes of the live (not deleted) memories among `ids`.
     pub async fn scope_of(&self, ids: &[String]) -> Result<HashMap<String, String>> {
-        let rows = sqlx::query("select id, scope from memories where id = any($1::text[]) and deleted_at is null")
-            .bind(ids)
-            .fetch_all(&self.pool)
-            .await?;
+        let rows = sqlx::query(
+            "select id, scope from memories where id = any($1::text[]) and deleted_at is null",
+        )
+        .bind(ids)
+        .fetch_all(&self.pool)
+        .await?;
         Ok(rows.iter().map(|r| (r.get("id"), r.get("scope"))).collect())
     }
 
-    pub async fn create(&self, principal: &str, input: &CreateInput<'_>, hash: &str, vector: Option<&VectorRow>) -> Result<WriteResult> {
+    pub async fn create(
+        &self,
+        principal: &str,
+        input: &CreateInput<'_>,
+        hash: &str,
+        vector: Option<&VectorRow>,
+    ) -> Result<WriteResult> {
         let mut c = self.begin_write().await?;
         if let Some(replay) = idempotent(&mut c, principal, input.idempotency_key).await? {
             return Ok(replay);
@@ -497,18 +571,27 @@ impl Store {
             if let Some(r) = &row {
                 let existing: Option<String> = r.get("content_hash");
                 if !deleted && existing.as_deref() == Some(hash) {
-                    return Ok(WriteResult { id: input.id.into(), version: r.get("current_version"), created: false });
+                    return Ok(WriteResult {
+                        id: input.id.into(),
+                        version: r.get("current_version"),
+                        created: false,
+                    });
                 }
             }
-            return Err(Error::AlreadyExists { message: format!("memory {} already exists", input.id), deleted });
+            return Err(Error::AlreadyExists {
+                message: format!("memory {} already exists", input.id),
+                deleted,
+            });
         }
         insert_version(&mut c, input.id, 1, principal, hash, &input.version, vector).await?;
         // Lock the corrected memories first, so a concurrent update cannot revive what this corrects.
         if !input.supersedes.is_empty() {
-            sqlx::query("select id from memories where id = any($1::text[]) order by id for update")
-                .bind(input.supersedes)
-                .execute(&mut *c)
-                .await?;
+            sqlx::query(
+                "select id from memories where id = any($1::text[]) order by id for update",
+            )
+            .bind(input.supersedes)
+            .execute(&mut *c)
+            .await?;
         }
         for old in input.supersedes {
             // The reason is fixed text: the correcting id lives only in superseded_by, which explain masks.
@@ -522,12 +605,20 @@ impl Store {
             .execute(&mut *c)
             .await?;
             if marked.rows_affected() == 0 {
-                return Err(Error::NotActive { message: format!("memory {old} is not active"), status: "not active".into(), memory_id: Some(old.clone()) });
+                return Err(Error::NotActive {
+                    message: format!("memory {old} is not active"),
+                    status: "not active".into(),
+                    memory_id: Some(old.clone()),
+                });
             }
         }
         remember(&mut c, principal, input.idempotency_key, input.id, 1).await?;
         c.commit().await?;
-        Ok(WriteResult { id: input.id.into(), version: 1, created: true })
+        Ok(WriteResult {
+            id: input.id.into(),
+            version: 1,
+            created: true,
+        })
     }
 
     pub async fn update(
@@ -545,24 +636,37 @@ impl Store {
             return Ok(replay);
         }
         // Lock first, then read the head: a join under FOR UPDATE would see the old snapshot's version.
-        let current: i32 = sqlx::query_scalar("select current_version from memories where id = $1 and deleted_at is null for update")
-            .bind(id)
-            .fetch_optional(&mut *c)
-            .await?
-            .ok_or_else(|| not_found(id))?;
+        let current: i32 = sqlx::query_scalar(
+            "select current_version from memories where id = $1 and deleted_at is null for update",
+        )
+        .bind(id)
+        .fetch_optional(&mut *c)
+        .await?
+        .ok_or_else(|| not_found(id))?;
         let head = sqlx::query("select content_hash, status from memory_versions where memory_id = $1 and version = $2")
             .bind(id).bind(current)
             .fetch_one(&mut *c)
             .await?;
         let status: String = head.get("status");
         if status != "active" {
-            return Err(Error::NotActive { message: format!("memory {id} is {status}"), status, memory_id: None });
+            return Err(Error::NotActive {
+                message: format!("memory {id} is {status}"),
+                status,
+                memory_id: None,
+            });
         }
         if head.get::<String, _>("content_hash") == hash {
-            return Ok(WriteResult { id: id.into(), version: current, created: false });
+            return Ok(WriteResult {
+                id: id.into(),
+                version: current,
+                created: false,
+            });
         }
         if current != expected_version {
-            return Err(Error::VersionConflict { message: format!("memory {id} is at version {current}"), current_version: current });
+            return Err(Error::VersionConflict {
+                message: format!("memory {id} is at version {current}"),
+                current_version: current,
+            });
         }
         let next = current + 1;
         sqlx::query("update memory_versions set status = 'superseded', status_reason = 'updated to version ' || $3 where memory_id = $1 and version = $2")
@@ -570,10 +674,18 @@ impl Store {
             .execute(&mut *c)
             .await?;
         insert_version(&mut c, id, next, principal, hash, input, vector).await?;
-        sqlx::query("update memories set current_version = $2 where id = $1").bind(id).bind(next).execute(&mut *c).await?;
+        sqlx::query("update memories set current_version = $2 where id = $1")
+            .bind(id)
+            .bind(next)
+            .execute(&mut *c)
+            .await?;
         remember(&mut c, principal, idempotency_key, id, next).await?;
         c.commit().await?;
-        Ok(WriteResult { id: id.into(), version: next, created: true })
+        Ok(WriteResult {
+            id: id.into(),
+            version: next,
+            created: true,
+        })
     }
 
     pub async fn invalidate(&self, id: &str, reason: &str, by: &str) -> Result<()> {
@@ -588,7 +700,13 @@ impl Store {
         match status.as_deref() {
             None => return Err(not_found(id)),
             Some("active") => {}
-            Some(s) => return Err(Error::NotActive { message: format!("memory {id} is {s}"), status: s.into(), memory_id: None }),
+            Some(s) => {
+                return Err(Error::NotActive {
+                    message: format!("memory {id} is {s}"),
+                    status: s.into(),
+                    memory_id: None,
+                });
+            }
         }
         let res = sqlx::query(
             "update memory_versions v set status = 'invalidated', status_reason = $2 || ' (by ' || $3 || ')',
@@ -617,38 +735,90 @@ impl Store {
         if res.rows_affected() == 0 {
             return Err(not_found(id));
         }
-        sqlx::query("delete from memory_versions where memory_id = $1").bind(id).execute(&mut *c).await?;
-        sqlx::query("delete from idempotent_writes where memory_id = $1").bind(id).execute(&mut *c).await?;
+        sqlx::query("delete from memory_versions where memory_id = $1")
+            .bind(id)
+            .execute(&mut *c)
+            .await?;
+        sqlx::query("delete from idempotent_writes where memory_id = $1")
+            .bind(id)
+            .execute(&mut *c)
+            .await?;
         c.commit().await?;
         Ok(())
     }
 
-    pub async fn bm25(&self, scopes: &[String], text: &str, limit: i64, as_of: Option<DateTime<Utc>>) -> Result<Vec<Hit>> {
+    pub async fn bm25(
+        &self,
+        scopes: &[String],
+        text: &str,
+        limit: i64,
+        as_of: Option<DateTime<Utc>>,
+    ) -> Result<Vec<Hit>> {
         if scopes.is_empty() || text.trim().is_empty() {
             return Ok(vec![]);
         }
-        let sql = match LexicalScorer::selected()? { LexicalScorer::Bm25 | LexicalScorer::Tantivy => bm25_sql(), LexicalScorer::Fast => fast_lexical_sql(), LexicalScorer::IndexedBm25 => indexed_bm25_sql() };
-        let rows = sqlx::query(sqlx::AssertSqlSafe(sql)).bind(scopes).bind(as_of).bind(text).bind(limit).fetch_all(&self.pool).await?;
-        Ok(rows.iter().map(|r| Hit { id: r.get("id"), score: r.get("score"), at: r.get("at") }).collect())
+        let sql = match LexicalScorer::selected()? {
+            LexicalScorer::Bm25 | LexicalScorer::Tantivy => bm25_sql(),
+            LexicalScorer::Fast => fast_lexical_sql(),
+            LexicalScorer::IndexedBm25 => indexed_bm25_sql(),
+        };
+        let rows = sqlx::query(sqlx::AssertSqlSafe(sql))
+            .bind(scopes)
+            .bind(as_of)
+            .bind(text)
+            .bind(limit)
+            .fetch_all(&self.pool)
+            .await?;
+        Ok(rows
+            .iter()
+            .map(|r| Hit {
+                id: r.get("id"),
+                score: r.get("score"),
+                at: r.get("at"),
+            })
+            .collect())
     }
 
-    pub async fn vector(&self, space: &str, scopes: &[String], query: &[f32], limit: i64, as_of: Option<DateTime<Utc>>) -> Result<Vec<Hit>> {
-        if scopes.is_empty() { return Ok(vec![]); }
+    pub async fn vector(
+        &self,
+        space: &str,
+        scopes: &[String],
+        query: &[f32],
+        limit: i64,
+        as_of: Option<DateTime<Utc>>,
+    ) -> Result<Vec<Hit>> {
+        if scopes.is_empty() {
+            return Ok(vec![]);
+        }
         let mut c = self.pool.begin().await?;
         let hits = Self::vector_in(&mut c, space, scopes, query, limit, as_of).await?;
         c.commit().await?;
         Ok(hits)
     }
 
-    pub(super) async fn vector_in(c: &mut PgConnection, space: &str, scopes: &[String], query: &[f32], limit: i64, as_of: Option<DateTime<Utc>>) -> Result<Vec<Hit>> {
+    pub(super) async fn vector_in(
+        c: &mut PgConnection,
+        space: &str,
+        scopes: &[String],
+        query: &[f32],
+        limit: i64,
+        as_of: Option<DateTime<Utc>>,
+    ) -> Result<Vec<Hit>> {
         if scopes.is_empty() {
             return Ok(vec![]);
         }
         let table = vector_table(space)?;
         // The iterative scan keeps reading the HNSW graph until enough rows pass the scope filter. The
         // default ef_search (40) found 92% of the exact top 24 on the cross-team corpus; 100 found all.
-        sqlx::query("set local hnsw.iterative_scan = strict_order").execute(&mut *c).await?;
-        sqlx::query(sql!("set local hnsw.ef_search = {}", (4 * limit).clamp(100, 1000))).execute(&mut *c).await?;
+        sqlx::query("set local hnsw.iterative_scan = strict_order")
+            .execute(&mut *c)
+            .await?;
+        sqlx::query(sql!(
+            "set local hnsw.ef_search = {}",
+            (4 * limit).clamp(100, 1000)
+        ))
+        .execute(&mut *c)
+        .await?;
         let rows = sqlx::query(sql!(
             "select m.id, (e.embedding <=> $3)::float8 as distance, extract(epoch from v.recorded_at)::float8 as at
                from {table} e
@@ -661,11 +831,23 @@ impl Store {
         .bind(scopes).bind(as_of).bind(Vector::from(query.to_vec())).bind(limit)
         .fetch_all(&mut *c)
         .await?;
-        Ok(rows.iter().map(|r| Hit { id: r.get("id"), score: 1.0 - r.get::<f64, _>("distance"), at: r.get("at") }).collect())
+        Ok(rows
+            .iter()
+            .map(|r| Hit {
+                id: r.get("id"),
+                score: 1.0 - r.get::<f64, _>("distance"),
+                at: r.get("at"),
+            })
+            .collect())
     }
 
     /// The current, active versions of `ids` the caller may read, in the order of `ids`.
-    pub async fn load(&self, ids: &[String], scopes: &[String], as_of: Option<DateTime<Utc>>) -> Result<Vec<Memory>> {
+    pub async fn load(
+        &self,
+        ids: &[String],
+        scopes: &[String],
+        as_of: Option<DateTime<Utc>>,
+    ) -> Result<Vec<Memory>> {
         if ids.is_empty() || scopes.is_empty() {
             return Ok(vec![]);
         }
@@ -699,7 +881,11 @@ impl Store {
 
     /// Every version of one memory, oldest first, plus its tombstone when deleted.
     pub async fn history(&self, id: &str) -> Result<Option<History>> {
-        let Some(head) = sqlx::query("select * from memories where id = $1").bind(id).fetch_optional(&self.pool).await? else {
+        let Some(head) = sqlx::query("select * from memories where id = $1")
+            .bind(id)
+            .fetch_optional(&self.pool)
+            .await?
+        else {
             return Ok(None);
         };
         let versions = sqlx::query(sql!(
@@ -708,10 +894,12 @@ impl Store {
         .bind(id)
         .fetch_all(&self.pool)
         .await?;
-        let corrects: Vec<String> = sqlx::query_scalar("select distinct memory_id from memory_versions where superseded_by = $1")
-            .bind(id)
-            .fetch_all(&self.pool)
-            .await?;
+        let corrects: Vec<String> = sqlx::query_scalar(
+            "select distinct memory_id from memory_versions where superseded_by = $1",
+        )
+        .bind(id)
+        .fetch_all(&self.pool)
+        .await?;
         let deleted_at: Option<DateTime<Utc>> = head.get("deleted_at");
         Ok(Some(History {
             id: head.get("id"),
@@ -720,14 +908,22 @@ impl Store {
             created_by: head.get("created_by"),
             created_at: iso_ms(head.get("created_at")),
             current_version: head.get("current_version"),
-            deleted: deleted_at.map(|at| Tombstone { at: iso_ms(at), by: head.get("deleted_by"), reason: head.get("delete_reason") }),
+            deleted: deleted_at.map(|at| Tombstone {
+                at: iso_ms(at),
+                by: head.get("deleted_by"),
+                reason: head.get("delete_reason"),
+            }),
             versions: versions.iter().map(memory_of).collect::<Result<_>>()?,
             corrects,
         }))
     }
 
     /// Current active versions with no vector in `space` yet: what a model switch must embed.
-    pub async fn missing_vectors(&self, space: &str, limit: i64) -> Result<Vec<(String, i32, String)>> {
+    pub async fn missing_vectors(
+        &self,
+        space: &str,
+        limit: i64,
+    ) -> Result<Vec<(String, i32, String)>> {
         let table = vector_table(space)?;
         let rows = sqlx::query(sql!(
             "select m.id, v.version, v.text from memories m
@@ -739,7 +935,10 @@ impl Store {
         .bind(limit)
         .fetch_all(&self.pool)
         .await?;
-        Ok(rows.iter().map(|r| (r.get("id"), r.get("version"), r.get("text"))).collect())
+        Ok(rows
+            .iter()
+            .map(|r| (r.get("id"), r.get("version"), r.get("text")))
+            .collect())
     }
 
     pub async fn put_vectors(&self, space: &str, rows: &[(String, i32, Vec<f32>)]) -> Result<()> {
@@ -757,7 +956,11 @@ impl Store {
 
     /// Ids among `ids` that already exist (live or tombstoned).
     pub async fn existing(&self, ids: &[String]) -> Result<HashSet<String>> {
-        let rows: Vec<String> = sqlx::query_scalar("select id from memories where id = any($1::text[])").bind(ids).fetch_all(&self.pool).await?;
+        let rows: Vec<String> =
+            sqlx::query_scalar("select id from memories where id = any($1::text[])")
+                .bind(ids)
+                .fetch_all(&self.pool)
+                .await?;
         Ok(rows.into_iter().collect())
     }
 
@@ -768,7 +971,10 @@ impl Store {
         let mut out = vec![];
         for r in rows {
             let id: String = r.get("id");
-            let count: i64 = sqlx::query_scalar(sql!("select count(*) from {}", vector_table(&id)?)).fetch_one(&self.pool).await?;
+            let count: i64 =
+                sqlx::query_scalar(sql!("select count(*) from {}", vector_table(&id)?))
+                    .fetch_one(&self.pool)
+                    .await?;
             out.push((
                 id,
                 EmbeddingSpace {
@@ -785,7 +991,12 @@ impl Store {
     }
 
     pub async fn setting(&self, key: &str) -> Result<Option<String>> {
-        Ok(sqlx::query_scalar("select value from settings where key = $1").bind(key).fetch_optional(&self.pool).await?)
+        Ok(
+            sqlx::query_scalar("select value from settings where key = $1")
+                .bind(key)
+                .fetch_optional(&self.pool)
+                .await?,
+        )
     }
 
     pub async fn set_setting(&self, key: &str, value: &str) -> Result<()> {
@@ -805,9 +1016,18 @@ mod lexical_scorer_tests {
     #[test]
     fn lexical_scorer_defaults_to_bm25_and_rejects_unknown_settings() {
         assert_eq!(LexicalScorer::parse(None).unwrap(), LexicalScorer::Bm25);
-        assert_eq!(LexicalScorer::parse(Some("bm25")).unwrap(), LexicalScorer::Bm25);
-        assert_eq!(LexicalScorer::parse(Some("fast")).unwrap(), LexicalScorer::Fast);
-        assert_eq!(LexicalScorer::parse(Some("indexed-bm25")).unwrap(), LexicalScorer::IndexedBm25);
+        assert_eq!(
+            LexicalScorer::parse(Some("bm25")).unwrap(),
+            LexicalScorer::Bm25
+        );
+        assert_eq!(
+            LexicalScorer::parse(Some("fast")).unwrap(),
+            LexicalScorer::Fast
+        );
+        assert_eq!(
+            LexicalScorer::parse(Some("indexed-bm25")).unwrap(),
+            LexicalScorer::IndexedBm25
+        );
         assert!(LexicalScorer::parse(Some("tantivy")).is_ok());
         assert!(LexicalScorer::parse(Some("Tantivy")).is_err());
         assert!(LexicalScorer::parse(Some(" tantivy")).is_err());

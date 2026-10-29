@@ -2,10 +2,11 @@ import { afterAll, beforeAll, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { Pool } from "pg";
 import { freshDatabase } from "./helpers";
+import { extractRankable } from "./rust-sql";
 
 // Execute the shipped Rust SQL, with its real parameter types and default planner settings.
 const source = readFileSync(new URL("../crates/hyperag/src/store.rs", import.meta.url), "utf8");
-const rankable = source.match(/const RANKABLE: &str = "([\s\S]*?)";/)![1]!;
+const rankable = extractRankable(source);
 const templateFor = (name: string) => source.match(new RegExp(String.raw`fn ${name}\(\) -> String \{\s*format!\(\s*"([\s\S]*?)"\s*\)`))?.[1];
 const expand = (template: string) => template.replaceAll("{RANKABLE}", rankable).replaceAll("{BM25_K1}", "1.2").replaceAll("{BM25_B}", "0.75").replaceAll("{{}}", "{}");
 // The review head had the fast query in bm25_sql; after the fix each path has its own SQL.

@@ -8,7 +8,9 @@
 use std::time::Duration;
 
 use rmcp::handler::server::wrapper::Parameters;
-use rmcp::model::{CallToolResult, ContentBlock, ErrorData, Implementation, ServerCapabilities, ServerConfig};
+use rmcp::model::{
+    CallToolResult, ContentBlock, ErrorData, Implementation, ServerCapabilities, ServerConfig,
+};
 use rmcp::schemars::{self, JsonSchema};
 use rmcp::{ServerHandler, tool, tool_handler, tool_router};
 use serde::{Deserialize, Serialize};
@@ -52,6 +54,23 @@ pub struct SearchArgs {
     /// Most passages to return (default 8, at most 50).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub limit: Option<usize>,
+    /// Restrict to these readable scopes (empty means all).
+    #[serde(
+        default,
+        deserialize_with = "crate::types::deserialize_scope_list",
+        skip_serializing_if = "Option::is_none"
+    )]
+    #[schemars(with = "Vec<String>")]
+    pub scopes: Option<Vec<String>>,
+    /// Exclude these readable scopes.
+    #[serde(
+        default,
+        alias = "exclude_scopes",
+        deserialize_with = "crate::types::deserialize_scope_list",
+        skip_serializing_if = "Option::is_none"
+    )]
+    #[schemars(with = "Vec<String>")]
+    pub exclude_scopes: Option<Vec<String>>,
     /// Token budget for the packed context (default 1,000).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_tokens: Option<usize>,
@@ -122,42 +141,85 @@ fn token_of(ctx: &rmcp::service::RequestContext<rmcp::RoleServer>) -> Option<Str
 impl Mcp {
     pub fn new(base: &str, token: Option<String>) -> Self {
         Mcp {
-            http: reqwest::Client::builder().timeout(Duration::from_secs(120)).build().expect("http client"),
+            http: reqwest::Client::builder()
+                .timeout(Duration::from_secs(120))
+                .build()
+                .expect("http client"),
             base: base.trim_end_matches('/').to_owned(),
             token,
         }
     }
 
-    async fn call(&self, ctx: &rmcp::service::RequestContext<rmcp::RoleServer>, method: reqwest::Method, path: &str, body: Option<Value>) -> Result<CallToolResult, ErrorData> {
+    async fn call(
+        &self,
+        ctx: &rmcp::service::RequestContext<rmcp::RoleServer>,
+        method: reqwest::Method,
+        path: &str,
+        body: Option<Value>,
+    ) -> Result<CallToolResult, ErrorData> {
         let Some(token) = self.token.clone().or_else(|| token_of(ctx)) else {
             // The same refusal the service gives, readable as a tool result.
-            return Ok(CallToolResult::error(vec![ContentBlock::text(json!({ "error": { "code": "unauthenticated" } }).to_string())]));
+            return Ok(CallToolResult::error(vec![ContentBlock::text(
+                json!({ "error": { "code": "unauthenticated" } }).to_string(),
+            )]));
         };
-        let mut req = self.http.request(method, format!("{}{path}", self.base)).bearer_auth(token);
+        let mut req = self
+            .http
+            .request(method, format!("{}{path}", self.base))
+            .bearer_auth(token);
         if let Some(b) = body {
             req = req.json(&b);
         }
-        let response = req.send().await.map_err(|e| ErrorData::internal_error(format!("hyperag service unreachable: {e}"), None))?;
+        let response = req.send().await.map_err(|e| {
+            ErrorData::internal_error(format!("hyperag service unreachable: {e}"), None)
+        })?;
         let ok = response.status().is_success();
         let raw = response.text().await.unwrap_or_default();
         // A non-JSON body (a proxy error, for example) is passed on as it is.
-        let text = serde_json::from_str::<Value>(&raw).ok().and_then(|v| serde_json::to_string_pretty(&v).ok()).unwrap_or(raw);
+        let text = serde_json::from_str::<Value>(&raw)
+            .ok()
+            .and_then(|v| serde_json::to_string_pretty(&v).ok())
+            .unwrap_or(raw);
         // A refusal (forbidden, not_found, version_conflict...) is a tool result the agent can read.
-        Ok(if ok { CallToolResult::success(vec![ContentBlock::text(text)]) } else { CallToolResult::error(vec![ContentBlock::text(text)]) })
+        Ok(if ok {
+            CallToolResult::success(vec![ContentBlock::text(text)])
+        } else {
+            CallToolResult::error(vec![ContentBlock::text(text)])
+        })
     }
 
-    #[tool(description = "Store a memory (decision, finding, evidence, fact) in a scope. Returns its id and version. A retry with the same text is a no-op.")]
-    async fn ingest(&self, Parameters(a): Parameters<IngestArgs>, ctx: rmcp::service::RequestContext<rmcp::RoleServer>) -> Result<CallToolResult, ErrorData> {
-        self.call(&ctx, reqwest::Method::POST, "/v1/memories", Some(json!(a))).await
+    #[tool(
+        description = "Store a memory (decision, finding, evidence, fact) in a scope. Returns its id and version. A retry with the same text is a no-op."
+    )]
+    async fn ingest(
+        &self,
+        Parameters(a): Parameters<IngestArgs>,
+        ctx: rmcp::service::RequestContext<rmcp::RoleServer>,
+    ) -> Result<CallToolResult, ErrorData> {
+        self.call(&ctx, reqwest::Method::POST, "/v1/memories", Some(json!(a)))
+            .await
     }
 
-    #[tool(description = "Search your readable memory and get a context with numbered citations (memory id, version, source, author), the ranked items, the retrieval paths used, and insufficientEvidence when nothing is good enough.")]
-    async fn search(&self, Parameters(a): Parameters<SearchArgs>, ctx: rmcp::service::RequestContext<rmcp::RoleServer>) -> Result<CallToolResult, ErrorData> {
-        self.call(&ctx, reqwest::Method::POST, "/v1/context", Some(json!(a))).await
+    #[tool(
+        description = "Search your readable memory and get a context with numbered citations (memory id, version, source, author), the ranked items, the retrieval paths used, and insufficientEvidence when nothing is good enough."
+    )]
+    async fn search(
+        &self,
+        Parameters(a): Parameters<SearchArgs>,
+        ctx: rmcp::service::RequestContext<rmcp::RoleServer>,
+    ) -> Result<CallToolResult, ErrorData> {
+        self.call(&ctx, reqwest::Method::POST, "/v1/context", Some(json!(a)))
+            .await
     }
 
-    #[tool(description = "The newest memories of one scope, newest first, as one compact text: what to read at the start of a session.")]
-    async fn recent(&self, Parameters(a): Parameters<RecentArgs>, ctx: rmcp::service::RequestContext<rmcp::RoleServer>) -> Result<CallToolResult, ErrorData> {
+    #[tool(
+        description = "The newest memories of one scope, newest first, as one compact text: what to read at the start of a session."
+    )]
+    async fn recent(
+        &self,
+        Parameters(a): Parameters<RecentArgs>,
+        ctx: rmcp::service::RequestContext<rmcp::RoleServer>,
+    ) -> Result<CallToolResult, ErrorData> {
         let mut path = format!("/v1/recent?scope={}", urlencode(&a.scope));
         if let Some(l) = a.limit {
             path.push_str(&format!("&limit={l}"));
@@ -168,45 +230,122 @@ impl Mcp {
         self.call(&ctx, reqwest::Method::GET, &path, None).await
     }
 
-    #[tool(description = "Write a new version of a memory. Pass the version you read as expectedVersion.")]
-    async fn update(&self, Parameters(a): Parameters<UpdateArgs>, ctx: rmcp::service::RequestContext<rmcp::RoleServer>) -> Result<CallToolResult, ErrorData> {
-        let body = json!({ "text": a.text, "source": a.source, "expectedVersion": a.expected_version });
-        self.call(&ctx, reqwest::Method::PATCH, &format!("/v1/memories/{}", urlencode(&a.id)), Some(body)).await
+    #[tool(
+        description = "Write a new version of a memory. Pass the version you read as expectedVersion."
+    )]
+    async fn update(
+        &self,
+        Parameters(a): Parameters<UpdateArgs>,
+        ctx: rmcp::service::RequestContext<rmcp::RoleServer>,
+    ) -> Result<CallToolResult, ErrorData> {
+        let body =
+            json!({ "text": a.text, "source": a.source, "expectedVersion": a.expected_version });
+        self.call(
+            &ctx,
+            reqwest::Method::PATCH,
+            &format!("/v1/memories/{}", urlencode(&a.id)),
+            Some(body),
+        )
+        .await
     }
 
-    #[tool(description = "Mark a memory as no longer valid. It stops ranking and keeps its history.")]
-    async fn invalidate(&self, Parameters(a): Parameters<IdReasonArgs>, ctx: rmcp::service::RequestContext<rmcp::RoleServer>) -> Result<CallToolResult, ErrorData> {
-        self.call(&ctx, reqwest::Method::POST, &format!("/v1/memories/{}/invalidate", urlencode(&a.id)), Some(json!({ "reason": a.reason }))).await
+    #[tool(
+        description = "Mark a memory as no longer valid. It stops ranking and keeps its history."
+    )]
+    async fn invalidate(
+        &self,
+        Parameters(a): Parameters<IdReasonArgs>,
+        ctx: rmcp::service::RequestContext<rmcp::RoleServer>,
+    ) -> Result<CallToolResult, ErrorData> {
+        self.call(
+            &ctx,
+            reqwest::Method::POST,
+            &format!("/v1/memories/{}/invalidate", urlencode(&a.id)),
+            Some(json!({ "reason": a.reason })),
+        )
+        .await
     }
 
-    #[tool(description = "Delete a memory: its text, vectors and graph edges go; a content-free tombstone stays.")]
-    async fn delete(&self, Parameters(a): Parameters<IdReasonArgs>, ctx: rmcp::service::RequestContext<rmcp::RoleServer>) -> Result<CallToolResult, ErrorData> {
-        self.call(&ctx, reqwest::Method::DELETE, &format!("/v1/memories/{}?reason={}", urlencode(&a.id), urlencode(&a.reason)), None).await
+    #[tool(
+        description = "Delete a memory: its text, vectors and graph edges go; a content-free tombstone stays."
+    )]
+    async fn delete(
+        &self,
+        Parameters(a): Parameters<IdReasonArgs>,
+        ctx: rmcp::service::RequestContext<rmcp::RoleServer>,
+    ) -> Result<CallToolResult, ErrorData> {
+        self.call(
+            &ctx,
+            reqwest::Method::DELETE,
+            &format!(
+                "/v1/memories/{}?reason={}",
+                urlencode(&a.id),
+                urlencode(&a.reason)
+            ),
+            None,
+        )
+        .await
     }
 
-    #[tool(description = "Link two memories with a typed edge, for example a finding SUPPORTED_BY its evidence.")]
-    async fn relate(&self, Parameters(a): Parameters<RelateArgs>, ctx: rmcp::service::RequestContext<rmcp::RoleServer>) -> Result<CallToolResult, ErrorData> {
-        self.call(&ctx, reqwest::Method::POST, "/v1/relations", Some(json!(a))).await
+    #[tool(
+        description = "Link two memories with a typed edge, for example a finding SUPPORTED_BY its evidence."
+    )]
+    async fn relate(
+        &self,
+        Parameters(a): Parameters<RelateArgs>,
+        ctx: rmcp::service::RequestContext<rmcp::RoleServer>,
+    ) -> Result<CallToolResult, ErrorData> {
+        self.call(&ctx, reqwest::Method::POST, "/v1/relations", Some(json!(a)))
+            .await
     }
 
-    #[tool(description = "Explain a memory's provenance: every version with author, recorded and valid time, why it changed, what corrected it, and its relations.")]
-    async fn explain(&self, Parameters(a): Parameters<IdArgs>, ctx: rmcp::service::RequestContext<rmcp::RoleServer>) -> Result<CallToolResult, ErrorData> {
-        self.call(&ctx, reqwest::Method::GET, &format!("/v1/memories/{}/explain", urlencode(&a.id)), None).await
+    #[tool(
+        description = "Explain a memory's provenance: every version with author, recorded and valid time, why it changed, what corrected it, and its relations."
+    )]
+    async fn explain(
+        &self,
+        Parameters(a): Parameters<IdArgs>,
+        ctx: rmcp::service::RequestContext<rmcp::RoleServer>,
+    ) -> Result<CallToolResult, ErrorData> {
+        self.call(
+            &ctx,
+            reqwest::Method::GET,
+            &format!("/v1/memories/{}/explain", urlencode(&a.id)),
+            None,
+        )
+        .await
     }
 
-    #[tool(description = "List the active embedding and re-ranker models and every embedding index with its model, revision, dimensions and vector count.")]
-    async fn models_list(&self, ctx: rmcp::service::RequestContext<rmcp::RoleServer>) -> Result<CallToolResult, ErrorData> {
-        self.call(&ctx, reqwest::Method::GET, "/v1/models", None).await
+    #[tool(
+        description = "List the active embedding and re-ranker models and every embedding index with its model, revision, dimensions and vector count."
+    )]
+    async fn models_list(
+        &self,
+        ctx: rmcp::service::RequestContext<rmcp::RoleServer>,
+    ) -> Result<CallToolResult, ErrorData> {
+        self.call(&ctx, reqwest::Method::GET, "/v1/models", None)
+            .await
     }
 
-    #[tool(description = "Switch the embedding and/or re-ranker model (admin only). A new embedding builds its own index first; documents, BM25 and the graph stay.")]
-    async fn models_set(&self, Parameters(a): Parameters<ModelsArgs>, ctx: rmcp::service::RequestContext<rmcp::RoleServer>) -> Result<CallToolResult, ErrorData> {
-        self.call(&ctx, reqwest::Method::POST, "/v1/models", Some(json!(a))).await
+    #[tool(
+        description = "Switch the embedding and/or re-ranker model (admin only). A new embedding builds its own index first; documents, BM25 and the graph stay."
+    )]
+    async fn models_set(
+        &self,
+        Parameters(a): Parameters<ModelsArgs>,
+        ctx: rmcp::service::RequestContext<rmcp::RoleServer>,
+    ) -> Result<CallToolResult, ErrorData> {
+        self.call(&ctx, reqwest::Method::POST, "/v1/models", Some(json!(a)))
+            .await
     }
 
     #[tool(description = "Check the service is up and who you are.")]
-    async fn health(&self, ctx: rmcp::service::RequestContext<rmcp::RoleServer>) -> Result<CallToolResult, ErrorData> {
-        self.call(&ctx, reqwest::Method::GET, "/v1/whoami", None).await
+    async fn health(
+        &self,
+        ctx: rmcp::service::RequestContext<rmcp::RoleServer>,
+    ) -> Result<CallToolResult, ErrorData> {
+        self.call(&ctx, reqwest::Method::GET, "/v1/whoami", None)
+            .await
     }
 }
 
@@ -226,8 +365,65 @@ impl ServerHandler for Mcp {
 pub(crate) fn urlencode(s: &str) -> String {
     s.bytes()
         .map(|b| match b {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => (b as char).to_string(),
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                (b as char).to_string()
+            }
             _ => format!("%{b:02X}"),
         })
         .collect()
+}
+
+#[cfg(test)]
+mod search_argument_tests {
+    use super::*;
+
+    #[test]
+    fn malformed_scope_filters_cannot_become_unscoped_http_requests() {
+        for key in ["scopes", "excludeScopes", "exclude_scopes"] {
+            for value in [
+                json!(null),
+                json!([""]),
+                json!([null]),
+                json!("project:fixture"),
+            ] {
+                let mut input = json!({"query": "synthetic fixture"});
+                input[key] = value;
+                assert!(
+                    serde_json::from_value::<SearchArgs>(input).is_err(),
+                    "{key}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn scope_filter_schema_allows_omission_but_not_null() {
+        let schema = json!(schemars::schema_for!(SearchArgs));
+        for key in ["scopes", "excludeScopes"] {
+            assert_eq!(schema["properties"][key]["type"], "array");
+            assert!(!schema["required"].as_array().unwrap().contains(&json!(key)));
+        }
+    }
+
+    #[test]
+    fn scope_filters_survive_mcp_to_http_conversion() {
+        for (input_key, output_key) in [
+            ("scopes", "scopes"),
+            ("excludeScopes", "excludeScopes"),
+            ("exclude_scopes", "excludeScopes"),
+        ] {
+            for scopes in [json!([]), json!(["project:fixture"])] {
+                let mut input = json!({"query": "synthetic fixture"});
+                input[input_key] = scopes.clone();
+                let arguments: SearchArgs = serde_json::from_value(input).unwrap();
+                let http_body = json!(arguments);
+                assert_eq!(http_body[output_key], scopes, "{input_key}");
+            }
+        }
+        let arguments: SearchArgs =
+            serde_json::from_value(json!({"query": "synthetic fixture"})).unwrap();
+        let http_body = json!(arguments);
+        assert!(http_body.get("scopes").is_none());
+        assert!(http_body.get("excludeScopes").is_none());
+    }
 }
