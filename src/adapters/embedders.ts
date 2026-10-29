@@ -1,3 +1,5 @@
+import { existsSync } from "node:fs";
+import { resolve } from "node:path";
 import { z } from "zod";
 
 import type { Embedder, EmbeddingSpace, Reranker } from "../types.js";
@@ -119,9 +121,16 @@ const loadLocalModel: LocalEmbeddingLoader = async (profile) => {
     const modalities = config as unknown as Record<string, unknown>;
     modalities.vision_config = null;
     modalities.audio_config = null;
-    const tokenizer = await t.AutoTokenizer.from_pretrained(profile.model, {
-      revision: profile.revision,
-    });
+    // 4.3.1 discovers tokenizer metadata without forwarding revision. Prefer the
+    // exact existing snapshot; this changes loading location, never model identity.
+    const snapshot = pinnedTokenizerSnapshot(t.env?.cacheDir, profile);
+    const tokenizer = await t.AutoTokenizer.from_pretrained(
+      snapshot ?? profile.model,
+      {
+        revision: profile.revision,
+        ...(snapshot ? { local_files_only: true } : {}),
+      },
+    );
     const encoder = await t.AutoModel.from_pretrained(profile.model, {
       ...options,
       config,
@@ -146,6 +155,24 @@ const loadLocalModel: LocalEmbeddingLoader = async (profile) => {
       await pipeline(texts, { pooling: profile.pooling, normalize: true })
     ).tolist() as number[][];
 };
+
+function pinnedTokenizerSnapshot(
+  cacheDir: string | null | undefined,
+  profile: Readonly<{ model: string; revision: string }>,
+): string | undefined {
+  if (
+    !cacheDir ||
+    profile.model !== GEMMA2 ||
+    profile.revision !== GEMMA2_REVISION
+  )
+    return undefined;
+  const directory = resolve(cacheDir, profile.model, profile.revision);
+  return ["tokenizer.json", "tokenizer_config.json"].every((file) =>
+    existsSync(resolve(directory, file)),
+  )
+    ? directory
+    : undefined;
+}
 
 /**
  * AN OPENAI-COMPATIBLE `/v1/embeddings` ENDPOINT: NVIDIA NIM / API catalog, Hugging Face Text

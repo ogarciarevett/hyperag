@@ -28,6 +28,17 @@ external data SHA-256 is
 See the [export card](https://huggingface.co/onnx-community/embeddinggemma-2-ONNX)
 and [canonical card](https://huggingface.co/google/embeddinggemma-2).
 
+## Cached tokenizer compatibility
+
+Transformers.js 4.3.1 discovers tokenizer metadata without forwarding the requested
+revision. When both tokenizer JSON files already exist under the exact pinned
+model/revision cache directory, the adapter passes that snapshot directory to
+AutoTokenizer with local-only loading. The semantic model and revision remain
+unchanged; AutoConfig and AutoModel still use the model ID and revision. This
+avoids creating an unpinned cache alias or changing global runtime configuration.
+An incomplete snapshot falls back to the normal loader; it is not an offline
+bootstrap mechanism. Cache content retains the library's existing trust boundary.
+
 ## Proof and activation gate
 
 Offline tests use an injected external inference boundary and a separate-process

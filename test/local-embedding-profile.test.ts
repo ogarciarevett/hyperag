@@ -135,3 +135,15 @@ test("the default external runtime uses text-only projected output without downl
   expect(result.exitCode).toBe(0);
   expect(result.stdout.toString()).toContain("text-only runtime contract PASS");
 });
+
+test("cached pinned tokenizer snapshots do not require an unpinned metadata alias", () => {
+  const result = Bun.spawnSync([
+    process.execPath,
+    "run",
+    new URL("./fixtures/local-tokenizer-snapshot.ts", import.meta.url).pathname,
+  ]);
+  expect(result.exitCode).toBe(0);
+  expect(result.stdout.toString()).toContain(
+    "pinned tokenizer snapshot contract PASS",
+  );
+});
