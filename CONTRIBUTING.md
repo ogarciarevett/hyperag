@@ -20,3 +20,5 @@ Validation: list actual checks and results, or explain checks not run.
 ```
 
 A named human must review and understand the complete change, verify its tests and claims, check security and privacy, and confirm the right to contribute all code and dependencies under the applicable licenses. AI assistance does not waive existing review, signing, coverage, or CI requirements. Do not include secrets, personal data, private prompts, conversation transcripts, or hidden reasoning in the disclosure.
+
+Before pushing a Rust change, run `cargo fmt --all -- --check`, `cargo clippy --release -p hyperag --lib --no-deps`, and focused database-free unit regressions for the changed behavior. CI repeats formatting and lint checks before its full build and test suite. Keep any baseline formatting repair in a separate mechanical commit and report its scope.
