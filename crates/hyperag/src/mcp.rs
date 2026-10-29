@@ -60,6 +60,7 @@ pub struct SearchArgs {
         deserialize_with = "crate::types::deserialize_scope_list",
         skip_serializing_if = "Option::is_none"
     )]
+    #[schemars(with = "Vec<String>")]
     pub scopes: Option<Vec<String>>,
     /// Exclude these readable scopes.
     #[serde(
@@ -68,6 +69,7 @@ pub struct SearchArgs {
         deserialize_with = "crate::types::deserialize_scope_list",
         skip_serializing_if = "Option::is_none"
     )]
+    #[schemars(with = "Vec<String>")]
     pub exclude_scopes: Option<Vec<String>>,
     /// Token budget for the packed context (default 1,000).
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -391,6 +393,15 @@ mod search_argument_tests {
                     "{key}"
                 );
             }
+        }
+    }
+
+    #[test]
+    fn scope_filter_schema_allows_omission_but_not_null() {
+        let schema = json!(schemars::schema_for!(SearchArgs));
+        for key in ["scopes", "excludeScopes"] {
+            assert_eq!(schema["properties"][key]["type"], "array");
+            assert!(!schema["required"].as_array().unwrap().contains(&json!(key)));
         }
     }
 
