@@ -190,9 +190,9 @@ struct QueryBody {
 #[serde(rename_all = "camelCase")]
 struct RetrieveBounds {
     limit: Option<usize>,
-    #[serde(default, deserialize_with = "scope_list")]
+    #[serde(default, deserialize_with = "crate::types::deserialize_scope_list")]
     scopes: Option<Vec<String>>,
-    #[serde(default, alias = "exclude_scopes", deserialize_with = "scope_list")]
+    #[serde(default, alias = "exclude_scopes", deserialize_with = "crate::types::deserialize_scope_list")]
     exclude_scopes: Option<Vec<String>>,
     candidates_per_channel: Option<usize>,
     rerank_candidates: Option<usize>,
@@ -201,14 +201,6 @@ struct RetrieveBounds {
     channels: Option<crate::core::Channels>,
     max_tokens: Option<usize>,
     profile: Option<bool>,
-}
-
-fn scope_list<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<Vec<String>>, D::Error> {
-    let scopes = Vec::<String>::deserialize(d)?;
-    if scopes.iter().any(|scope| scope.is_empty()) {
-        return Err(serde::de::Error::custom("scope names must not be empty"));
-    }
-    Ok(Some(scopes))
 }
 
 fn bounded(b: RetrieveBounds) -> Result<RetrieveOptions, ApiError> {

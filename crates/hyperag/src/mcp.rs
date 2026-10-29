@@ -53,10 +53,19 @@ pub struct SearchArgs {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub limit: Option<usize>,
     /// Restrict to these readable scopes (empty means all).
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        deserialize_with = "crate::types::deserialize_scope_list",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub scopes: Option<Vec<String>>,
     /// Exclude these readable scopes.
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        alias = "exclude_scopes",
+        deserialize_with = "crate::types::deserialize_scope_list",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub exclude_scopes: Option<Vec<String>>,
     /// Token budget for the packed context (default 1,000).
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -236,4 +245,50 @@ pub(crate) fn urlencode(s: &str) -> String {
             _ => format!("%{b:02X}"),
         })
         .collect()
+}
+
+#[cfg(test)]
+mod search_argument_tests {
+    use super::*;
+
+    #[test]
+    fn malformed_scope_filters_cannot_become_unscoped_http_requests() {
+        for key in ["scopes", "excludeScopes", "exclude_scopes"] {
+            for value in [
+                json!(null),
+                json!([""]),
+                json!([null]),
+                json!("project:fixture"),
+            ] {
+                let mut input = json!({"query": "synthetic fixture"});
+                input[key] = value;
+                assert!(
+                    serde_json::from_value::<SearchArgs>(input).is_err(),
+                    "{key}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn scope_filters_survive_mcp_to_http_conversion() {
+        for (input_key, output_key) in [
+            ("scopes", "scopes"),
+            ("excludeScopes", "excludeScopes"),
+            ("exclude_scopes", "excludeScopes"),
+        ] {
+            for scopes in [json!([]), json!(["project:fixture"])] {
+                let mut input = json!({"query": "synthetic fixture"});
+                input[input_key] = scopes.clone();
+                let arguments: SearchArgs = serde_json::from_value(input).unwrap();
+                let http_body = json!(arguments);
+                assert_eq!(http_body[output_key], scopes, "{input_key}");
+            }
+        }
+        let arguments: SearchArgs =
+            serde_json::from_value(json!({"query": "synthetic fixture"})).unwrap();
+        let http_body = json!(arguments);
+        assert!(http_body.get("scopes").is_none());
+        assert!(http_body.get("excludeScopes").is_none());
+    }
 }

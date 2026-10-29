@@ -1,6 +1,18 @@
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
+/// Deserialize an explicitly supplied scope filter. Missing fields use their serde default;
+/// null and empty names must fail rather than silently widening the readable scope set.
+pub(crate) fn deserialize_scope_list<'de, D: serde::Deserializer<'de>>(
+    d: D,
+) -> Result<Option<Vec<String>>, D::Error> {
+    let scopes = Vec::<String>::deserialize(d)?;
+    if scopes.iter().any(|scope| scope.is_empty()) {
+        return Err(serde::de::Error::custom("scope names must not be empty"));
+    }
+    Ok(Some(scopes))
+}
+
 /// The memory record a caller sees. One stable id, many versions; only the current one ranks.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
