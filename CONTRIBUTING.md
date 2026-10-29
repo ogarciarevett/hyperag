@@ -32,3 +32,7 @@ Before pushing changes to the runnable README fixture or its database cleanup, r
 New commits must use the owner's GitHub noreply identity in repository-local Git configuration. Before pushing, audit both author and committer metadata and any message trailers for the newly authored commit range; do not rewrite historical feature commits as a metadata cleanup shortcut.
 
 Before pushing source or formatting changes, run `bun run test:db-free` as well as the relevant language checks. This service-free TypeScript suite includes temporary SQLite fixtures and loopback HTTP mocks; maintain its file list when adding tests. SQL fixture extraction must tolerate Rust formatter whitespace while preserving SQL literal bytes.
+
+Database fixtures that execute the shipped Rust SQL must install its required production index migrations before asserting plans or performance. When that migration list or SQL changes, run the affected database-backed fixture locally; service-free tests alone do not prove query-plan parity.
+
+Query-plan fixtures must separate semantic safety from planner choice: small or dense cache scans can be legitimate, while source-table scans remain forbidden for ready indexed retrieval. Prove narrow indexed/bounded work on a realistically sized, diverse-vocabulary fixture and preserve exact score/order parity and the existing execution budgets.
