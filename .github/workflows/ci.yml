@@ -34,6 +34,7 @@ jobs:
         with:
           bun-version: 1.4.3
       - run: bun install --frozen-lockfile
+      - run: bun run lint
       - run: bunx tsc --noEmit -p tsconfig.json
       - run: bun run build
       - run: node scripts/package-smoke.mjs . "$(npm pack --ignore-scripts --silent)"
@@ -208,6 +209,7 @@ jobs:
         with:
           bun-version: 1.4.3
       - run: bun install --frozen-lockfile
+      - run: bun run lint
       - name: wait for neo4j
         # The root page answers before the Query API accepts queries: wait for a real query, or fail.
         run: |
