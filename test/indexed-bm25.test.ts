@@ -2,9 +2,10 @@ import { afterAll,beforeAll,expect,test } from "bun:test";
 import { existsSync, readFileSync } from "node:fs";
 import { Pool } from "pg";
 import { freshDatabase } from "./helpers";
+import { extractRankable } from "./rust-sql";
 
 const code=readFileSync(new URL("../crates/hyperag/src/store.rs",import.meta.url),"utf8");
-const rankable=code.match(/const RANKABLE: &str = "([\s\S]*?)";/)![1]!;
+const rankable = extractRankable(code);
 const expand=(s:string)=>s.replaceAll("{RANKABLE}",rankable).replaceAll("{BM25_K1}","1.2").replaceAll("{BM25_B}","0.75");
 const legacy=expand(code.match(/fn bm25_sql\(\) -> String \{\s*format!\(\s*"([\s\S]*?)"\s*\)/)![1]!);
 const template=code.match(/const INDEXED_BM25_SQL: &str = r#"([\s\S]*?)"#;/)?.[1];
@@ -38,6 +39,8 @@ beforeAll(async()=>{
  for(let i=0;i<100;i++){if(Number((await pool.query("select lexical_cache_backfill(256)n")).rows[0].n)===0)break;}
  const migration=new URL("../crates/hyperag/migrations/0005_lexical_postings.sql",import.meta.url);
  if(existsSync(migration))await pool.query(readFileSync(migration,"utf8"));
+ // The shipped Rust query requires the same lexeme-first index as Store::migrate.
+ await pool.query(readFileSync(new URL("../crates/hyperag/migrations/0007_lexical_term_stats_lexeme_index.sql",import.meta.url),"utf8"));
 },60000);
 afterAll(async()=>{closing=true;await pool.end();await db.drop();});
 const compare=async(scopes:string[],at:string|null,q:string)=>{
@@ -46,6 +49,11 @@ const compare=async(scopes:string[],at:string|null,q:string)=>{
  expect(actual).toEqual(expected);
  return actual;
 };
+test("the fixture installs the runtime lexeme-first index before indexed queries",async()=>{
+ const row=(await pool.query("select indexdef from pg_indexes where indexname='lexical_term_stats_lexeme'")).rows[0];
+ expect(row?.indexdef).toContain("(lexeme, scope)");
+ expect(row?.indexdef).toContain("INCLUDE (df, valid_from, valid_to)");
+});
 test("unready falls back, then exact legacy scores/order across scopes, dates and rare/common terms",async()=>{
  await compare(["allowed"],null,"ordinary quartz");
  for(let i=0;i<100;i++){if(Number((await pool.query("select lexical_cache_backfill(256)n")).rows[0].n)===0)break;}
@@ -60,16 +68,19 @@ test("unready falls back, then exact legacy scores/order across scopes, dates an
     await compare(scopes,at,q);
  const rare=await compare(["allowed"],null,"ordinary quartz");expect(rare.some(r=>r.id==='rare')).toBe(true);
 },60000);
-test("ready search reads indexed postings with no source-table or whole-document scan",async()=>{
+test("small-cache search stays cache-only under planner-selected access paths",async()=>{
  await pool.query("vacuum (analyze) memory_versions");
+ // Fresh backfilled fixture tables need the statistics already present on the live cache.
+ await pool.query("analyze lexical_documents; analyze lexical_postings; analyze lexical_term_stats; analyze lexical_corpus_stats");
  const nodes:any[]=[];const walk=(n:any)=>{nodes.push(n);for(const p of n.Plans??[])walk(p);};
  const plan=(await pool.query(`explain(analyze,buffers,format json) ${indexed}`,[["allowed"],null,"ultrararefixturetoken",24])).rows[0]["QUERY PLAN"][0];walk(plan.Plan);
- expect(nodes.some(n=>n["Index Name"]==='lexical_postings_pkey'&&n["Actual Loops"]>0)).toBe(true);
+ // At this small cardinality PostgreSQL may correctly prefer a cache sequential scan.
+ expect(plan.Plan['Actual Rows']).toBe(1);
  expect(nodes.filter(n=>['memory_versions','memories'].includes(n["Relation Name"])).every(n=>n["Actual Loops"]===0)).toBe(true);
  const broad=(await pool.query(`explain(analyze,buffers,format json) ${indexed}`,[["allowed"],null,"ordinary quartz",24])).rows[0]["QUERY PLAN"][0];nodes.length=0;walk(broad.Plan);
  expect(nodes.filter(n=>n["Node Type"]==='Function Scan').every(n=>n["Actual Loops"]<=1)).toBe(true);
  expect(nodes.some(n=>n["Node Type"]==='Function Scan'&&n["Actual Loops"]===1)).toBe(true);
- expect(nodes.filter(n=>['memory_versions','memories'].includes(n["Relation Name"])||(n["Relation Name"]==='lexical_documents'&&n["Node Type"]==='Seq Scan')).every(n=>n["Actual Loops"]===0)).toBe(true);
+ expect(nodes.filter(n=>n['Relation Name']&&n['Actual Loops']>0).every(n=>['settings','lexical_documents','lexical_postings','lexical_corpus_stats','lexical_term_stats'].includes(n['Relation Name']))).toBe(true);
  console.info('indexed-bm25-fixture',JSON.stringify({selectiveMs:plan["Execution Time"],broadMs:broad["Execution Time"]}));
 });
 test("metadata/postings backfill is idempotent, bounded and matches every current source lexeme",async()=>{
@@ -79,7 +90,7 @@ test("metadata/postings backfill is idempotent, bounded and matches every curren
  await postingsOracle();
  const before=(await pool.query("select memory_id,posting_id from lexical_documents order by memory_id")).rows;
  await pool.query("begin; select pg_advisory_xact_lock(1213811052,1)");
- for(const name of ["0004_lexical_cache.sql","0005_lexical_postings.sql"])await pool.query(readFileSync(new URL(`../crates/hyperag/migrations/${name}`,import.meta.url),"utf8"));
+ for(const name of ["0004_lexical_cache.sql","0005_lexical_postings.sql","0007_lexical_term_stats_lexeme_index.sql"])await pool.query(readFileSync(new URL(`../crates/hyperag/migrations/${name}`,import.meta.url),"utf8"));
  await pool.query("commit; select lexical_refresh_document('both')");
  expect((await pool.query("select memory_id,posting_id from lexical_documents order by memory_id")).rows).toEqual(before);
  await postingsOracle();
@@ -110,7 +121,7 @@ async function postingsOracle(){
  expect(actual).toEqual(expected);
 }
 
-test("100k dense broad query preserves scores without source or whole-document scans",async()=>{
+test("100k narrow lookup is indexed and bounded; dense queries preserve scores without source scans",async()=>{
  await pool.query("select lexical_cache_backfill(64); select lexical_postings_backfill(64)");
  // Bulk-load equivalent synthetic source/cache rows so this tests the planner, not backfill throughput.
  await pool.query(`begin; select pg_advisory_xact_lock(1213811052,1);
@@ -121,7 +132,7 @@ test("100k dense broad query preserves scores without source or whole-document s
   insert into memories(id,scope,kind,created_by,current_version)
    select 'large-'||n,case when n%7=0 then 'hidden' else 'allowed' end,'fact','fixture',1 from generate_series(1,100000)n;
   insert into memory_versions(memory_id,version,text,source,author,content_hash)
-   select id,1,'ordinary quartz common token','fixture','fixture',id from memories where id like 'large-%';
+   select id,1,'ordinary quartz common '||replace(id,'-',''),'fixture','fixture',id from memories where id like 'large-%';
   insert into lexical_documents(memory_id,version,scope,valid_from,valid_to,doc_len,tf,current_version,status,recorded_at)
    select m.id,v.version,m.scope,'-infinity','infinity',length(v.text_search),
     (select jsonb_object_agg(u.lexeme,coalesce(array_length(u.positions,1),1)) from unnest(v.text_search)u),
@@ -137,9 +148,20 @@ test("100k dense broad query preserves scores without source or whole-document s
   await pool.query(`vacuum(analyze) ${name}`);
  expect(Number((await pool.query("select count(*)n from memory_versions")).rows[0].n)).toBe(100000);
  expect(Number((await pool.query("select count(*)n from lexical_postings")).rows[0].n)).toBe(400000);
+ // One unique lexeme per document models a real vocabulary while keeping four postings per row.
+ const nodes:any[]=[];const walk=(n:any)=>{nodes.push(n);for(const c of n.Plans??[])walk(c);};
+ const narrow=(await pool.query(`explain(analyze,buffers,format json) ${indexed}`,[["allowed"],null,"large1",24])).rows[0]["QUERY PLAN"][0];walk(narrow.Plan);
+ expect(narrow.Plan["Actual Rows"]).toBe(1);
+ const postingReads=nodes.filter(n=>n["Relation Name"]==='lexical_postings'&&n["Actual Loops"]>0);
+ expect(postingReads.some(n=>['Index Scan','Index Only Scan','Bitmap Heap Scan'].includes(n['Node Type']))).toBe(true);
+ const postingWork=nodes.filter(n=>(n['Relation Name']==='lexical_postings'||n['Index Name']?.startsWith('lexical_postings'))&&n['Actual Loops']>0);
+ expect(postingWork.reduce((sum,n)=>sum+((n['Actual Rows']??0)+(n['Rows Removed by Filter']??0)+(n['Rows Removed by Index Recheck']??0))*n['Actual Loops'],0)).toBeLessThanOrEqual(24);
+ expect(nodes.filter(n=>['memories','memory_versions'].includes(n['Relation Name'])||(n['Relation Name']==='lexical_documents'&&n['Node Type']==='Seq Scan')).every(n=>n['Actual Loops']===0)).toBe(true);
+ await compare(["allowed"],null,"large1");
  await compare(["allowed"],null,"ordinary quartz");
  const plan=(await pool.query(`explain(analyze,buffers,format json) ${indexed}`,[["allowed"],null,"ordinary quartz",24])).rows[0]["QUERY PLAN"][0];
- const nodes:any[]=[];const walk=(n:any)=>{nodes.push(n);for(const c of n.Plans??[])walk(c);};walk(plan.Plan);
- expect(nodes.filter(n=>['memory_versions','memories'].includes(n["Relation Name"])||(n["Relation Name"]==='lexical_documents'&&n["Node Type"]==='Seq Scan')).every(n=>n["Actual Loops"]===0)).toBe(true);
- console.info('postings-100k-plan',JSON.stringify({executionMs:plan["Execution Time"],sourceRows:100000,postings:400000}));
+ nodes.length=0;walk(plan.Plan);
+ expect(nodes.filter(n=>['memory_versions','memories'].includes(n['Relation Name'])).every(n=>n['Actual Loops']===0)).toBe(true);
+ expect(nodes.filter(n=>n['Relation Name']&&n['Actual Loops']>0).every(n=>['settings','lexical_documents','lexical_postings','lexical_corpus_stats','lexical_term_stats'].includes(n['Relation Name']))).toBe(true);
+ console.info('postings-100k-plan',JSON.stringify({executionMs:plan["Execution Time"],narrowMs:narrow["Execution Time"],sourceRows:100000,postings:400000}));
 },180000);

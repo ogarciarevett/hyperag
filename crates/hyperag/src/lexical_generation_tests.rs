@@ -212,10 +212,15 @@ async fn exercise(pool: &PgPool) -> anyhow::Result<()> {
     let cancelled_path = root.path().join("cancelled-copy");
     let cancelled_source = SourceSnapshot::open(pool, Some(&target)).await?;
     let mut cancelled = Box::pin(Generation::replay(
-        &cancelled_path, &complete_path, cancelled_source,
+        &cancelled_path,
+        &complete_path,
+        cancelled_source,
     ));
-    assert!(std::future::poll_fn(|cx| std::task::Poll::Ready(cancelled.as_mut().poll(cx)))
-        .await.is_pending());
+    assert!(
+        std::future::poll_fn(|cx| std::task::Poll::Ready(cancelled.as_mut().poll(cx)))
+            .await
+            .is_pending()
+    );
     drop(cancelled);
     assert!(recover(&cancelled_path, &target)?.is_none());
     assert!(recover(&cancelled_path, &replay_target)?.is_none());
@@ -328,15 +333,29 @@ async fn exercise(pool: &PgPool) -> anyhow::Result<()> {
     );
     assert_eq!(std::fs::read(&meta_path)?, base_metadata);
     let full = SourceSnapshot::open(pool, None).await?;
-    assert!(Generation::replay(&root.path().join("bad-full"), &complete_path, full).await.is_err());
+    assert!(
+        Generation::replay(&root.path().join("bad-full"), &complete_path, full)
+            .await
+            .is_err()
+    );
     let mut consumed = SourceSnapshot::open(pool, Some(&target)).await?;
     assert!(consumed.next_batch().await?.is_some());
     assert!(
-        Generation::replay(&root.path().join("bad-consumed"), &complete_path, consumed).await.is_err()
+        Generation::replay(&root.path().join("bad-consumed"), &complete_path, consumed)
+            .await
+            .is_err()
     );
     let source = SourceSnapshot::open(pool, Some(&target)).await?;
-    assert!(Generation::replay(&root.path().join("bad-base"), &old_path, source).await.is_err());
+    assert!(
+        Generation::replay(&root.path().join("bad-base"), &old_path, source)
+            .await
+            .is_err()
+    );
     let source = SourceSnapshot::open(pool, Some(&target)).await?;
-    assert!(Generation::replay(&root.path().join("bad-pending"), &pending_path, source).await.is_err());
+    assert!(
+        Generation::replay(&root.path().join("bad-pending"), &pending_path, source)
+            .await
+            .is_err()
+    );
     Ok(())
 }

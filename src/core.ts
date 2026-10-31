@@ -19,6 +19,8 @@ import {
 export type RetrieveOptions = Readonly<{
   limit?: number;
   candidatesPerChannel?: number;
+  scopes?: readonly string[];
+  excludeScopes?: readonly string[];
   /** Only facts valid at this instant (valid time), default: no valid-time filter. */
   asOf?: string;
   /** Turn single channels off to evaluate components one at a time. */
@@ -37,6 +39,7 @@ export type RetrievedItem = Readonly<{
 
 export type Retrieval = Readonly<{
   items: readonly RetrievedItem[];
+  scopeFilterApplied?: boolean;
   /** True when no item clears the evidence bar: the caller should say it does not know. */
   insufficientEvidence: boolean;
   pathsUsed: readonly string[];
@@ -279,7 +282,8 @@ export class Hyperag {
   }
 
   async retrieve(principal: string, query: string, options: RetrieveOptions = {}): Promise<Retrieval> {
-    const readable = await this.config.store.scopes(principal, "read");
+    const readable = (await this.config.store.scopes(principal, "read")).filter((scope) =>
+      (!options.scopes?.length || options.scopes.includes(scope)) && !options.excludeScopes?.includes(scope));
     const limit = options.limit ?? 8;
     const candidates = options.candidatesPerChannel ?? 24;
     const asOf = options.asOf ?? null;
@@ -365,7 +369,8 @@ export class Hyperag {
     const insufficientEvidence = !this.hasEvidence(items, lists, reranked);
     if (insufficientEvidence) limitations.push("insufficient evidence: no result clears the evidence threshold");
     if (readable.length === 0) limitations.push("principal has no readable scope");
-    return { items, insufficientEvidence, pathsUsed: paths, limitations, embeddingSpace: this.space };
+    return { items, insufficientEvidence, pathsUsed: paths, limitations, embeddingSpace: this.space,
+      ...(options.scopes !== undefined || options.excludeScopes !== undefined ? { scopeFilterApplied: true } : {}) };
   }
 
   /** Retrieval packed into a token budget, each passage numbered and cited. */

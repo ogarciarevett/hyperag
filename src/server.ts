@@ -105,6 +105,8 @@ export function createHandler(hyperag: Hyperag, auth: ServiceAuth) {
       throw new HyperagError("invalid_input", "channels values must be booleans");
     return defined({
       limit: int(b, "limit", 1, 50),
+      scopes: strings(b, "scopes"),
+      excludeScopes: strings(b, "excludeScopes") ?? strings(b, "exclude_scopes"),
       candidatesPerChannel: int(b, "candidatesPerChannel", 1, 150),
       maxTokens: int(b, "maxTokens", 1, 32_000),
       asOf: optStr(b, "asOf"),

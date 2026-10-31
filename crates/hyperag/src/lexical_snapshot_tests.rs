@@ -269,7 +269,8 @@ async fn fallback_cost(pool: &PgPool) -> anyhow::Result<()> {
         &scratch.path().join("replay"),
         &base_path,
         SourceSnapshot::open(pool, Some(&checkpoint)).await?,
-    ).await?;
+    )
+    .await?;
     assert!(replay.advance().await?);
     let before = source_visits(replay.source_for_test()).await?;
     let fallback_started = std::time::Instant::now();
