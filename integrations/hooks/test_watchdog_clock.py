@@ -79,6 +79,14 @@ class WatchdogClockTest(unittest.TestCase):
             guard._status({'active_marker': '/fixture-marker'})
         self.assertNotIsInstance(error.exception, guard.WriterFailure)
 
+    def test_ack_failure_trips_even_when_deliveries_are_reconciled(self):
+        status = {'async_writes': True, 'token_file': True, 'async_active_marker': '/fixture-marker',
+                  'categories': {'ack_failure': 1}, 'accepted': 3, 'stored': 3,
+                  'failed': 0, 'rejected': 0, 'cancelled': 0}
+        with patch.object(guard, '_native', return_value=(0, json.dumps(status).encode(), False, b'')), \
+                self.assertRaisesRegex(guard.WriterFailure, 'ack_failure'):
+            guard._status({'active_marker': '/fixture-marker'})
+
     def test_shared_clock_uses_raw_clock_not_process_relative_monotonic(self):
         with patch.object(guard.time, 'clock_gettime', return_value=123) as clock, \
                 patch.object(guard.time, 'monotonic', side_effect=AssertionError('process-relative clock')):
