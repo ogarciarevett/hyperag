@@ -365,14 +365,14 @@ await Promise.all(
           }
           const answer = await chat(prompt, a.bench === "locomo" ? 32 : 500);
           // a failed search scores 0 whatever the model answers (score_locomo.py does the same)
-          const judged =
-            a.bench === "locomo"
-              ? undefined
-              : searchError
-                ? false
-                : (await chat(judgePrompt(q, answer), 10))
-                    .toLowerCase()
-                    .includes("yes");
+          let judged: boolean | undefined;
+          if (a.bench !== "locomo") {
+            if (searchError) judged = false;
+            else
+              judged = (await chat(judgePrompt(q, answer), 10))
+                .toLowerCase()
+                .includes("yes");
+          }
           appendFileSync(
             outFile,
             `${JSON.stringify({ id: q.id, type: q.type, question: q.question, gold: q.gold, answer, correct: judged, retrieved: hits.map((h) => h.id), ...(searchError ? { searchError } : {}), extra: q.extra })}\n`,

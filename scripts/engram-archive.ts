@@ -132,15 +132,15 @@ export async function archiveSource(path: string, call: Call) {
       // Decimal strings retain 64-bit integers exactly in JSON; column affinity remains in schema.
       const normalize = (row: Record<string, unknown>) =>
         Object.fromEntries(
-          Object.entries(row).map(([k, v]) => [
-            k,
-            typeof v === "bigint"
-              ? v <= BigInt(Number.MAX_SAFE_INTEGER) &&
-                v >= BigInt(Number.MIN_SAFE_INTEGER)
-                ? Number(v)
-                : { $integer: v.toString() }
-              : v,
-          ]),
+          Object.entries(row).map(([k, v]) => {
+            if (typeof v !== "bigint") return [k, v];
+            if (
+              v <= BigInt(Number.MAX_SAFE_INTEGER) &&
+              v >= BigInt(Number.MIN_SAFE_INTEGER)
+            )
+              return [k, Number(v)];
+            return [k, { $integer: v.toString() }];
+          }),
         );
       let count = 0;
       const records: Array<{ identity: unknown; sha256: string }> = [];

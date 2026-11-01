@@ -4,21 +4,21 @@
 import time
 
 STARTED = time.monotonic()
-import argparse
-import fcntl
-import hashlib
-import importlib.util
-import json
-import math
-import secrets
-import os
-from pathlib import Path
-import selectors
-import stat
-import statistics
-import subprocess
-import sys
-import tempfile
+import argparse  # noqa: E402 - preserve early budget clock
+import fcntl  # noqa: E402 - preserve early budget clock
+import hashlib  # noqa: E402 - preserve early budget clock
+import importlib.util  # noqa: E402 - preserve early budget clock
+import json  # noqa: E402 - preserve early budget clock
+import math  # noqa: E402 - preserve early budget clock
+import secrets  # noqa: E402 - preserve early budget clock
+import os  # noqa: E402 - preserve early budget clock
+from pathlib import Path  # noqa: E402 - preserve early budget clock
+import selectors  # noqa: E402 - preserve early budget clock
+import stat  # noqa: E402 - preserve early budget clock
+import statistics  # noqa: E402 - preserve early budget clock
+import subprocess  # noqa: E402 - preserve early budget clock
+import sys  # noqa: E402 - preserve early budget clock
+import tempfile  # noqa: E402 - preserve early budget clock
 
 
 def _module(name):

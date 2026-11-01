@@ -126,7 +126,12 @@ COLS = [
     "latency_p95_ms",
     "latency_p95_c8",
 ]
-fmt = lambda v: "n/a" if v is None else (f"{v:.3f}" if isinstance(v, float) else str(v))
+
+
+def fmt(v):
+    return "n/a" if v is None else (f"{v:.3f}" if isinstance(v, float) else str(v))
+
+
 print("| run | " + " | ".join(COLS) + " |")
 print("|" + " --- |" * (len(COLS) + 1))
 for name, r in results.items():

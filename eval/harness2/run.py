@@ -18,9 +18,11 @@ import sys
 sys.dont_write_bytecode = True  # never write caches into the read-only pilot folder
 HERE = Path(__file__).resolve().parent
 sys.path[:0] = [os.environ["PILOT"], str(HERE)]
-import round2
-from harness.loop import loop, packs as meta_packs
-import packs
+import round2  # noqa: E402 - bootstrap read-only pilot path first
+
+# Pilot imports require the configured read-only path before module loading.
+from harness.loop import loop, packs as meta_packs  # noqa: E402
+import packs  # noqa: E402 - bootstrap read-only pilot path first
 
 meta_packs.PACKS.update(packs.PACKS)
 loop.SEEDS = HERE / "seeds"
@@ -93,11 +95,13 @@ round2.CodexProposer.call = _proposer_call_clean
 
 
 def harness_diff(base, final):
-    read = lambda d: {
-        str(p.relative_to(d)): p.read_bytes()
-        for p in d.rglob("*")
-        if p.is_file() and "__pycache__" not in p.parts
-    }
+    def read(d):
+        return {
+            str(p.relative_to(d)): p.read_bytes()
+            for p in d.rglob("*")
+            if p.is_file() and "__pycache__" not in p.parts
+        }
+
     a, b = read(base), read(final)
     return {
         "added": sorted(b.keys() - a.keys()),
@@ -109,14 +113,17 @@ def harness_diff(base, final):
 def phases(pack):
     root = HERE / "runs/round2" / pack
     calls = json.loads((root / "B/model-calls/calls.json").read_text())
-    done = lambda test: any(
-        test(c["label"]) and c["status"] == "complete" for c in calls
-    )
+
+    def done(test):
+        return any(test(c["label"]) and c["status"] == "complete" for c in calls)
+
     reached = {
-        "baseline": done(lambda l: l.endswith("/base1")),
-        "propose": done(lambda l: l.endswith(".a1") and not l.startswith("agg1")),
-        "probe": done(lambda l: l.endswith(("/inv1", "/dom1"))),
-        "compose": done(lambda l: l == "agg1.a1"),
+        "baseline": done(lambda label: label.endswith("/base1")),
+        "propose": done(
+            lambda label: label.endswith(".a1") and not label.startswith("agg1")
+        ),
+        "probe": done(lambda label: label.endswith(("/inv1", "/dom1"))),
+        "compose": done(lambda label: label == "agg1.a1"),
     }
     candidates = list((root / "B/attempt-00/recursion").glob(f"*/{pack}/harnesses"))
     if len(candidates) != 1:

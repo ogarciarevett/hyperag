@@ -249,18 +249,19 @@ const factory: SystemFactory = async (profile) => {
     ["rerank", "nvrerank", "bgev2m3"].includes(x),
   );
   const embedder = embedders[base]!();
-  const reranker = extras.includes("nvrerank")
-    ? nemotronReranker()
-    : extras.includes("bgev2m3")
-      ? // The owner's re-ranker: BAAI/bge-reranker-v2-m3 (568M, multilingual), ONNX q8, pinned.
-        createLocalReranker({
-          model: "onnx-community/bge-reranker-v2-m3-ONNX",
-          revision: "6f5ff65298512715a1e669753bc754d2bc8f367b",
-          dtype: "q8",
-        })
-      : rerank
-        ? createLocalReranker({ threads })
-        : null;
+  const reranker = (() => {
+    if (extras.includes("nvrerank")) return nemotronReranker();
+    if (extras.includes("bgev2m3")) {
+      // Preserve the explicit pinned multilingual profile.
+      return createLocalReranker({
+        model: "onnx-community/bge-reranker-v2-m3-ONNX",
+        revision: "6f5ff65298512715a1e669753bc754d2bc8f367b",
+        dtype: "q8",
+      });
+    }
+    if (rerank) return createLocalReranker({ threads });
+    return null;
+  })();
   // One Neo4j for every database: memory ids are the same in each, and the rules depend on the text only.
   const graph = extras.includes("graph")
     ? createNeo4jGraph({

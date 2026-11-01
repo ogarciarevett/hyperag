@@ -103,20 +103,19 @@ function transcriptParser(source: Source) {
   const stamp = (v: unknown) =>
     typeof v === "string" && Number.isFinite(Date.parse(v)) ? v : null;
   const add = (target: Prompt[], raw: unknown, timestamp: unknown) => {
-    const content =
-      typeof raw === "string"
-        ? raw
-        : Array.isArray(raw)
-          ? raw
-              .filter(
-                (b) =>
-                  b &&
-                  ["text", "input_text"].includes(b.type) &&
-                  typeof b.text === "string",
-              )
-              .map((b) => b.text)
-              .join("\n")
-          : "";
+    let content = "";
+    if (typeof raw === "string") content = raw;
+    else if (Array.isArray(raw)) {
+      content = raw
+        .filter(
+          (b) =>
+            b &&
+            ["text", "input_text"].includes(b.type) &&
+            typeof b.text === "string",
+        )
+        .map((b) => b.text)
+        .join("\n");
+    }
     if (!content.trim()) {
       skip("nonText");
       return;
@@ -177,12 +176,9 @@ function transcriptParser(source: Source) {
       )
         session.startedAt = start;
     }
-    const id =
-      source === "codex"
-        ? r.type === "session_meta"
-          ? string(p.id)
-          : null
-        : string(r.sessionId);
+    let id: string | null = null;
+    if (source !== "codex") id = string(r.sessionId);
+    else if (r.type === "session_meta") id = string(p.id);
     if (id && session.id && session.id !== id)
       throw new Error("mixed source session ids");
     session.id ??= id;
@@ -252,12 +248,9 @@ export function parseTranscriptSessions(source: Source, text: string) {
       try {
         record = JSON.parse(line);
       } catch {}
-    const id =
-      source === "codex"
-        ? record?.type === "session_meta"
-          ? record.payload?.id
-          : null
-        : record?.sessionId;
+    let id: unknown = null;
+    if (source !== "codex") id = record?.sessionId;
+    else if (record?.type === "session_meta") id = record.payload?.id;
     if (typeof id === "string") current = id;
     let parser = parsers.get(current);
     if (!parser) {

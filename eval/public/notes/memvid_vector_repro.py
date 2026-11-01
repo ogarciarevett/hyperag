@@ -1,10 +1,13 @@
-import json, os, sys, tempfile
+import json
+import os
+import sys
+import tempfile
 import numpy as np
 
 os.environ["MEMVID_TELEMETRY"] = "0"
 import memvid_sdk
 
-docs = [json.loads(l) for l, _ in zip(open(sys.argv[1]), range(30))]
+docs = [json.loads(line) for line, _ in zip(open(sys.argv[1]), range(30))]
 rng = np.random.default_rng(0)
 V = rng.normal(size=(len(docs), 8))
 V /= np.linalg.norm(V, axis=1, keepdims=True)
@@ -18,9 +21,14 @@ mv.put_many(
     embeddings=V.tolist(),
 )
 mv.commit()
-hit = lambda m, i: m.find("q", k=1, mode="sem", query_embedding=V[i].tolist())["hits"][
-    0
-]["uri"].split("/")[-1].split("#")[0] == str(i)
+
+
+def hit(m, i):
+    return m.find("q", k=1, mode="sem", query_embedding=V[i].tolist())["hits"][0][
+        "uri"
+    ].split("/")[-1].split("#")[0] == str(i)
+
+
 print(
     "after commit:     ",
     "".join("1" if hit(mv, i) else "0" for i in range(len(docs))),
