@@ -71,7 +71,8 @@ Reviewers return CHANGES for unlinked dependent feature PRs. Merge an accepted
 stack through `gh stack merge` only with the existing named-human and release
 authority; a linked stack or source PASS does not grant merge or runtime adoption.
 
-Ruff uses E4/E7/E9/F. E402 has only 18 inline applicability annotations:
-15 imports after the native guard's early budget clock and three imports after
-the read-only pilot path bootstrap. Preserve those ordering contracts; no global
-ignore applies. The unannotated E402 negative fixture must still block delivery.
+Ruff uses E4/E7/E9/F. E402 has 30 inline applicability annotations in total:
+18 introduced here (15 native-guard imports after the early budget clock and three
+read-only pilot bootstrap imports), plus 12 pre-existing under `eval/public/systems/`.
+Preserve those ordering contracts; no global ignore applies. The unannotated E402
+negative fixture must still block delivery.

@@ -37,13 +37,24 @@ def version_shims(root, versions):
 
 
 class QualityGate(unittest.TestCase):
-    def check_python(self, source, versions=None):
+    def check_python(self, source, versions=None, pins=None):
         with tempfile.TemporaryDirectory() as directory:
             root = pathlib.Path(directory)
             (root / "scripts").mkdir()
             shutil.copy2(ROOT / "scripts/quality-gate.py", root / "scripts")
             shutil.copy2(ROOT / "pyproject.toml", root)
             (root / "example.py").write_text(source)
+            env = version_shims(root, versions)
+            if pins:
+                metadata = root / "metadata"
+                metadata.mkdir()
+                for package, version in pins.items():
+                    distribution = metadata / f"{package}-{version}.dist-info"
+                    distribution.mkdir()
+                    (distribution / "METADATA").write_text(
+                        f"Metadata-Version: 2.1\nName: {package}\nVersion: {version}\n"
+                    )
+                env["PYTHONPATH"] = str(metadata)
             result = subprocess.run(
                 [
                     "sh",
@@ -54,9 +65,10 @@ class QualityGate(unittest.TestCase):
                     str(root / "scripts/quality-gate.py"),
                 ],
                 cwd=root,
-                env=version_shims(root, versions),
+                env=env,
                 capture_output=True,
                 text=True,
+                timeout=30,
             )
             return result
 
@@ -92,6 +104,8 @@ class QualityGate(unittest.TestCase):
         versions=None,
         engines={"node": "^24.22.1"},
         language="typescript",
+        biome_pin="2.6.4",
+        biome_version=None,
     ):
         with tempfile.TemporaryDirectory() as directory:
             root = pathlib.Path(directory)
@@ -99,14 +113,25 @@ class QualityGate(unittest.TestCase):
             shutil.copy2(ROOT / "scripts/quality-gate.py", root / "scripts")
             shutil.copy2(ROOT / "biome.json", root)
             shutil.copy2(ROOT / "pyproject.toml", root)
-            (root / "node_modules").symlink_to(
-                ROOT / "node_modules", target_is_directory=True
-            )
+            if biome_version:
+                tools = root / "node_modules/.bin"
+                tools.mkdir(parents=True)
+                wrapper = tools / "biome"
+                wrapper.write_text(
+                    '#!/bin/sh\nif [ "$*" = --version ]; then\n'
+                    f"  echo {shlex.quote(biome_version)}\n  exit 0\nfi\n"
+                    f'exec {shlex.quote(str(ROOT / "node_modules/.bin/biome"))} "$@"\n'
+                )
+                wrapper.chmod(0o755)
+            else:
+                (root / "node_modules").symlink_to(
+                    ROOT / "node_modules", target_is_directory=True
+                )
             (root / "package.json").write_text(
                 json.dumps(
                     {
                         "engines": engines,
-                        "devDependencies": {"@biomejs/biome": "2.6.4"},
+                        "devDependencies": {"@biomejs/biome": biome_pin},
                         "scripts": {"typecheck": typecheck},
                     }
                 )
@@ -143,6 +168,21 @@ class QualityGate(unittest.TestCase):
                 text=True,
             )
             return result, (root / "continued-typecheck").exists()
+
+    def test_wrong_biome_pins_stop_before_lint_and_typecheck(self):
+        for drift in (
+            {"biome_pin": "0.0.0"},
+            {"biome_version": "Version: 0.0.0"},
+        ):
+            with self.subTest(drift):
+                result, continued = self.check_typescript(
+                    "export const answer = 42;\n", **drift
+                )
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("Biome must be 2.6.4", result.stderr)
+                self.assertNotIn("+", result.stdout)
+                self.assertNotIn("CONTINUED", result.stdout)
+                self.assertFalse(continued)
 
     def test_typescript_gate_stops_before_typecheck_on_nested_ternary(self):
         result, continued = self.check_typescript(
@@ -287,6 +327,34 @@ class QualityGate(unittest.TestCase):
         self.assertIn("cargo", result.stderr)
         self.assertNotIn("Node", result.stderr)
         self.assertNotIn("Bun", result.stderr)
+
+    def test_wrong_python_metadata_pin_stops_before_tools(self):
+        for package, pin in (("black", "26.10.1"), ("ruff", "0.14.3")):
+            with self.subTest(package):
+                result = self.check_python("answer = 42\n", pins={package: "0.0.0"})
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn(f"{package} must be {pin}", result.stderr)
+                self.assertNotIn("+", result.stdout)
+                self.assertNotIn("CONTINUED", result.stdout)
+
+    def test_real_pre_push_rejects_missing_quality_venv(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            subprocess.run(["git", "init", "-q", str(root)], check=True, timeout=10)
+            (root / "scripts").mkdir()
+            shutil.copy2(ROOT / "scripts/quality-gate.py", root / "scripts")
+            hook = root / "pre-push"
+            shutil.copy2(ROOT / ".githooks/pre-push", hook)
+            result = subprocess.run(
+                ["sh", "-c", 'sh "$1" && printf CONTINUED', "hook-test", str(hook)],
+                cwd=root,
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("Missing quality venv; follow CONTRIBUTING.md", result.stderr)
+            self.assertEqual(result.stdout, "")
 
 
 if __name__ == "__main__":
