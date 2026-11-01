@@ -1,9 +1,15 @@
 """Generate the Homebrew formula from the published release checksums, never placeholder hashes."""
+
 import argparse
 from pathlib import Path
 import re
 
-TARGETS = ("aarch64-apple-darwin", "x86_64-apple-darwin", "aarch64-unknown-linux-gnu", "x86_64-unknown-linux-gnu")
+TARGETS = (
+    "aarch64-apple-darwin",
+    "x86_64-apple-darwin",
+    "aarch64-unknown-linux-gnu",
+    "x86_64-unknown-linux-gnu",
+)
 
 
 def formula(version, checksums):
@@ -18,20 +24,35 @@ def formula(version, checksums):
         if name in hashes:
             raise ValueError("duplicate release asset checksum")
         hashes[name] = parts[0].lower()
-    out = ['class Hyperag < Formula', '  desc "Shared memory and retrieval with scoped access and version history"',
-           '  homepage "https://github.com/ogarciarevett/hyperag"', '  license "Apache-2.0"']
+    out = [
+        "class Hyperag < Formula",
+        '  desc "Shared memory and retrieval with scoped access and version history"',
+        '  homepage "https://github.com/ogarciarevett/hyperag"',
+        '  license "Apache-2.0"',
+    ]
     for os_name, targets in [("macos", TARGETS[:2]), ("linux", TARGETS[2:])]:
-        out += [f'  on_{os_name} do', '    if Hardware::CPU.arm?']
+        out += [f"  on_{os_name} do", "    if Hardware::CPU.arm?"]
         for i, target in enumerate(targets):
             if i:
-                out.append('    else')
+                out.append("    else")
             name = f"hyperag-{version}-{target}.tar.gz"
             if name not in hashes:
                 raise ValueError("release is missing a platform checksum")
-            out += [f'      url "https://github.com/ogarciarevett/hyperag/releases/download/{version}/{name}"', f'      sha256 "{hashes[name]}"']
-        out += ['    end', '  end']
-    out += ['  def install', '    bin.install "hyperag"', '    pkgshare.install "README.md", "LICENSE", "NOTICE"', '  end',
-            '  test do', '    assert_match "hyperag #{version}", shell_output("#{bin}/hyperag --version")', '  end', 'end']
+            out += [
+                f'      url "https://github.com/ogarciarevett/hyperag/releases/download/{version}/{name}"',
+                f'      sha256 "{hashes[name]}"',
+            ]
+        out += ["    end", "  end"]
+    out += [
+        "  def install",
+        '    bin.install "hyperag"',
+        '    pkgshare.install "README.md", "LICENSE", "NOTICE"',
+        "  end",
+        "  test do",
+        '    assert_match "hyperag #{version}", shell_output("#{bin}/hyperag --version")',
+        "  end",
+        "end",
+    ]
     return "\n".join(out) + "\n"
 
 

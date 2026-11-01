@@ -7,6 +7,7 @@ engineering: fill the requested release-record fields (owner, rollback image, ro
          date) from the hits. Quality: share of fields that match exactly. Every value must appear in
          a retrieved hit, so an invented value is a hard failure.
 """
+
 import json
 from pathlib import Path
 import re
@@ -14,11 +15,19 @@ import re
 from harness.loop.packs import Pack
 
 DATA = Path(__file__).resolve().parent / "data"
-HANDOFF = {"cross_team_handoff", "multi_evidence_2", "multi_evidence_3", "unanswerable", "unauthorized_probe"}
-FIELDS = {"owner": ("owner", r"technical owner is ([^.]+)\."),
-          "incident": ("root_cause", r"root cause is ([^.]+)\."),
-          "rollback": ("rollback_image", r"restore image (\S+)\. Preserve"),
-          "schedule-current": ("launch_date", r"launch is (November \d+,2026)")}
+HANDOFF = {
+    "cross_team_handoff",
+    "multi_evidence_2",
+    "multi_evidence_3",
+    "unanswerable",
+    "unauthorized_probe",
+}
+FIELDS = {
+    "owner": ("owner", r"technical owner is ([^.]+)\."),
+    "incident": ("root_cause", r"root cause is ([^.]+)\."),
+    "rollback": ("rollback_image", r"restore image (\S+)\. Preserve"),
+    "schedule-current": ("launch_date", r"launch is (November \d+,2026)"),
+}
 
 
 def norm(text):
@@ -41,18 +50,28 @@ class Handoff(Pack):
 
     def __init__(self):
         _, queries, hits = load()
-        self.rows = [{"id": q["id"], "key": q["id"], "input": item(q, hits), "label": q["gold_ids"]}
-                     for q in queries if q["category"] in HANDOFF]
+        self.rows = [
+            {
+                "id": q["id"],
+                "key": q["id"],
+                "input": item(q, hits),
+                "label": q["gold_ids"],
+            }
+            for q in queries
+            if q["category"] in HANDOFF
+        ]
 
     def quality(self, prediction, row):
         gold, cited = set(row["label"]), set(prediction)
         if not gold:
             return float(not cited)
         right = len(gold & cited)
-        return 2 * right / (len(gold) + len(cited)) if right else 0.
+        return 2 * right / (len(gold) + len(cited)) if right else 0.0
 
     def hard_fail(self, prediction, row):
-        if not isinstance(prediction, list) or not all(isinstance(i, str) for i in prediction):
+        if not isinstance(prediction, list) or not all(
+            isinstance(i, str) for i in prediction
+        ):
             return "prediction is not a list of memory ids"
         if len(set(prediction)) != len(prediction):
             return "cites a memory twice"
@@ -68,20 +87,34 @@ class Engineering(Pack):
         self.rows = []
         for q in queries:
             kinds = [docs[g]["artifact"] for g in q["gold_ids"]]
-            if q["scope"] != "engineering" or not kinds or not set(kinds) <= set(FIELDS):
+            if (
+                q["scope"] != "engineering"
+                or not kinds
+                or not set(kinds) <= set(FIELDS)
+            ):
                 continue
             label = {}
             for gold, kind in zip(q["gold_ids"], kinds):
                 field, pattern = FIELDS[kind]
                 label[field] = re.search(pattern, docs[gold]["text"]).group(1)
-            self.rows.append({"id": q["id"], "key": q["id"], "input": {**item(q, hits), "fields": sorted(label)},
-                              "label": label})
+            self.rows.append(
+                {
+                    "id": q["id"],
+                    "key": q["id"],
+                    "input": {**item(q, hits), "fields": sorted(label)},
+                    "label": label,
+                }
+            )
 
     def quality(self, prediction, row):
-        return sum(norm(prediction.get(f, "")) == norm(v) for f, v in row["label"].items()) / len(row["label"])
+        return sum(
+            norm(prediction.get(f, "")) == norm(v) for f, v in row["label"].items()
+        ) / len(row["label"])
 
     def hard_fail(self, prediction, row):
-        if not isinstance(prediction, dict) or not all(isinstance(v, str) for v in prediction.values()):
+        if not isinstance(prediction, dict) or not all(
+            isinstance(v, str) for v in prediction.values()
+        ):
             return "prediction is not a mapping of field to text"
         if set(prediction) != set(row["input"]["fields"]):
             return "prediction does not fill exactly the requested fields"

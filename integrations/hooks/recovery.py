@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Run a trusted local recovery command outside a harness hook's process group."""
+
 import fcntl
 import json
 import math
@@ -31,14 +32,29 @@ def dispatch(command: list[str], state_dir: Path) -> int:
     The caller disables hooks before dispatch and supplies a trusted, private state
     directory. The command must use absolute paths and load its own named settings.
     """
-    if not command or not all(isinstance(value, str) for value in command) or not Path(command[0]).is_absolute():
+    if (
+        not command
+        or not all(isinstance(value, str) for value in command)
+        or not Path(command[0]).is_absolute()
+    ):
         raise ValueError("recovery command requires an absolute executable")
     directory = Path(state_dir).absolute()
     directory.mkdir(mode=0o700, parents=True, exist_ok=True)
     child = subprocess.Popen(
-        [sys.executable, str(Path(__file__).resolve()), "--worker", str(directory), "--", *command],
-        stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-        start_new_session=True, close_fds=True, env={"PATH": os.defpath},
+        [
+            sys.executable,
+            str(Path(__file__).resolve()),
+            "--worker",
+            str(directory),
+            "--",
+            *command,
+        ],
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        start_new_session=True,
+        close_fds=True,
+        env={"PATH": os.defpath},
     )
     # Reap in long-lived callers without keeping the hook alive.
     threading.Thread(target=child.wait, daemon=True).start()
@@ -60,20 +76,29 @@ def dispatch_confirmed(command: list[str], state_dir: Path, timeout=1.0) -> int:
     Confirmation is not restoration success. A suppressed single-flight contender
     remains unconfirmed; timeout leaves its worker untouched for the caller's watch.
     """
-    if isinstance(timeout, bool) or not isinstance(timeout, (int, float)) or not math.isfinite(timeout) or timeout < 0:
+    if (
+        isinstance(timeout, bool)
+        or not isinstance(timeout, (int, float))
+        or not math.isfinite(timeout)
+        or timeout < 0
+    ):
         raise ValueError("confirmation timeout must be finite and nonnegative")
     pid = dispatch(command, state_dir)
     deadline = time.monotonic() + timeout
     while True:
         status = status_for(state_dir, pid)
-        if status is not None and status.get("state") in {"running", "succeeded", "failed"}:
+        if status is not None and status.get("state") in {
+            "running",
+            "succeeded",
+            "failed",
+        }:
             return pid
         remaining = deadline - time.monotonic()
         if remaining <= 0:
             error = TimeoutError("recovery acknowledgement timed out")
             error.worker_pid = pid
             raise error
-        time.sleep(min(.01, remaining))
+        time.sleep(min(0.01, remaining))
 
 
 def _worker(command, directory):
@@ -87,10 +112,17 @@ def _worker(command, directory):
         _status(directory, state)
         try:
             result = subprocess.run(
-                command, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL, close_fds=True, env={"PATH": os.defpath},
+                command,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                close_fds=True,
+                env={"PATH": os.defpath},
             )
-            state.update(state="succeeded" if result.returncode == 0 else "failed", exit_code=result.returncode)
+            state.update(
+                state="succeeded" if result.returncode == 0 else "failed",
+                exit_code=result.returncode,
+            )
         except Exception as error:
             state.update(state="failed", error_type=type(error).__name__)
         state["completed_at"] = time.time()

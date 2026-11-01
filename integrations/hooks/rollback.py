@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Identity-checked service rollback. Configuration is an owner-only JSON file."""
+
 import hashlib
 import json
 import os
@@ -14,11 +15,23 @@ import urllib.parse
 import urllib.request
 
 SERVICE_VARIABLES = (
-    "HOME", "HYPERAG_PG_URL", "HYPERAG_TOKENS_FILE", "HYPERAG_ADMINS",
-    "HYPERAG_EMBEDDING", "HYPERAG_RERANKER", "HYPERAG_RERANK_PROVIDER",
-    "HYPERAG_RERANK_CANDIDATES", "HYPERAG_LEXICAL_SCORER", "HYPERAG_LEXICAL_INDEX_ROOT",
-    "HYPERAG_NEO4J_URL", "HYPERAG_NEO4J_USER", "HYPERAG_NEO4J_PASSWORD",
-    "HYPERAG_MODEL_THREADS", "HYPERAG_THREADS", "TOKIO_WORKER_THREADS", "RUST_LOG",
+    "HOME",
+    "HYPERAG_PG_URL",
+    "HYPERAG_TOKENS_FILE",
+    "HYPERAG_ADMINS",
+    "HYPERAG_EMBEDDING",
+    "HYPERAG_RERANKER",
+    "HYPERAG_RERANK_PROVIDER",
+    "HYPERAG_RERANK_CANDIDATES",
+    "HYPERAG_LEXICAL_SCORER",
+    "HYPERAG_LEXICAL_INDEX_ROOT",
+    "HYPERAG_NEO4J_URL",
+    "HYPERAG_NEO4J_USER",
+    "HYPERAG_NEO4J_PASSWORD",
+    "HYPERAG_MODEL_THREADS",
+    "HYPERAG_THREADS",
+    "TOKIO_WORKER_THREADS",
+    "RUST_LOG",
 )
 
 
@@ -31,9 +44,13 @@ def binary_hash(path):
 
 
 def _darwin_metadata(pid, field):
-    result = subprocess.run(["/bin/ps", "-p", str(pid), "-o", field + "="],
-                            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True,
-                            env={"PATH": os.defpath, "LC_ALL": "C", "TZ": "UTC"})
+    result = subprocess.run(
+        ["/bin/ps", "-p", str(pid), "-o", field + "="],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+        text=True,
+        env={"PATH": os.defpath, "LC_ALL": "C", "TZ": "UTC"},
+    )
     if result.returncode == 1:
         return None
     if result.returncode or not result.stdout.strip():
@@ -44,14 +61,17 @@ def _darwin_metadata(pid, field):
 def identity(pid):
     """Strict live ownership check; executable metadata is never used to wait for exit."""
     if sys.platform == "darwin":
+
         def metadata(field):
             return _darwin_metadata(pid, field)
+
         process_state = metadata("stat")
         if process_state is None or process_state.startswith("Z"):
             return None
         started, executable = metadata("lstart"), metadata("comm")
         if started is None or executable is None:
             return None
+
         def same_live_process():
             latest_state = metadata("stat")
             if latest_state is None or latest_state.startswith("Z"):
@@ -62,6 +82,7 @@ def identity(pid):
             if latest_start != started:
                 raise ValueError("process start marker changed")
             return True
+
         # ps reads are separate snapshots. A terminating process can become defunct
         # after the first state read; that is absence, not an invalid live executable.
         if not same_live_process():
@@ -79,8 +100,12 @@ def identity(pid):
             raise
         if not same_live_process():
             return None
-        return {"pid": pid, "binary": str(Path(executable).resolve()),
-                "sha256": digest, "start_ticks": "darwin:" + started}
+        return {
+            "pid": pid,
+            "binary": str(Path(executable).resolve()),
+            "sha256": digest,
+            "start_ticks": "darwin:" + started,
+        }
     if sys.platform != "linux":
         raise NotImplementedError("process identity unsupported on this platform")
     try:
@@ -89,8 +114,12 @@ def identity(pid):
         if fields[0] == "Z":
             return None
         executable = directory / "exe"
-        return {"pid": pid, "binary": str(executable.resolve()),
-                "sha256": binary_hash(executable), "start_ticks": fields[19]}
+        return {
+            "pid": pid,
+            "binary": str(executable.resolve()),
+            "sha256": binary_hash(executable),
+            "start_ticks": fields[19],
+        }
     except FileNotFoundError:
         return None
 
@@ -108,7 +137,9 @@ def _live_start(pid):
     if sys.platform != "linux":
         raise NotImplementedError("process identity unsupported on this platform")
     try:
-        fields = (Path("/proc") / str(pid) / "stat").read_text().rsplit(")", 1)[1].split()
+        fields = (
+            (Path("/proc") / str(pid) / "stat").read_text().rsplit(")", 1)[1].split()
+        )
         return None if fields[0] == "Z" else fields[19]
     except FileNotFoundError:
         return None
@@ -128,12 +159,12 @@ def wait_exited(current, timeout=15):
             raise ValueError("process start marker changed while stopping")
         if time.monotonic() >= deadline:
             raise TimeoutError("service stop deadline")
-        time.sleep(.05)
+        time.sleep(0.05)
 
 
 def healthy(url):
     try:
-        with urllib.request.urlopen(url, timeout=.3) as response:
+        with urllib.request.urlopen(url, timeout=0.3) as response:
             return response.status == 200 and json.load(response).get("ok") is True
     except (OSError, ValueError):
         return False
@@ -157,7 +188,9 @@ def report_status(directory, value):
         write_status(directory, value)
     except Exception as error:
         try:
-            sys.stderr.write("hyperag rollback status unavailable: " + type(error).__name__ + "\n")
+            sys.stderr.write(
+                "hyperag rollback status unavailable: " + type(error).__name__ + "\n"
+            )
         except Exception:
             pass
 
@@ -165,11 +198,20 @@ def report_status(directory, value):
 def read_config(config_path):
     config_path = Path(config_path)
     info = config_path.lstat()
-    if not stat.S_ISREG(info.st_mode) or stat.S_IMODE(info.st_mode) != 0o600 or info.st_uid != os.getuid():
+    if (
+        not stat.S_ISREG(info.st_mode)
+        or stat.S_IMODE(info.st_mode) != 0o600
+        or info.st_uid != os.getuid()
+    ):
         raise ValueError("private configuration required")
     config = json.loads(config_path.read_text())
     url = urllib.parse.urlsplit(config["health_url"])
-    if url.scheme != "http" or url.hostname != "127.0.0.1" or not url.port or url.path != "/healthz":
+    if (
+        url.scheme != "http"
+        or url.hostname != "127.0.0.1"
+        or not url.port
+        or url.path != "/healthz"
+    ):
         raise ValueError("loopback health endpoint required")
     if url.username or url.password or url.query or url.fragment:
         raise ValueError("invalid health endpoint")
@@ -177,13 +219,22 @@ def read_config(config_path):
 
 
 def checked_launch(launch):
-    if not isinstance(launch["argv"], list) or not launch["argv"] or not all(isinstance(value, str) for value in launch["argv"]) or not Path(launch["argv"][0]).is_absolute():
+    if (
+        not isinstance(launch["argv"], list)
+        or not launch["argv"]
+        or not all(isinstance(value, str) for value in launch["argv"])
+        or not Path(launch["argv"][0]).is_absolute()
+    ):
         raise ValueError("absolute launch executable required")
-    if set(launch["env"]) - set(SERVICE_VARIABLES) or not all(isinstance(v, str) for v in launch["env"].values()):
+    if set(launch["env"]) - set(SERVICE_VARIABLES) or not all(
+        isinstance(v, str) for v in launch["env"].values()
+    ):
         raise ValueError("only named service variables are accepted")
     if binary_hash(launch["argv"][0]) != launch["sha256"]:
         raise ValueError("launch binary identity mismatch")
-    return {name: launch["env"][name] for name in SERVICE_VARIABLES if name in launch["env"]}
+    return {
+        name: launch["env"][name] for name in SERVICE_VARIABLES if name in launch["env"]
+    }
 
 
 def restore(config_path):
@@ -210,8 +261,11 @@ def restore(config_path):
         if healthy(config["health_url"]):
             raise ValueError("healthy endpoint has no verified process owner")
     elif actual_current != current:
-        state["identity_changed_keys"] = sorted(key for key in current.keys() | actual_current.keys()
-                                                if current.get(key) != actual_current.get(key))
+        state["identity_changed_keys"] = sorted(
+            key
+            for key in current.keys() | actual_current.keys()
+            if current.get(key) != actual_current.get(key)
+        )
         report_status(config_path.parent, state)
         raise ValueError("current process identity changed")
     else:
@@ -221,9 +275,15 @@ def restore(config_path):
     report_status(config_path.parent, state)
     # A configured holdoff also exercises recovery across harness deadlines in CI.
     time.sleep(delay)
-    service = subprocess.Popen(old["argv"], env=environment, stdin=subprocess.DEVNULL,
-                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                               start_new_session=True, close_fds=True)
+    service = subprocess.Popen(
+        old["argv"],
+        env=environment,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        start_new_session=True,
+        close_fds=True,
+    )
     state.update(state="starting", restored_pid=service.pid)
     report_status(config_path.parent, state)
     deadline = time.monotonic() + 35
@@ -231,13 +291,22 @@ def restore(config_path):
         if service.poll() is not None:
             raise RuntimeError("restore process exited")
         actual = identity(service.pid)
-        if actual is None or actual["binary"] != str(Path(old["argv"][0]).resolve()) or actual["sha256"] != old["sha256"]:
+        if (
+            actual is None
+            or actual["binary"] != str(Path(old["argv"][0]).resolve())
+            or actual["sha256"] != old["sha256"]
+        ):
             raise ValueError("restored process identity mismatch")
         if healthy(config["health_url"]) and service.poll() is None:
-            state.update(state="succeeded", health=True, restored_sha256=actual["sha256"], completed_at=time.time())
+            state.update(
+                state="succeeded",
+                health=True,
+                restored_sha256=actual["sha256"],
+                completed_at=time.time(),
+            )
             report_status(config_path.parent, state)
             return
-        time.sleep(.05)
+        time.sleep(0.05)
     raise TimeoutError("restored service health timed out")
 
 
@@ -252,7 +321,12 @@ def main(arguments=None):
             state = json.loads(status_path.read_text()) if status_path.exists() else {}
         except (OSError, ValueError):
             state = {}
-        state.update(phase=state.get("state", "config"), state="failed", error_type=type(error).__name__, completed_at=time.time())
+        state.update(
+            phase=state.get("state", "config"),
+            state="failed",
+            error_type=type(error).__name__,
+            completed_at=time.time(),
+        )
         report_status(path.parent, state)
         return 1
     return 0
