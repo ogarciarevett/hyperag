@@ -6,7 +6,8 @@ export function* memoryBatches<T>(memories: readonly T[]): Generator<T[]> {
   let bytes = envelope;
   for (const memory of memories) {
     const size = Buffer.byteLength(JSON.stringify(memory));
-    if (envelope + size > limit) throw new Error("A memory exceeds the service JSON body limit");
+    if (envelope + size > limit)
+      throw new Error("A memory exceeds the service JSON body limit");
     if (batch.length === 256 || bytes + size + (batch.length ? 1 : 0) > limit) {
       yield batch;
       batch = [];

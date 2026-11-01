@@ -5,12 +5,22 @@
 // Railway (set POSTGRES_PASSWORD and NEO4J_PASSWORD right after the first apply; each redeploys). Composed values
 // (the Postgres URL, NEO4J_AUTH) use Railway's `${{service.VARIABLE}}` variable syntax; the first
 // `railway config plan` must show them resolving.
-import { defineRailway, github, image, preserve, project, service, volume } from "railway/iac";
+import {
+  defineRailway,
+  github,
+  image,
+  preserve,
+  project,
+  service,
+  volume,
+} from "railway/iac";
 
 export default defineRailway(() => {
   // The same pinned image as docker-compose.yml, so pgvector is present.
   const postgres = service("postgres", {
-    source: image("pgvector/pgvector:pg18@sha256:2358fcba361ed2233a5ed81b5fe4ca779ccb304120ce531a3bf51c0ed7e2bc11"),
+    source: image(
+      "pgvector/pgvector:pg18@sha256:2358fcba361ed2233a5ed81b5fe4ca779ccb304120ce531a3bf51c0ed7e2bc11",
+    ),
     env: {
       POSTGRES_USER: "hyperag",
       POSTGRES_DB: "hyperag",
@@ -18,11 +28,15 @@ export default defineRailway(() => {
       // The volume's root holds a lost+found directory, so the cluster lives one level down.
       PGDATA: "/var/lib/postgresql/data/pgdata",
     },
-    volumeMounts: { "/var/lib/postgresql/data": volume("pgdata", { sizeMB: 5120 }) },
+    volumeMounts: {
+      "/var/lib/postgresql/data": volume("pgdata", { sizeMB: 5120 }),
+    },
   });
 
   const neo4j = service("neo4j", {
-    source: image("neo4j:5.26.28-community@sha256:ff32db30b2baff97971e441b46bfd9c832c1b62c970398ef579244c06b21d357"),
+    source: image(
+      "neo4j:5.26.28-community@sha256:ff32db30b2baff97971e441b46bfd9c832c1b62c970398ef579244c06b21d357",
+    ),
     env: {
       // One password, set here; NEO4J_AUTH and Hyperag's login both read it.
       NEO4J_PASSWORD: preserve(),
@@ -40,7 +54,8 @@ export default defineRailway(() => {
     // The first start downloads the default models (about 900 MB).
     healthcheckTimeout: 600,
     env: {
-      HYPERAG_PG_URL: "postgres://hyperag:${{postgres.POSTGRES_PASSWORD}}@${{postgres.RAILWAY_PRIVATE_DOMAIN}}:5432/hyperag",
+      HYPERAG_PG_URL:
+        "postgres://hyperag:${{postgres.POSTGRES_PASSWORD}}@${{postgres.RAILWAY_PRIVATE_DOMAIN}}:5432/hyperag",
       HYPERAG_NEO4J_URL: "http://${{neo4j.RAILWAY_PRIVATE_DOMAIN}}:7474",
       HYPERAG_NEO4J_USER: "neo4j",
       HYPERAG_NEO4J_PASSWORD: neo4j.env.NEO4J_PASSWORD,

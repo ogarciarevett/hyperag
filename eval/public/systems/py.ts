@@ -10,8 +10,14 @@ import type { MemorySystem, SystemFactory } from "../system";
 export function pyAdapter(name: string): SystemFactory {
   return async (profile) => {
     const python = `${import.meta.dir}/../.venv-${name}/bin/python`;
-    const child = spawn(python, ["-I", `${import.meta.dir}/pyserve.py`, name, profile], { stdio: ["pipe", "pipe", "inherit"] });
-    const lines = createInterface({ input: child.stdout })[Symbol.asyncIterator]();
+    const child = spawn(
+      python,
+      ["-I", `${import.meta.dir}/pyserve.py`, name, profile],
+      { stdio: ["pipe", "pipe", "inherit"] },
+    );
+    const lines = createInterface({ input: child.stdout })[
+      Symbol.asyncIterator
+    ]();
     // the adapter answers one request at a time, so calls queue behind each other
     let queue: Promise<unknown> = Promise.resolve();
     let nextId = 0;
@@ -26,10 +32,15 @@ export function pyAdapter(name: string): SystemFactory {
       try {
         r = JSON.parse(value);
       } catch {
-        throw (broken = new Error(`${name} adapter protocol broken: ${value.slice(0, 200)}`));
+        throw (broken = new Error(
+          `${name} adapter protocol broken: ${value.slice(0, 200)}`,
+        ));
       }
       // a reply for another request means the stream is out of step: stop the run, never pair wrong answers
-      if (r.id !== id) throw (broken = new Error(`${name} adapter protocol out of step (reply ${r.id} for request ${id})`));
+      if (r.id !== id)
+        throw (broken = new Error(
+          `${name} adapter protocol out of step (reply ${r.id} for request ${id})`,
+        ));
       if (r.error !== undefined) throw new Error(r.error);
       return r.result as T;
     };
@@ -42,7 +53,8 @@ export function pyAdapter(name: string): SystemFactory {
       describe: () => call("describe"),
       open: (ns) => call("open", ns),
       ingest: (ns, docs) => call("ingest", ns, docs),
-      search: (ns, query, k, opts) => call("search", ns, query, k, opts ?? null),
+      search: (ns, query, k, opts) =>
+        call("search", ns, query, k, opts ?? null),
       rssBytes: () => call("rss"),
       close: async () => {
         await call("close");

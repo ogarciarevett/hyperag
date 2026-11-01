@@ -20,7 +20,8 @@ export function createLocalEmbedder(
   }> = {},
 ): Embedder {
   const model = options.model ?? "Xenova/multilingual-e5-small";
-  const revision = options.revision ?? "761b726dd34fb83930e26aab4e9ac3899aa1fa78";
+  const revision =
+    options.revision ?? "761b726dd34fb83930e26aab4e9ac3899aa1fa78";
   const dtype = options.dtype ?? "q8";
   const queryPrefix = options.queryPrefix ?? "query: ";
   const documentPrefix = options.documentPrefix ?? "passage: ";
@@ -32,11 +33,17 @@ export function createLocalEmbedder(
     normalized: true,
     preprocessing: `${pooling} pooling; prefixes query=${JSON.stringify(queryPrefix)} document=${JSON.stringify(documentPrefix)}`,
   };
-  let extractor: Promise<(texts: string[], o: object) => Promise<{ tolist(): number[][] }>> | undefined;
+  let extractor:
+    | Promise<(texts: string[], o: object) => Promise<{ tolist(): number[][] }>>
+    | undefined;
   const load = () => {
     extractor ??= import("@huggingface/transformers").then(
       ({ pipeline }) =>
-        pipeline("feature-extraction", model, { revision, dtype, ...sessionOptions(options.threads) }) as unknown as Promise<
+        pipeline("feature-extraction", model, {
+          revision,
+          dtype,
+          ...sessionOptions(options.threads),
+        }) as unknown as Promise<
           (texts: string[], o: object) => Promise<{ tolist(): number[][] }>
         >,
     );
@@ -47,7 +54,10 @@ export function createLocalEmbedder(
     const vectors: number[][] = [];
     // Batches of 16 keep peak memory flat on long corpora.
     for (let i = 0; i < texts.length; i += 16) {
-      const out = await fe(texts.slice(i, i + 16), { pooling, normalize: true });
+      const out = await fe(texts.slice(i, i + 16), {
+        pooling,
+        normalize: true,
+      });
       vectors.push(...out.tolist());
     }
     return checked(space, vectors, texts.length);
@@ -86,24 +96,40 @@ export function createOpenAICompatibleEmbedder(
     preprocessing: `query=${JSON.stringify(options.queryBody ?? {})} document=${JSON.stringify(options.documentBody ?? {})}`,
   };
   const doFetch = options.fetch ?? fetch;
-  async function embed(input: readonly string[], extra: Record<string, unknown> | undefined) {
-    const response = await doFetch(`${options.baseUrl.replace(/\/+$/u, "")}/v1/embeddings`, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        ...(options.apiKey === undefined ? {} : { authorization: `Bearer ${options.apiKey}` }),
+  async function embed(
+    input: readonly string[],
+    extra: Record<string, unknown> | undefined,
+  ) {
+    const response = await doFetch(
+      `${options.baseUrl.replace(/\/+$/u, "")}/v1/embeddings`,
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          ...(options.apiKey === undefined
+            ? {}
+            : { authorization: `Bearer ${options.apiKey}` }),
+        },
+        body: JSON.stringify({ model: options.model, input, ...extra }),
+        signal: AbortSignal.timeout(30_000),
       },
-      body: JSON.stringify({ model: options.model, input, ...extra }),
-      signal: AbortSignal.timeout(30_000),
-    });
-    if (!response.ok) throw new Error(`embedder_failed: http_${response.status}`);
-    const body = (await response.json()) as { data?: Array<{ index: number; embedding: number[] }> };
+    );
+    if (!response.ok)
+      throw new Error(`embedder_failed: http_${response.status}`);
+    const body = (await response.json()) as {
+      data?: Array<{ index: number; embedding: number[] }>;
+    };
     const rows = [...(body.data ?? [])].sort((a, b) => a.index - b.index);
-    return checked(space, rows.map((r) => r.embedding), input.length);
+    return checked(
+      space,
+      rows.map((r) => r.embedding),
+      input.length,
+    );
   }
   return {
     embedDocuments: (texts) => embed(texts, options.documentBody),
-    embedQuery: async (q) => (await embed([q], options.queryBody))[0] as number[],
+    embedQuery: async (q) =>
+      (await embed([q], options.queryBody))[0] as number[],
     describeModel: () => space,
   };
 }
@@ -132,13 +158,20 @@ export function createCloudflareEmbedder(
   };
   const doFetch = options.fetch ?? fetch;
   async function embed(text: readonly string[]) {
-    const response = await doFetch(`${base}/accounts/${options.accountId}/ai/run/${options.model}`, {
-      method: "POST",
-      headers: { "content-type": "application/json", authorization: `Bearer ${options.apiToken}` },
-      body: JSON.stringify({ text }),
-      signal: AbortSignal.timeout(30_000),
-    });
-    if (!response.ok) throw new Error(`embedder_failed: http_${response.status}`);
+    const response = await doFetch(
+      `${base}/accounts/${options.accountId}/ai/run/${options.model}`,
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${options.apiToken}`,
+        },
+        body: JSON.stringify({ text }),
+        signal: AbortSignal.timeout(30_000),
+      },
+    );
+    if (!response.ok)
+      throw new Error(`embedder_failed: http_${response.status}`);
     const body = (await response.json()) as { result?: { data?: number[][] } };
     return checked(space, body.result?.data ?? [], text.length);
   }
@@ -150,23 +183,38 @@ export function createCloudflareEmbedder(
 }
 
 /** One vector per input, each of the declared dimension, or the call failed. */
-function checked(space: EmbeddingSpace, vectors: number[][], count: number): number[][] {
-  if (vectors.length !== count) throw new Error("embedder_failed: wrong vector count");
+function checked(
+  space: EmbeddingSpace,
+  vectors: number[][],
+  count: number,
+): number[][] {
+  if (vectors.length !== count)
+    throw new Error("embedder_failed: wrong vector count");
   for (const v of vectors)
     if (v.length !== space.dimensions || !v.every(Number.isFinite))
-      throw new Error(`embedder_failed: expected ${space.dimensions} finite dimensions`);
+      throw new Error(
+        `embedder_failed: expected ${space.dimensions} finite dimensions`,
+      );
   return vectors;
 }
 
 const sessionOptions = (threads?: number) =>
-  threads ? { session_options: { intraOpNumThreads: threads, interOpNumThreads: 1 } } : {};
+  threads
+    ? { session_options: { intraOpNumThreads: threads, interOpNumThreads: 1 } }
+    : {};
 
 /** A LOCAL CROSS-ENCODER through transformers.js; the default is bge-reranker-base. */
 export function createLocalReranker(
-  options: Readonly<{ model?: string; revision?: string; dtype?: "fp32" | "q8"; threads?: number }> = {},
+  options: Readonly<{
+    model?: string;
+    revision?: string;
+    dtype?: "fp32" | "q8";
+    threads?: number;
+  }> = {},
 ): Reranker {
   const model = options.model ?? "Xenova/bge-reranker-base";
-  const revision = options.revision ?? "280bcc27a84e0b898c251e06fddb25171bd9b101";
+  const revision =
+    options.revision ?? "280bcc27a84e0b898c251e06fddb25171bd9b101";
   const dtype = options.dtype ?? "q8";
   type Loaded = {
     tokenizer: (a: string[], o: object) => unknown;
@@ -175,12 +223,17 @@ export function createLocalReranker(
   let loaded: Promise<Loaded> | undefined;
   const load = () => {
     loaded ??= import("@huggingface/transformers").then(async (t) => ({
-      tokenizer: (await t.AutoTokenizer.from_pretrained(model, { revision })) as unknown as Loaded["tokenizer"],
-      model: (await t.AutoModelForSequenceClassification.from_pretrained(model, {
+      tokenizer: (await t.AutoTokenizer.from_pretrained(model, {
         revision,
-        dtype,
-        ...sessionOptions(options.threads),
-      })) as unknown as Loaded["model"],
+      })) as unknown as Loaded["tokenizer"],
+      model: (await t.AutoModelForSequenceClassification.from_pretrained(
+        model,
+        {
+          revision,
+          dtype,
+          ...sessionOptions(options.threads),
+        },
+      )) as unknown as Loaded["model"],
     }));
     return loaded;
   };

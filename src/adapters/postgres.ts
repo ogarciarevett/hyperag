@@ -2,7 +2,12 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import type { Pool, PoolClient } from "pg";
 
-import { type EmbeddingSpace, type Hit, HyperagError, type Memory } from "../types.js";
+import {
+  type EmbeddingSpace,
+  type Hit,
+  HyperagError,
+  type Memory,
+} from "../types.js";
 
 // Okapi BM25 constants, as the original agent memory store uses them.
 const BM25_K1 = 1.2;
@@ -11,8 +16,14 @@ const BM25_B = 0.75;
 const MIGRATIONS = [
   new URL("../../crates/hyperag/migrations/0001_init.sql", import.meta.url),
   new URL("../../crates/hyperag/migrations/0002_settings.sql", import.meta.url),
-  new URL("../../crates/hyperag/migrations/0003_memory_text_limit.sql", import.meta.url),
-  new URL("../../crates/hyperag/migrations/0006_lexical_index_outbox.sql", import.meta.url),
+  new URL(
+    "../../crates/hyperag/migrations/0003_memory_text_limit.sql",
+    import.meta.url,
+  ),
+  new URL(
+    "../../crates/hyperag/migrations/0006_lexical_index_outbox.sql",
+    import.meta.url,
+  ),
 ];
 
 type VersionRow = {
@@ -87,18 +98,35 @@ export function spaceId(space: EmbeddingSpace): string {
 }
 
 /** The default stable identity of a memory: what it says, where, from which source. */
-export function identityHash(scope: string, source: string, text: string): string {
-  return createHash("sha256").update(JSON.stringify([scope, source, text])).digest("hex").slice(0, 24);
+export function identityHash(
+  scope: string,
+  source: string,
+  text: string,
+): string {
+  return createHash("sha256")
+    .update(JSON.stringify([scope, source, text]))
+    .digest("hex")
+    .slice(0, 24);
 }
 
 /** Everything a version records; an update equal to the current version on all of it is a no-op. */
 export function versionHash(
   scope: string,
-  v: Readonly<{ text: string; source: string; validFrom?: string; validTo?: string; metadata?: Record<string, unknown> }>,
+  v: Readonly<{
+    text: string;
+    source: string;
+    validFrom?: string;
+    validTo?: string;
+    metadata?: Record<string, unknown>;
+  }>,
 ): string {
-  const validity = [v.validFrom ?? null, v.validTo ?? null].map((t) => (t === null ? null : new Date(t).toISOString()));
+  const validity = [v.validFrom ?? null, v.validTo ?? null].map((t) =>
+    t === null ? null : new Date(t).toISOString(),
+  );
   return createHash("sha256")
-    .update(JSON.stringify([scope, v.source, v.text, ...validity, v.metadata ?? {}]))
+    .update(
+      JSON.stringify([scope, v.source, v.text, ...validity, v.metadata ?? {}]),
+    )
     .digest("hex");
 }
 
@@ -111,11 +139,15 @@ type VersionInput = Readonly<{
 }>;
 
 export function createPostgresStore(pool: Pool) {
-  async function tx<T>(fn: (c: PoolClient) => Promise<T>, write = true): Promise<T> {
+  async function tx<T>(
+    fn: (c: PoolClient) => Promise<T>,
+    write = true,
+  ): Promise<T> {
     const client = await pool.connect();
     try {
       await client.query("begin");
-      if (write) await client.query("select pg_advisory_xact_lock(1213811052,1)");
+      if (write)
+        await client.query("select pg_advisory_xact_lock(1213811052,1)");
       const value = await fn(client);
       await client.query("commit");
       return value;
@@ -159,14 +191,20 @@ export function createPostgresStore(pool: Pool) {
       );
   }
 
-  async function idempotent(c: PoolClient, principal: string, key: string | undefined) {
+  async function idempotent(
+    c: PoolClient,
+    principal: string,
+    key: string | undefined,
+  ) {
     if (key === undefined) return null;
     const seen = await c.query<{ memory_id: string; version: number }>(
       "select memory_id, version from idempotent_writes where principal = $1 and idempotency_key = $2",
       [principal, key],
     );
     const row = seen.rows[0];
-    return row === undefined ? null : { id: row.memory_id, version: row.version, created: false };
+    return row === undefined
+      ? null
+      : { id: row.memory_id, version: row.version, created: false };
   }
 
   async function remember(
@@ -186,11 +224,15 @@ export function createPostgresStore(pool: Pool) {
   return {
     async migrate() {
       await tx(async (c) => {
-        for (const migration of MIGRATIONS) await c.query(readFileSync(migration, "utf8"));
+        for (const migration of MIGRATIONS)
+          await c.query(readFileSync(migration, "utf8"));
       });
     },
 
-    async scopes(principal: string, permission: "read" | "write"): Promise<string[]> {
+    async scopes(
+      principal: string,
+      permission: "read" | "write",
+    ): Promise<string[]> {
       const rows = await pool.query<{ scope: string }>(
         "select scope from grants where principal = $1 and permission = $2 order by scope",
         [principal, permission],
@@ -198,7 +240,12 @@ export function createPostgresStore(pool: Pool) {
       return rows.rows.map((r) => r.scope);
     },
 
-    async grant(principal: string, scope: string, permission: "read" | "write", by: string) {
+    async grant(
+      principal: string,
+      scope: string,
+      permission: "read" | "write",
+      by: string,
+    ) {
       await tx(async (c) => {
         await c.query(
           "insert into grants (principal, scope, permission, granted_by) values ($1, $2, $3, $4) on conflict do nothing",
@@ -211,13 +258,17 @@ export function createPostgresStore(pool: Pool) {
       });
     },
 
-    async revoke(principal: string, scope: string, permission: "read" | "write", by: string) {
+    async revoke(
+      principal: string,
+      scope: string,
+      permission: "read" | "write",
+      by: string,
+    ) {
       await tx(async (c) => {
-        await c.query("delete from grants where principal = $1 and scope = $2 and permission = $3", [
-          principal,
-          scope,
-          permission,
-        ]);
+        await c.query(
+          "delete from grants where principal = $1 and scope = $2 and permission = $3",
+          [principal, scope, permission],
+        );
         await c.query(
           "insert into grant_log (principal, scope, permission, action, actor) values ($1, $2, $3, 'revoke', $4)",
           [principal, scope, permission, by],
@@ -233,7 +284,14 @@ export function createPostgresStore(pool: Pool) {
         await c.query(
           `insert into embedding_spaces (id, model, revision, dimensions, normalized, preprocessing)
            values ($1, $2, $3, $4, $5, $6) on conflict (id) do nothing`,
-          [id, space.model, space.revision, space.dimensions, space.normalized, space.preprocessing],
+          [
+            id,
+            space.model,
+            space.revision,
+            space.dimensions,
+            space.normalized,
+            space.preprocessing,
+          ],
         );
         await c.query(`create table if not exists ${table} (
             memory_id text not null, version int not null, embedding vector(${space.dimensions}) not null,
@@ -276,25 +334,42 @@ export function createPostgresStore(pool: Pool) {
           [input.id, input.scope, input.kind, principal],
         );
         if (inserted.rowCount === 0) {
-          const existing = await c.query<{ current_version: number; content_hash: string; deleted_at: Date | null }>(
+          const existing = await c.query<{
+            current_version: number;
+            content_hash: string;
+            deleted_at: Date | null;
+          }>(
             `select m.current_version, v.content_hash, m.deleted_at from memories m
                left join memory_versions v on v.memory_id = m.id and v.version = m.current_version
               where m.id = $1`,
             [input.id],
           );
           const row = existing.rows[0];
-          if (row !== undefined && row.deleted_at === null && row.content_hash === hash)
-            return { id: input.id, version: row.current_version, created: false };
-          throw new HyperagError("already_exists", `memory ${input.id} already exists`, {
-            deleted: row?.deleted_at !== null,
-          });
+          if (
+            row !== undefined &&
+            row.deleted_at === null &&
+            row.content_hash === hash
+          )
+            return {
+              id: input.id,
+              version: row.current_version,
+              created: false,
+            };
+          throw new HyperagError(
+            "already_exists",
+            `memory ${input.id} already exists`,
+            {
+              deleted: row?.deleted_at !== null,
+            },
+          );
         }
         await insertVersion(c, input.id, 1, principal, hash, input, vector);
         // Lock the corrected memories first, so a concurrent update cannot revive what this corrects.
         if (input.supersedes.length > 0)
-          await c.query("select id from memories where id = any($1::text[]) order by id for update", [
-            input.supersedes,
-          ]);
+          await c.query(
+            "select id from memories where id = any($1::text[]) order by id for update",
+            [input.supersedes],
+          );
         for (const old of input.supersedes) {
           // The reason is fixed text: the correcting id lives only in superseded_by, which explain masks.
           const marked = await c.query(
@@ -305,7 +380,11 @@ export function createPostgresStore(pool: Pool) {
             [old, input.id],
           );
           if (marked.rowCount === 0)
-            throw new HyperagError("not_active", `memory ${old} is not active`, { memoryId: old });
+            throw new HyperagError(
+              "not_active",
+              `memory ${old} is not active`,
+              { memoryId: old },
+            );
         }
         await remember(c, principal, input.idempotencyKey, input.id, 1);
         return { id: input.id, version: 1, created: true };
@@ -315,7 +394,10 @@ export function createPostgresStore(pool: Pool) {
     async update(
       principal: string,
       id: string,
-      input: VersionInput & { expectedVersion: number; idempotencyKey?: string },
+      input: VersionInput & {
+        expectedVersion: number;
+        idempotencyKey?: string;
+      },
       hash: string,
       vector: { space: string; values: number[] } | null,
     ) {
@@ -329,21 +411,34 @@ export function createPostgresStore(pool: Pool) {
           [id],
         );
         const head = locked.rows[0];
-        const current = head === undefined ? undefined : await c.query<{ content_hash: string; status: string }>(
-          "select content_hash, status from memory_versions where memory_id = $1 and version = $2",
-          [id, head.current_version],
-        );
-        const row = head === undefined ? undefined : { ...head, ...current?.rows[0] };
-        if (row === undefined) throw new HyperagError("not_found", `memory ${id} not found`);
+        const current =
+          head === undefined
+            ? undefined
+            : await c.query<{ content_hash: string; status: string }>(
+                "select content_hash, status from memory_versions where memory_id = $1 and version = $2",
+                [id, head.current_version],
+              );
+        const row =
+          head === undefined ? undefined : { ...head, ...current?.rows[0] };
+        if (row === undefined)
+          throw new HyperagError("not_found", `memory ${id} not found`);
         // A superseded or invalidated fact keeps its reason; it is not silently revived by an update.
         if (row.status !== "active")
-          throw new HyperagError("not_active", `memory ${id} is ${row.status}`, { status: row.status });
+          throw new HyperagError(
+            "not_active",
+            `memory ${id} is ${row.status}`,
+            { status: row.status },
+          );
         if (row.content_hash === hash)
           return { id, version: row.current_version, created: false };
         if (row.current_version !== input.expectedVersion)
-          throw new HyperagError("version_conflict", `memory ${id} is at version ${row.current_version}`, {
-            currentVersion: row.current_version,
-          });
+          throw new HyperagError(
+            "version_conflict",
+            `memory ${id} is at version ${row.current_version}`,
+            {
+              currentVersion: row.current_version,
+            },
+          );
         const next = row.current_version + 1;
         await c.query(
           `update memory_versions set status = 'superseded', status_reason = 'updated to version ' || $3
@@ -351,7 +446,10 @@ export function createPostgresStore(pool: Pool) {
           [id, row.current_version, next],
         );
         await insertVersion(c, id, next, principal, hash, input, vector);
-        await c.query("update memories set current_version = $2 where id = $1", [id, next]);
+        await c.query(
+          "update memories set current_version = $2 where id = $1",
+          [id, next],
+        );
         await remember(c, principal, input.idempotencyKey, id, next);
         return { id, version: next, created: true };
       });
@@ -366,7 +464,9 @@ export function createPostgresStore(pool: Pool) {
         );
         const status = head.rows[0]?.status;
         if (status !== undefined && status !== "active")
-          throw new HyperagError("not_active", `memory ${id} is ${status}`, { status });
+          throw new HyperagError("not_active", `memory ${id} is ${status}`, {
+            status,
+          });
         const res = await c.query(
           `update memory_versions v set status = 'invalidated', status_reason = $2 || ' (by ' || $3 || ')',
              valid_to = coalesce(v.valid_to, now())
@@ -375,7 +475,8 @@ export function createPostgresStore(pool: Pool) {
              and v.status = 'active'`,
           [id, reason, by],
         );
-        if (res.rowCount === 0) throw new HyperagError("not_found", `memory ${id} not found`);
+        if (res.rowCount === 0)
+          throw new HyperagError("not_found", `memory ${id} not found`);
       });
     },
 
@@ -386,21 +487,34 @@ export function createPostgresStore(pool: Pool) {
           "update memories set deleted_at = now(), deleted_by = $2, delete_reason = $3 where id = $1 and deleted_at is null",
           [id, by, reason],
         );
-        if (res.rowCount === 0) throw new HyperagError("not_found", `memory ${id} not found`);
+        if (res.rowCount === 0)
+          throw new HyperagError("not_found", `memory ${id} not found`);
         await c.query("delete from memory_versions where memory_id = $1", [id]);
-        await c.query("delete from idempotent_writes where memory_id = $1", [id]);
+        await c.query("delete from idempotent_writes where memory_id = $1", [
+          id,
+        ]);
       });
     },
 
-    async bm25(scopes: readonly string[], text: string, limit: number, asOf: string | null): Promise<Hit[]> {
+    async bm25(
+      scopes: readonly string[],
+      text: string,
+      limit: number,
+      asOf: string | null,
+    ): Promise<Hit[]> {
       if (scopes.length === 0 || text.trim() === "") return [];
-      const rows = await pool.query<{ id: string; version: number; score: number; at: number }>(BM25_SQL, [
-        scopes,
-        asOf,
-        text,
-        limit,
-      ]);
-      return rows.rows.map((r) => ({ id: r.id, version: r.version, score: Number(r.score), at: Number(r.at) }));
+      const rows = await pool.query<{
+        id: string;
+        version: number;
+        score: number;
+        at: number;
+      }>(BM25_SQL, [scopes, asOf, text, limit]);
+      return rows.rows.map((r) => ({
+        id: r.id,
+        version: r.version,
+        score: Number(r.score),
+        at: Number(r.at),
+      }));
     },
 
     async vector(
@@ -415,8 +529,15 @@ export function createPostgresStore(pool: Pool) {
         // The iterative scan keeps reading the HNSW graph until enough rows pass the scope filter. The
         // default ef_search (40) found 92% of the exact top 24 on the cross-team corpus; 100 found all.
         await c.query("set local hnsw.iterative_scan = strict_order");
-        await c.query(`set local hnsw.ef_search = ${Math.min(1000, Math.max(100, 4 * Math.trunc(limit)))}`);
-        const rows = await c.query<{ id: string; version: number; distance: number; at: number }>(
+        await c.query(
+          `set local hnsw.ef_search = ${Math.min(1000, Math.max(100, 4 * Math.trunc(limit)))}`,
+        );
+        const rows = await c.query<{
+          id: string;
+          version: number;
+          distance: number;
+          at: number;
+        }>(
           `select m.id, v.version, e.embedding <=> $3::vector as distance,
                   extract(epoch from v.recorded_at)::float8 as at
              from ${vectorTable(space)} e
@@ -427,12 +548,21 @@ export function createPostgresStore(pool: Pool) {
             limit $4`,
           [scopes, asOf, vectorLiteral(query), limit],
         );
-        return rows.rows.map((r) => ({ id: r.id, version: r.version, score: 1 - Number(r.distance), at: Number(r.at) }));
+        return rows.rows.map((r) => ({
+          id: r.id,
+          version: r.version,
+          score: 1 - Number(r.distance),
+          at: Number(r.at),
+        }));
       }, false);
     },
 
     /** The current, active versions of `ids` the caller may read, in the order of `ids`. */
-    async load(ids: readonly string[], scopes: readonly string[], asOf: string | null): Promise<Memory[]> {
+    async load(
+      ids: readonly string[],
+      scopes: readonly string[],
+      asOf: string | null,
+    ): Promise<Memory[]> {
       if (ids.length === 0 || scopes.length === 0) return [];
       const rows = await pool.query<VersionRow>(
         `select ${VERSION_COLUMNS} from memories m join memory_versions v on v.memory_id = m.id
@@ -477,7 +607,11 @@ export function createPostgresStore(pool: Pool) {
         deleted:
           memory.deleted_at === null
             ? null
-            : { at: memory.deleted_at.toISOString(), by: memory.deleted_by, reason: memory.delete_reason },
+            : {
+                at: memory.deleted_at.toISOString(),
+                by: memory.deleted_by,
+                reason: memory.delete_reason,
+              },
         versions: versions.rows.map(memoryOf),
         corrects: supersededBy.rows.map((r) => r.memory_id),
       };
@@ -485,7 +619,11 @@ export function createPostgresStore(pool: Pool) {
 
     /** Current active versions with no vector in `space` yet: what a model switch must embed. */
     async missingVectors(space: string, limit: number) {
-      const rows = await pool.query<{ id: string; version: number; text: string }>(
+      const rows = await pool.query<{
+        id: string;
+        version: number;
+        text: string;
+      }>(
         `select m.id, v.version, v.text from memories m
            join memory_versions v on v.memory_id = m.id and v.version = m.current_version
           where m.deleted_at is null and not exists (
@@ -496,7 +634,10 @@ export function createPostgresStore(pool: Pool) {
       return rows.rows;
     },
 
-    async putVectors(space: string, rows: ReadonlyArray<{ id: string; version: number; values: number[] }>) {
+    async putVectors(
+      space: string,
+      rows: ReadonlyArray<{ id: string; version: number; values: number[] }>,
+    ) {
       await tx(async (c) => {
         for (const row of rows)
           await c.query(
@@ -508,24 +649,34 @@ export function createPostgresStore(pool: Pool) {
     },
 
     async stats() {
-      const rows = await pool.query<{ memories: string; versions: string; bytes: string }>(
+      const rows = await pool.query<{
+        memories: string;
+        versions: string;
+        bytes: string;
+      }>(
         `select (select count(*) from memories where deleted_at is null) as memories,
                 (select count(*) from memory_versions) as versions,
                 pg_database_size(current_database()) as bytes`,
       );
       const r = rows.rows[0];
-      return { memories: Number(r?.memories), versions: Number(r?.versions), databaseBytes: Number(r?.bytes) };
+      return {
+        memories: Number(r?.memories),
+        versions: Number(r?.versions),
+        databaseBytes: Number(r?.bytes),
+      };
     },
   };
 }
 
 function vectorTable(space: string): string {
-  if (!/^[0-9a-f]{16}$/u.test(space)) throw new HyperagError("invalid_input", "bad embedding space id");
+  if (!/^[0-9a-f]{16}$/u.test(space))
+    throw new HyperagError("invalid_input", "bad embedding space id");
   return `vectors_${space}`;
 }
 
 function vectorLiteral(values: readonly number[]): string {
-  if (!values.every(Number.isFinite)) throw new HyperagError("invalid_input", "vector has a non-finite value");
+  if (!values.every(Number.isFinite))
+    throw new HyperagError("invalid_input", "vector has a non-finite value");
   return `[${values.join(",")}]`;
 }
 
