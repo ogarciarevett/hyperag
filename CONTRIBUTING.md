@@ -36,3 +36,39 @@ Before pushing source or formatting changes, run `bun run test:db-free` as well 
 Database fixtures that execute the shipped Rust SQL must install its required production index migrations before asserting plans or performance. When that migration list or SQL changes, run the affected database-backed fixture locally; service-free tests alone do not prove query-plan parity.
 
 Query-plan fixtures must separate semantic safety from planner choice: small or dense cache scans can be legitimate, while source-table scans remain forbidden for ready indexed retrieval. Prove narrow indexed/bounded work on a realistically sized, diverse-vocabulary fixture and preserve exact score/order parity and the existing execution budgets.
+
+## Shared language quality gate
+
+Use the existing Rust 1.99.0, Bun 1.4.3 and Node 24.22.1 runtimes. Set up
+contributor-only Python tools with Python 3.12 or newer:
+
+```sh
+python3 -m venv .quality-venv
+.quality-venv/bin/python -m pip install --require-hashes -r requirements-quality.txt
+bun install --frozen-lockfile --ignore-scripts
+.quality-venv/bin/python scripts/quality-gate.py
+.quality-venv/bin/python -I scripts/test_quality_gate.py
+```
+
+The read-only command checks Black 26.10.1, Ruff 0.14.3, Biome 2.6.4,
+strict TypeScript types, and the existing Rust fmt/clippy gates. The first
+failure stops delivery; it never formats files or downloads models. CI and
+release builds depend on the same command. The `python`, `typescript`, and
+`rust` arguments select an individual language for diagnosis.
+
+Install `.githooks/pre-push` only after inspecting existing local hooks. For an
+isolated worktree, enable Git's `extensions.worktreeConfig` in repository-local
+config and set `core.hooksPath` to that worktree's absolute `.githooks` path with
+`git config --worktree`; preserve any existing hook rather than replacing it.
+No global Git configuration is needed.
+
+Related or dependent feature PRs must form an official `gh stack`. Record the
+exact stack/base/head relationship and current-head validation for every layer.
+Reviewers return CHANGES for unlinked dependent feature PRs. Merge an accepted
+stack through `gh stack merge` only with the existing named-human and release
+authority; a linked stack or source PASS does not grant merge or runtime adoption.
+
+Ruff uses E4/E7/E9/F. E402 has only 18 inline applicability annotations:
+15 imports after the native guard's early budget clock and three imports after
+the read-only pilot path bootstrap. Preserve those ordering contracts; no global
+ignore applies. The unannotated E402 negative fixture must still block delivery.
