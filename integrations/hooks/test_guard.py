@@ -5,6 +5,7 @@ import json
 import os
 import sys
 import threading
+import time
 import importlib.util
 import io
 from pathlib import Path
@@ -78,7 +79,7 @@ class GuardTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             guard.check_scope("shared:other", credential, logs.append)
 
-    def test_real_entrypoint_quiet_skip_in_separate_namespace_after_revocation(self):
+    def test_real_entrypoint_revocation_skips_same_and_fresh_config(self):
         writes = []
 
         class Service(http.server.BaseHTTPRequestHandler):
@@ -126,7 +127,7 @@ class GuardTest(unittest.TestCase):
                     (namespace / "active").touch()
                     rollback = namespace / "rollback"
                     rollback.write_text(
-                        '#!/bin/sh\ntouch "'
+                        '#!/bin/sh\nprintf "recovered\\n" >> "'
                         + str(namespace / "recovery-called")
                         + '"\n'
                     )
@@ -181,6 +182,45 @@ class GuardTest(unittest.TestCase):
                 self.assertEqual(writes, ["/v1/memories"])
                 self.assertEqual(invocations.read_text().splitlines(), ["invoked"])
                 # A may legitimately trip latency policy; retain all its history.
+                control = root / "A"
+                control_state = control / "state"
+                recovery_status = control_state / "recovery/status.json"
+                if recovery_status.parent.exists():
+                    deadline = time.monotonic() + 3
+                    status = {}
+                    while time.monotonic() < deadline:
+                        if recovery_status.exists():
+                            status = json.loads(recovery_status.read_text())
+                            if status.get("state") in ("succeeded", "failed"):
+                                break
+                        time.sleep(0.01)
+                    self.assertEqual(status.get("state"), "succeeded", status)
+                    self.assertEqual(
+                        (control / "recovery-called").read_text().splitlines(),
+                        ["recovered"],
+                    )
+                diagnostics = {
+                    str(path.relative_to(control_state)): path.read_text()
+                    for path in (
+                        control_state / "calls.jsonl",
+                        control_state / "trips.jsonl",
+                        recovery_status,
+                    )
+                    if path.exists()
+                }
+                self.assertTrue(
+                    (control / "active").exists(),
+                    f"same-config proof requires active positive control: {diagnostics}",
+                )
+
+                def artifacts(namespace):
+                    return {
+                        str(path.relative_to(namespace)): path.read_bytes()
+                        for path in namespace.rglob("*")
+                        if path.is_file()
+                    }
+
+                control_baseline = artifacts(control)
                 grants["write_scopes"] = []
                 credential.write_text(json.dumps(grants))
                 original = credential.read_bytes()
@@ -207,6 +247,26 @@ class GuardTest(unittest.TestCase):
                 self.assertEqual(
                     (state / "skips.jsonl").read_text().splitlines(),
                     [json.dumps({"category": "skipped_ungranted"})],
+                )
+                self.assertTrue((control / "active").exists())
+                revoked = invoke(configs[0])
+                self.assertEqual(
+                    (revoked.returncode, revoked.stdout, revoked.stderr), (0, "", "")
+                )
+                self.assertEqual(
+                    writes, ["/v1/memories"], "same-config revocation forwarded HTTP"
+                )
+                self.assertEqual(invocations.read_text().splitlines(), ["invoked"])
+                self.assertEqual(credential.read_bytes(), original)
+                self.assertTrue((control / "active").exists())
+                self.assertEqual(
+                    artifacts(control),
+                    {
+                        **control_baseline,
+                        "state/skips.jsonl": (
+                            json.dumps({"category": "skipped_ungranted"}) + "\n"
+                        ).encode(),
+                    },
                 )
         finally:
             service.shutdown()
