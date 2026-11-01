@@ -51,8 +51,21 @@ The Rust hook independently GETs authenticated `/v1/scopes` before recent or wri
 requests. It checks current caller read/write grants and silently skips an
 ungranted project, including stale permissions that a local snapshot still lists.
 Both Rust and TypeScript services implement this read-only caller-scoped endpoint.
-`test_guard.py` drives the actual CLI through a positive write control then an
-ungranted call with zero writes, empty stderr, no trip, and unchanged grants.
+`test_guard.py` drives the actual Python CLI through a positive write control in
+namespace A, then a quiet ungranted call in namespace B. Both private configurations,
+active markers and rollback namespaces exist before either call and reference the
+same mode-0600 synthetic credential file. After A proves a real POST and one
+synthetic child invocation, only that file's write grant is revoked. B must retain
+its original active marker, leave the credential bytes unchanged, emit exactly one
+category-only `skipped_ungranted` record, and add no child invocation, request,
+eligible-call monitoring, stderr, trip or recovery. A may legitimately exceed the
+300 ms policy and trip; its history is retained separately, without resetting it.
+
+**Public coverage gap:** this narrower fixture does not prove a permission
+transition under the same config/state identity. A stale positive grant cached by
+config or state could escape it. Same-config transition coverage remains separate
+work; this replacement does not establish full revocation parity. It also proves
+neither the native hook's fresh `/v1/scopes` checks nor model or live-service behavior.
 The binary hook contract tests and service smoke test cover the Rust entrypoint.
 
 `rollback.py /absolute/path/to/private-config.json` is the included Linux/macOS service

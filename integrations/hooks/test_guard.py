@@ -78,7 +78,7 @@ class GuardTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             guard.check_scope("shared:other", credential, logs.append)
 
-    def test_real_entrypoint_skips_without_writes_stderr_or_recovery(self):
+    def test_real_entrypoint_quiet_skip_in_separate_namespace_after_revocation(self):
         writes = []
 
         class Service(http.server.BaseHTTPRequestHandler):
@@ -100,9 +100,6 @@ class GuardTest(unittest.TestCase):
                 root = Path(name)
                 project = root / "Known"
                 project.mkdir()
-                active = root / "active"
-                active.touch()
-                state = root / "state"
                 credential = root / "credential.json"
                 grants = {
                     "token": "fixture-token",
@@ -111,37 +108,53 @@ class GuardTest(unittest.TestCase):
                 }
                 credential.write_text(json.dumps(grants))
                 credential.chmod(0o600)
+                invocations = root / "child-invocations"
                 executable = root / "hook"
                 executable.write_text(
                     "#!"
                     + sys.executable
-                    + "\nimport os,urllib.request\nrequest=urllib.request.Request(os.getenv('HYPERAG_URL')+'/v1/memories',data=b'{}',method='POST')\nwith urllib.request.urlopen(request,timeout=2) as response:response.read()\n"
+                    + "\nimport os,urllib.request\n"
+                    + f"with open({str(invocations)!r}, 'a') as marker: marker.write('invoked\\n')\n"
+                    + "request=urllib.request.Request(os.getenv('HYPERAG_URL')+'/v1/memories',data=b'{}',method='POST')\nwith urllib.request.urlopen(request,timeout=2) as response:response.read()\n"
                 )
                 executable.chmod(0o700)
-                rollback = root / "rollback"
-                rollback.write_text(
-                    "#!/bin/sh\ntouch " + str(root / "recovery-called") + "\n"
-                )
-                rollback.chmod(0o700)
-                config = root / "config.json"
-                config.write_text(
-                    json.dumps(
-                        {
-                            "binary": str(executable),
-                            "credential_file": str(credential),
-                            "active_marker": str(active),
-                            "state_dir": str(state),
-                            "url": "http://127.0.0.1:" + str(service.server_port),
-                            "rollback_command": [str(rollback)],
-                        }
+                # Both namespaces exist before A runs; neither is reset or reused.
+                configs = []
+                for label in ("A", "B"):
+                    namespace = root / label
+                    namespace.mkdir(mode=0o700)
+                    (namespace / "active").touch()
+                    rollback = namespace / "rollback"
+                    rollback.write_text(
+                        '#!/bin/sh\ntouch "'
+                        + str(namespace / "recovery-called")
+                        + '"\n'
                     )
-                )
+                    rollback.chmod(0o700)
+                    config = namespace / "config.json"
+                    config.write_text(
+                        json.dumps(
+                            {
+                                "binary": str(executable),
+                                "credential_file": str(credential),
+                                "active_marker": str(namespace / "active"),
+                                "state_dir": str(namespace / "state"),
+                                "url": "http://127.0.0.1:" + str(service.server_port),
+                                "rollback_command": [str(rollback)],
+                            }
+                        )
+                    )
+                    config.chmod(0o600)
+                    configs.append(config)
+                denied = root / "B"
+                active, state = denied / "active", denied / "state"
+                baseline = {path.name: path.read_bytes() for path in denied.iterdir()}
                 command = [
                     sys.executable,
                     "-I",
                     str(Path(__file__).with_name("guard.py")),
                     "--config",
-                    str(config),
+                    str(configs[0]),
                     "hook",
                     "prompt",
                     "--harness",
@@ -151,7 +164,8 @@ class GuardTest(unittest.TestCase):
                     {"cwd": str(project), "prompt": "synthetic fixture input"}
                 )
 
-                def invoke():
+                def invoke(config):
+                    command[4] = str(config)
                     return subprocess.run(
                         command,
                         input=payload,
@@ -162,23 +176,34 @@ class GuardTest(unittest.TestCase):
                     )
 
                 # Positive control proves this CLI really forwards an eligible hook.
-                granted = invoke()
+                granted = invoke(configs[0])
                 self.assertEqual((granted.returncode, granted.stderr), (0, ""))
                 self.assertEqual(writes, ["/v1/memories"])
-                writes.clear()
+                self.assertEqual(invocations.read_text().splitlines(), ["invoked"])
+                # A may legitimately trip latency policy; retain all its history.
                 grants["write_scopes"] = []
                 credential.write_text(json.dumps(grants))
                 original = credential.read_bytes()
-                skipped = invoke()
+                self.assertEqual(credential.stat().st_mode & 0o777, 0o600)
+                self.assertTrue(active.exists())
+                self.assertEqual(
+                    {path.name: path.read_bytes() for path in denied.iterdir()},
+                    baseline,
+                )
+                skipped = invoke(configs[1])
                 self.assertEqual(
                     (skipped.returncode, skipped.stdout, skipped.stderr), (0, "", "")
                 )
-                self.assertEqual(writes, [])
+                self.assertEqual(writes, ["/v1/memories"])
+                self.assertEqual(invocations.read_text().splitlines(), ["invoked"])
                 self.assertEqual(credential.read_bytes(), original)
                 self.assertTrue(active.exists())
                 self.assertFalse((state / "trips.jsonl").exists())
                 self.assertFalse((state / "recovery").exists())
-                self.assertFalse((root / "recovery-called").exists())
+                self.assertFalse((denied / "recovery-called").exists())
+                self.assertEqual(
+                    [path.name for path in state.iterdir()], ["skips.jsonl"]
+                )
                 self.assertEqual(
                     (state / "skips.jsonl").read_text().splitlines(),
                     [json.dumps({"category": "skipped_ungranted"})],
