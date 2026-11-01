@@ -2,29 +2,39 @@ import importlib.util
 from pathlib import Path
 import unittest
 
-spec = importlib.util.spec_from_file_location("formula", Path(__file__).with_name("homebrew-formula.py"))
+spec = importlib.util.spec_from_file_location(
+    "formula", Path(__file__).with_name("homebrew-formula.py")
+)
 module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
 
 
 class Formula(unittest.TestCase):
     def checksums(self):
-        return "\n".join(f"{'0' * 64}  hyperag-v0.2.0-{target}.tar.gz" for target in module.TARGETS)
+        return "\n".join(
+            f"{'0' * 64}  hyperag-v0.2.0-{target}.tar.gz" for target in module.TARGETS
+        )
 
     def test_four_platforms_are_pinned_to_release_checksums(self):
         text = module.formula("v0.2.0", self.checksums())
         self.assertEqual(text.count('sha256 "'), 4)
-        self.assertIn('/releases/download/v0.2.0/hyperag-v0.2.0-', text)
-        self.assertIn('hyperag --version', text)
+        self.assertIn("/releases/download/v0.2.0/hyperag-v0.2.0-", text)
+        self.assertIn("hyperag --version", text)
         self.assertTrue(all(target in text for target in module.TARGETS))
 
     def test_version_is_inferred_from_release_url_for_strict_audit(self):
         text = module.formula("v0.2.0", self.checksums())
-        self.assertFalse(any(line.lstrip().startswith('version ') for line in text.splitlines()))
+        self.assertFalse(
+            any(line.lstrip().startswith("version ") for line in text.splitlines())
+        )
 
     def test_missing_duplicate_and_invalid_metadata_fail_closed(self):
-        for version, checksums in [("../../bad", self.checksums()), ("v0.2.0", ""),
-                                   ("v0.2.0", self.checksums() + "\n" + self.checksums()), ("v0.2.0", "not a checksum")]:
+        for version, checksums in [
+            ("../../bad", self.checksums()),
+            ("v0.2.0", ""),
+            ("v0.2.0", self.checksums() + "\n" + self.checksums()),
+            ("v0.2.0", "not a checksum"),
+        ]:
             with self.subTest(version=version), self.assertRaises(ValueError):
                 module.formula(version, checksums)
 

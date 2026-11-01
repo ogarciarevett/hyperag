@@ -6,6 +6,7 @@ get_cat_5_answer (category 5: the chosen option must be "Not mentioned").
   uv pip install -c eval/public/python-ca-constraints.txt --python .venv-bench/bin/python nltk==3.9.2 regex==2025.11.3
   .venv-bench/bin/python -I eval/public/score_locomo.py eval/public/results/memory/locomo.*.jsonl
 """
+
 import json
 import string
 import sys
@@ -20,7 +21,11 @@ ps = PorterStemmer()
 
 def normalize_answer(s):
     s = s.replace(",", "")
-    s = regex.sub(r"\b(a|an|the|and)\b", " ", "".join(ch for ch in s.lower() if ch not in set(string.punctuation)))
+    s = regex.sub(
+        r"\b(a|an|the|and)\b",
+        " ",
+        "".join(ch for ch in s.lower() if ch not in set(string.punctuation)),
+    )
     return " ".join(s.split())
 
 
@@ -60,7 +65,11 @@ def score(row):
     if cat == 1:
         return f1_multi(out, gold)
     out = cat5_choice(out, row["extra"]["options"])
-    return 1.0 if "no information available" in out.lower() or "not mentioned" in out.lower() else 0.0
+    return (
+        1.0
+        if "no information available" in out.lower() or "not mentioned" in out.lower()
+        else 0.0
+    )
 
 
 for path in sys.argv[1:]:
@@ -69,14 +78,27 @@ for path in sys.argv[1:]:
     m = json.loads(meta.read_text()) if meta.exists() else {}
     if m.get("expectedQuestions") is None or len(rows) != m["expectedQuestions"]:
         # a run that died partway is never scored on the questions it reached
-        print(Path(path).name, json.dumps({"f1_cat1_4": "N/D", "reason": f"{len(rows)} rows, expected {m.get('expectedQuestions', 'unknown')}"}))
+        print(
+            Path(path).name,
+            json.dumps(
+                {
+                    "f1_cat1_4": "N/D",
+                    "reason": f"{len(rows)} rows, expected {m.get('expectedQuestions', 'unknown')}",
+                }
+            ),
+        )
         continue
     by: dict[str, list[float]] = {}
     for r in rows:
         by.setdefault(r["type"], []).append(score(r))
     main = [s for t, xs in by.items() if t != "5" for s in xs]
-    result = {"f1_cat1_4": round(sum(main) / len(main), 4) if main else "N/D",
-              "per_category": {t: {"n": len(xs), "f1": round(sum(xs) / len(xs), 4)} for t, xs in sorted(by.items())}}
+    result = {
+        "f1_cat1_4": round(sum(main) / len(main), 4) if main else "N/D",
+        "per_category": {
+            t: {"n": len(xs), "f1": round(sum(xs) / len(xs), 4)}
+            for t, xs in sorted(by.items())
+        },
+    }
     m["locomo"] = result
     meta.write_text(json.dumps(m, indent=2) + "\n")
     print(Path(path).name, json.dumps(result))

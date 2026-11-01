@@ -1,6 +1,12 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 
-import { DEFAULT_RERANK_CACHE_SIZE, MAX_RERANK_CACHE_BYTES, RerankCache, parseRerankCache, rerankCacheKey } from "../src/core";
+import {
+  DEFAULT_RERANK_CACHE_SIZE,
+  MAX_RERANK_CACHE_BYTES,
+  RerankCache,
+  parseRerankCache,
+  rerankCacheKey,
+} from "../src/core";
 import { HyperagError } from "../src/types";
 import { createNeo4jGraph } from "../src/adapters/neo4j";
 import { freshDatabase, NEO4J, open, uniq } from "./helpers";
@@ -40,19 +46,36 @@ describe("individual memory", () => {
     });
     await a.close();
     a = await open(db.url); // a new pool and a new Hyperag, as after a process restart
-    const r = await a.hyperag.retrieve("alice", "which lock does the ingestion queue use?");
+    const r = await a.hyperag.retrieve(
+      "alice",
+      "which lock does the ingestion queue use?",
+    );
     expect(r.items[0]?.memory.text).toContain("advisory locks");
     expect(r.items[0]?.memory.source).toBe("PR #42");
-    expect(r.pathsUsed).toEqual(expect.arrayContaining(["bm25", "vector", "graph"]));
+    expect(r.pathsUsed).toEqual(
+      expect.arrayContaining(["bm25", "vector", "graph"]),
+    );
   });
 
   test("a retried write is idempotent", async () => {
-    const input = { scope: alicePrivate, source: "notes", text: "Retry-safe fact about the cache TTL of 30 seconds." };
+    const input = {
+      scope: alicePrivate,
+      source: "notes",
+      text: "Retry-safe fact about the cache TTL of 30 seconds.",
+    };
     const first = await a.hyperag.ingest("alice", input);
     const again = await a.hyperag.ingest("alice", input);
     expect(again).toEqual({ id: first.id, version: 1, created: false });
-    const keyed = await a.hyperag.ingest("alice", { ...input, text: "Another fact.", idempotencyKey: "k1" });
-    const replay = await a.hyperag.ingest("alice", { ...input, text: "Changed on retry.", idempotencyKey: "k1" });
+    const keyed = await a.hyperag.ingest("alice", {
+      ...input,
+      text: "Another fact.",
+      idempotencyKey: "k1",
+    });
+    const replay = await a.hyperag.ingest("alice", {
+      ...input,
+      text: "Changed on retry.",
+      idempotencyKey: "k1",
+    });
     expect(replay.id).toBe(keyed.id);
     expect(replay.created).toBe(false);
   });
@@ -72,13 +95,27 @@ describe("shared memory", () => {
       source: "alice analysis",
       text: "Finding: set TZ=UTC in the test runner to stop checkout_spec flaking.",
     });
-    await a.hyperag.relate("alice", { from: finding.id, to: evidence.id, type: "SUPPORTED_BY" });
-    const r = await a.hyperag.retrieve("bob", "how do we fix the flaky checkout test?");
+    await a.hyperag.relate("alice", {
+      from: finding.id,
+      to: evidence.id,
+      type: "SUPPORTED_BY",
+    });
+    const r = await a.hyperag.retrieve(
+      "bob",
+      "how do we fix the flaky checkout test?",
+    );
     const ids = r.items.map((i) => i.memory.id);
     expect(ids).toContain(finding.id);
     expect(ids).toContain(evidence.id);
     const rels = await a.hyperag.relations("bob", finding.id);
-    expect(rels).toEqual([expect.objectContaining({ from: finding.id, to: evidence.id, type: "SUPPORTED_BY", createdBy: "alice" })]);
+    expect(rels).toEqual([
+      expect.objectContaining({
+        from: finding.id,
+        to: evidence.id,
+        type: "SUPPORTED_BY",
+        createdBy: "alice",
+      }),
+    ]);
   });
 
   test("a correction supersedes an earlier fact and the history explains it", async () => {
@@ -97,35 +134,74 @@ describe("shared memory", () => {
     expect(r.items[0]?.memory.id).toBe(fix.id);
     expect(r.items.map((i) => i.memory.id)).not.toContain(old.id);
     const why = await a.hyperag.explain("alice", old.id);
-    expect(why.versions[0]).toMatchObject({ status: "superseded", supersededBy: fix.id });
-    expect(why.relations).toEqual([expect.objectContaining({ from: fix.id, to: old.id, type: "SUPERSEDES" })]);
+    expect(why.versions[0]).toMatchObject({
+      status: "superseded",
+      supersededBy: fix.id,
+    });
+    expect(why.relations).toEqual([
+      expect.objectContaining({ from: fix.id, to: old.id, type: "SUPERSEDES" }),
+    ]);
   });
 
   test("two agents updating one memory: the stale writer gets version_conflict", async () => {
-    const m = await a.hyperag.ingest("alice", { scope: team, source: "plan", text: "Release train leaves on Tuesday." });
+    const m = await a.hyperag.ingest("alice", {
+      scope: team,
+      source: "plan",
+      text: "Release train leaves on Tuesday.",
+    });
     const [x, y] = await Promise.allSettled([
-      a.hyperag.update("alice", m.id, { text: "Release train leaves on Wednesday.", source: "plan", expectedVersion: 1 }),
-      a.hyperag.update("bob", m.id, { text: "Release train leaves on Thursday.", source: "plan", expectedVersion: 1 }),
+      a.hyperag.update("alice", m.id, {
+        text: "Release train leaves on Wednesday.",
+        source: "plan",
+        expectedVersion: 1,
+      }),
+      a.hyperag.update("bob", m.id, {
+        text: "Release train leaves on Thursday.",
+        source: "plan",
+        expectedVersion: 1,
+      }),
     ]);
-    const outcomes = [x, y].map((o) => (o.status === "fulfilled" ? "ok" : (o.reason as HyperagError).code)).sort();
+    const outcomes = [x, y]
+      .map((o) =>
+        o.status === "fulfilled" ? "ok" : (o.reason as HyperagError).code,
+      )
+      .sort();
     expect(outcomes).toEqual(["ok", "version_conflict"]);
     const history = await a.hyperag.explain("bob", m.id);
-    expect(history.versions.map((v) => v.status)).toEqual(["superseded", "active"]);
+    expect(history.versions.map((v) => v.status)).toEqual([
+      "superseded",
+      "active",
+    ]);
   });
 });
 
 describe("authorization", () => {
   test("a query cannot reach restricted information", async () => {
-    await a.hyperag.ingest("carol", { scope: finance, source: "ledger", text: "Q3 acquisition budget for Project Lynx is 4.2 million." });
-    const r = await a.hyperag.retrieve("bob", "Project Lynx acquisition budget");
+    await a.hyperag.ingest("carol", {
+      scope: finance,
+      source: "ledger",
+      text: "Q3 acquisition budget for Project Lynx is 4.2 million.",
+    });
+    const r = await a.hyperag.retrieve(
+      "bob",
+      "Project Lynx acquisition budget",
+    );
     expect(r.items.every((i) => i.memory.scope !== finance)).toBe(true);
-    await expect(a.hyperag.ingest("bob", { scope: finance, source: "x", text: "y" })).rejects.toMatchObject({ code: "forbidden" });
+    await expect(
+      a.hyperag.ingest("bob", { scope: finance, source: "x", text: "y" }),
+    ).rejects.toMatchObject({ code: "forbidden" });
   });
 
   test("an unrelated query reports insufficient evidence", async () => {
-    const r = await a.hyperag.retrieve("bob", "what is the airspeed velocity of an unladen swallow");
+    const r = await a.hyperag.retrieve(
+      "bob",
+      "what is the airspeed velocity of an unladen swallow",
+    );
     expect(r.insufficientEvidence).toBe(true);
-    const ctx = await a.hyperag.context("bob", "what is the airspeed velocity of an unladen swallow");
+    const ctx = await a.hyperag.context(
+      "bob",
+      "what is the airspeed velocity of an unladen swallow",
+    );
     expect(ctx.citations).toEqual([]);
   });
 
@@ -134,22 +210,51 @@ describe("authorization", () => {
     await a.hyperag.grant("admin", "dave", scope, "read");
     await a.hyperag.grant("admin", "alice", scope, "write");
     await a.hyperag.grant("admin", "alice", scope, "read");
-    const m = await a.hyperag.ingest("alice", { scope, source: "handoff", text: "Handoff note: rotate the vault token on Friday." });
-    expect((await a.hyperag.retrieve("dave", "rotate the vault token")).items[0]?.memory.id).toBe(m.id);
+    const m = await a.hyperag.ingest("alice", {
+      scope,
+      source: "handoff",
+      text: "Handoff note: rotate the vault token on Friday.",
+    });
+    expect(
+      (await a.hyperag.retrieve("dave", "rotate the vault token")).items[0]
+        ?.memory.id,
+    ).toBe(m.id);
     await a.hyperag.revoke("admin", "dave", scope, "read");
-    expect((await a.hyperag.retrieve("dave", "rotate the vault token")).items).toEqual([]);
-    await expect(a.hyperag.explain("dave", m.id)).rejects.toMatchObject({ code: "not_found" });
+    expect(
+      (await a.hyperag.retrieve("dave", "rotate the vault token")).items,
+    ).toEqual([]);
+    await expect(a.hyperag.explain("dave", m.id)).rejects.toMatchObject({
+      code: "not_found",
+    });
   });
 
   test("deletion removes the memory from search, graph and history text", async () => {
-    const m = await a.hyperag.ingest("alice", { scope: team, source: "chat", text: "Temporary password hint: blue-falcon." });
-    const other = await a.hyperag.ingest("alice", { scope: team, source: "chat", text: "Password hints must never be stored." });
-    await a.hyperag.relate("alice", { from: other.id, to: m.id, type: "REFERS_TO" });
+    const m = await a.hyperag.ingest("alice", {
+      scope: team,
+      source: "chat",
+      text: "Temporary password hint: blue-falcon.",
+    });
+    const other = await a.hyperag.ingest("alice", {
+      scope: team,
+      source: "chat",
+      text: "Password hints must never be stored.",
+    });
+    await a.hyperag.relate("alice", {
+      from: other.id,
+      to: m.id,
+      type: "REFERS_TO",
+    });
     await a.hyperag.delete("alice", m.id, "secret in memory");
-    const r = await a.hyperag.retrieve("bob", "temporary password hint blue-falcon");
+    const r = await a.hyperag.retrieve(
+      "bob",
+      "temporary password hint blue-falcon",
+    );
     expect(r.items.map((i) => i.memory.id)).not.toContain(m.id);
     const why = await a.hyperag.explain("alice", m.id);
-    expect(why.deleted).toMatchObject({ by: "alice", reason: "secret in memory" });
+    expect(why.deleted).toMatchObject({
+      by: "alice",
+      reason: "secret in memory",
+    });
     expect(why.versions).toEqual([]);
     expect(await a.hyperag.relations("alice", other.id)).toEqual([]);
     const graph = createNeo4jGraph(NEO4J);
@@ -157,9 +262,16 @@ describe("authorization", () => {
   });
 
   test("invalidated facts stop ranking but keep their history", async () => {
-    const m = await a.hyperag.ingest("alice", { scope: team, source: "wiki", text: "The on-call rotation uses PagerDuty schedule ALPHA." });
+    const m = await a.hyperag.ingest("alice", {
+      scope: team,
+      source: "wiki",
+      text: "The on-call rotation uses PagerDuty schedule ALPHA.",
+    });
     await a.hyperag.invalidate("bob", m.id, "schedule retired");
-    const r = await a.hyperag.retrieve("alice", "PagerDuty schedule ALPHA on-call rotation");
+    const r = await a.hyperag.retrieve(
+      "alice",
+      "PagerDuty schedule ALPHA on-call rotation",
+    );
     expect(r.items.map((i) => i.memory.id)).not.toContain(m.id);
     const why = await a.hyperag.explain("alice", m.id);
     expect(why.versions[0]?.status).toBe("invalidated");
@@ -169,24 +281,59 @@ describe("authorization", () => {
 
 describe("review fixes", () => {
   test("only an admin grants or revokes", async () => {
-    await expect(a.hyperag.grant("bob", "bob", finance, "read")).rejects.toMatchObject({ code: "forbidden" });
-    await expect(a.hyperag.revoke("bob", "carol", finance, "read")).rejects.toMatchObject({ code: "forbidden" });
+    await expect(
+      a.hyperag.grant("bob", "bob", finance, "read"),
+    ).rejects.toMatchObject({ code: "forbidden" });
+    await expect(
+      a.hyperag.revoke("bob", "carol", finance, "read"),
+    ).rejects.toMatchObject({ code: "forbidden" });
   });
 
   test("writes cannot tell a missing id from an unreadable one", async () => {
-    const hidden = await a.hyperag.ingest("carol", { scope: finance, source: "ledger", text: "Hidden payroll fact." });
+    const hidden = await a.hyperag.ingest("carol", {
+      scope: finance,
+      source: "ledger",
+      text: "Hidden payroll fact.",
+    });
     for (const call of [
-      () => a.hyperag.update("bob", hidden.id, { text: "x", source: "x", expectedVersion: 1 }),
+      () =>
+        a.hyperag.update("bob", hidden.id, {
+          text: "x",
+          source: "x",
+          expectedVersion: 1,
+        }),
       () => a.hyperag.invalidate("bob", hidden.id, "x"),
       () => a.hyperag.delete("bob", hidden.id, "x"),
-      () => a.hyperag.update("bob", "m_does_not_exist", { text: "x", source: "x", expectedVersion: 1 }),
+      () =>
+        a.hyperag.update("bob", "m_does_not_exist", {
+          text: "x",
+          source: "x",
+          expectedVersion: 1,
+        }),
     ])
       await expect(call()).rejects.toMatchObject({ code: "not_found" });
     // The same explicit id in two scopes is two memories.
-    const x = await a.hyperag.ingest("carol", { scope: finance, id: "plan", source: "s", text: "Finance plan." });
-    const y = await a.hyperag.ingest("bob", { scope: team, id: "plan", source: "s", text: "Team plan." });
+    const x = await a.hyperag.ingest("carol", {
+      scope: finance,
+      id: "plan",
+      source: "s",
+      text: "Finance plan.",
+    });
+    const y = await a.hyperag.ingest("bob", {
+      scope: team,
+      id: "plan",
+      source: "s",
+      text: "Team plan.",
+    });
     expect(x.id).not.toBe(y.id);
-    await expect(a.hyperag.ingest("bob", { scope: team, id: "b/x", source: "s", text: "t" })).rejects.toMatchObject({ code: "invalid_input" });
+    await expect(
+      a.hyperag.ingest("bob", {
+        scope: team,
+        id: "b/x",
+        source: "s",
+        text: "t",
+      }),
+    ).rejects.toMatchObject({ code: "invalid_input" });
   });
 
   test("explain hides ids the reader cannot read", async () => {
@@ -194,8 +341,17 @@ describe("review fixes", () => {
     await a.hyperag.grant("admin", "carol", shared, "read");
     await a.hyperag.grant("admin", "carol", shared, "write");
     await a.hyperag.grant("admin", "bob", shared, "read");
-    const old = await a.hyperag.ingest("carol", { scope: shared, source: "s", text: "Shared fact before correction." });
-    await a.hyperag.ingest("carol", { scope: finance, source: "s", text: "Private correction.", supersedes: [old.id] });
+    const old = await a.hyperag.ingest("carol", {
+      scope: shared,
+      source: "s",
+      text: "Shared fact before correction.",
+    });
+    await a.hyperag.ingest("carol", {
+      scope: finance,
+      source: "s",
+      text: "Private correction.",
+      supersedes: [old.id],
+    });
     const why = await a.hyperag.explain("bob", old.id);
     expect(why.versions[0]?.supersededBy).toBe("[not readable]");
     expect(why.versions[0]?.statusReason).toBe("corrected");
@@ -203,20 +359,66 @@ describe("review fixes", () => {
   });
 
   test("a corrected or invalidated fact is not revived by update or re-invalidated", async () => {
-    const old = await a.hyperag.ingest("alice", { scope: team, source: "s", text: "Old fact to correct." });
-    await a.hyperag.ingest("alice", { scope: team, source: "s", text: "New fact.", supersedes: [old.id] });
-    await expect(a.hyperag.update("alice", old.id, { text: "Revived.", source: "s", expectedVersion: 1 })).rejects.toMatchObject({ code: "not_active" });
-    await expect(a.hyperag.invalidate("alice", old.id, "x")).rejects.toMatchObject({ code: "not_active" });
-    await expect(a.hyperag.ingest("alice", { scope: team, source: "s", text: "Second correction.", supersedes: [old.id] })).rejects.toMatchObject({ code: "not_active" });
-    await expect(a.hyperag.ingest("alice", { scope: team, source: "s", text: "Bad date.", validFrom: "tuesday" })).rejects.toMatchObject({ code: "invalid_input" });
-    expect((await a.hyperag.explain("alice", old.id)).versions[0]?.statusReason).toBe("corrected");
+    const old = await a.hyperag.ingest("alice", {
+      scope: team,
+      source: "s",
+      text: "Old fact to correct.",
+    });
+    await a.hyperag.ingest("alice", {
+      scope: team,
+      source: "s",
+      text: "New fact.",
+      supersedes: [old.id],
+    });
+    await expect(
+      a.hyperag.update("alice", old.id, {
+        text: "Revived.",
+        source: "s",
+        expectedVersion: 1,
+      }),
+    ).rejects.toMatchObject({ code: "not_active" });
+    await expect(
+      a.hyperag.invalidate("alice", old.id, "x"),
+    ).rejects.toMatchObject({ code: "not_active" });
+    await expect(
+      a.hyperag.ingest("alice", {
+        scope: team,
+        source: "s",
+        text: "Second correction.",
+        supersedes: [old.id],
+      }),
+    ).rejects.toMatchObject({ code: "not_active" });
+    await expect(
+      a.hyperag.ingest("alice", {
+        scope: team,
+        source: "s",
+        text: "Bad date.",
+        validFrom: "tuesday",
+      }),
+    ).rejects.toMatchObject({ code: "invalid_input" });
+    expect(
+      (await a.hyperag.explain("alice", old.id)).versions[0]?.statusReason,
+    ).toBe("corrected");
   });
 
   test("supersede racing an update never leaves the corrected fact active", async () => {
-    const old = await a.hyperag.ingest("alice", { scope: team, source: "s", text: "Race target fact." });
+    const old = await a.hyperag.ingest("alice", {
+      scope: team,
+      source: "s",
+      text: "Race target fact.",
+    });
     await Promise.allSettled([
-      a.hyperag.update("bob", old.id, { text: "Race target fact, edited.", source: "s", expectedVersion: 1 }),
-      a.hyperag.ingest("alice", { scope: team, source: "s", text: "Race correction.", supersedes: [old.id] }),
+      a.hyperag.update("bob", old.id, {
+        text: "Race target fact, edited.",
+        source: "s",
+        expectedVersion: 1,
+      }),
+      a.hyperag.ingest("alice", {
+        scope: team,
+        source: "s",
+        text: "Race correction.",
+        supersedes: [old.id],
+      }),
     ]);
     const why = await a.hyperag.explain("alice", old.id);
     const current = why.versions.at(-1);
@@ -225,20 +427,49 @@ describe("review fixes", () => {
   });
 
   test("a validity-only update writes a new version", async () => {
-    const m = await a.hyperag.ingest("alice", { scope: team, source: "s", text: "Validity fact." });
-    const u = await a.hyperag.update("alice", m.id, { text: "Validity fact.", source: "s", expectedVersion: 1, validTo: "2026-12-31T00:00:00Z" });
+    const m = await a.hyperag.ingest("alice", {
+      scope: team,
+      source: "s",
+      text: "Validity fact.",
+    });
+    const u = await a.hyperag.update("alice", m.id, {
+      text: "Validity fact.",
+      source: "s",
+      expectedVersion: 1,
+      validTo: "2026-12-31T00:00:00Z",
+    });
     expect(u).toMatchObject({ version: 2, created: true });
   });
 
   test("a failed graph delete is repaired by retrying, and reads ignore it meanwhile", async () => {
     const real = createNeo4jGraph(NEO4J);
     let fail = true;
-    const flaky = { ...real, deleteMemory: async (id: string) => { if (fail) throw new Error("graph down"); return real.deleteMemory(id); } };
+    const flaky = {
+      ...real,
+      deleteMemory: async (id: string) => {
+        if (fail) throw new Error("graph down");
+        return real.deleteMemory(id);
+      },
+    };
     const f = await open(db.url, { graph: flaky });
-    const m = await f.hyperag.ingest("alice", { scope: team, source: "s", text: "Graph delete repair target." });
-    const n = await f.hyperag.ingest("alice", { scope: team, source: "s", text: "Graph delete repair neighbour." });
-    await f.hyperag.relate("alice", { from: n.id, to: m.id, type: "REFERS_TO" });
-    await expect(f.hyperag.delete("alice", m.id, "x")).rejects.toThrow("graph down");
+    const m = await f.hyperag.ingest("alice", {
+      scope: team,
+      source: "s",
+      text: "Graph delete repair target.",
+    });
+    const n = await f.hyperag.ingest("alice", {
+      scope: team,
+      source: "s",
+      text: "Graph delete repair neighbour.",
+    });
+    await f.hyperag.relate("alice", {
+      from: n.id,
+      to: m.id,
+      type: "REFERS_TO",
+    });
+    await expect(f.hyperag.delete("alice", m.id, "x")).rejects.toThrow(
+      "graph down",
+    );
     expect(await f.hyperag.relations("alice", n.id)).toEqual([]);
     fail = false;
     await f.hyperag.delete("alice", m.id, "x");
@@ -256,8 +487,16 @@ describe("valid time", () => {
       validFrom: "2026-01-01T00:00:00Z",
       validTo: "2026-06-01T00:00:00Z",
     });
-    const before = await a.hyperag.retrieve("alice", "deploy freeze window policy", { asOf: "2026-03-01T00:00:00Z" });
-    const after = await a.hyperag.retrieve("alice", "deploy freeze window policy", { asOf: "2026-09-01T00:00:00Z" });
+    const before = await a.hyperag.retrieve(
+      "alice",
+      "deploy freeze window policy",
+      { asOf: "2026-03-01T00:00:00Z" },
+    );
+    const after = await a.hyperag.retrieve(
+      "alice",
+      "deploy freeze window policy",
+      { asOf: "2026-09-01T00:00:00Z" },
+    );
     expect(before.items.some((i) => i.memory.source === "policy")).toBe(true);
     expect(after.items.some((i) => i.memory.source === "policy")).toBe(false);
   });
@@ -265,28 +504,70 @@ describe("valid time", () => {
 
 describe("rerank cache", () => {
   test("key hashes model, query and candidate versions, with hit, miss, invalidation and LRU bound", () => {
-    expect([parseRerankCache(undefined), parseRerankCache("off"), parseRerankCache("true"), parseRerankCache("4")]).toEqual([0, 0, DEFAULT_RERANK_CACHE_SIZE, 4]);
+    expect([
+      parseRerankCache(undefined),
+      parseRerankCache("off"),
+      parseRerankCache("true"),
+      parseRerankCache("4"),
+    ]).toEqual([0, 0, DEFAULT_RERANK_CACHE_SIZE, 4]);
     expect(() => parseRerankCache("bogus")).toThrow(HyperagError);
-    const k1 = rerankCacheKey("bge-reranker-base", "deploy freeze", [["m_1", 1], ["m_2", 3]]);
+    const k1 = rerankCacheKey("bge-reranker-base", "deploy freeze", [
+      ["m_1", 1],
+      ["m_2", 3],
+    ]);
     expect(k1).toHaveLength(64);
-    expect(rerankCacheKey("bge-reranker-base", "deploy freeze", [["m_1", 1], ["m_2", 3]])).toBe(k1);
-    for (const [m, q, v] of [["other-model", "deploy freeze", 3], ["bge-reranker-base", "other query", 3], ["bge-reranker-base", "deploy freeze", 4]] as const)
-      expect(rerankCacheKey(m, q, [["m_1", 1], ["m_2", v]])).not.toBe(k1);
+    expect(
+      rerankCacheKey("bge-reranker-base", "deploy freeze", [
+        ["m_1", 1],
+        ["m_2", 3],
+      ]),
+    ).toBe(k1);
+    for (const [m, q, v] of [
+      ["other-model", "deploy freeze", 3],
+      ["bge-reranker-base", "other query", 3],
+      ["bge-reranker-base", "deploy freeze", 4],
+    ] as const)
+      expect(
+        rerankCacheKey(m, q, [
+          ["m_1", 1],
+          ["m_2", v],
+        ]),
+      ).not.toBe(k1);
 
     const cache = new RerankCache(2);
-    const c12: [string, number][] = [["m_1", 1], ["m_2", 1]];
-    const c23: [string, number][] = [["m_2", 1], ["m_3", 1]];
-    const c34: [string, number][] = [["m_3", 1], ["m_4", 1]];
+    const c12: [string, number][] = [
+      ["m_1", 1],
+      ["m_2", 1],
+    ];
+    const c23: [string, number][] = [
+      ["m_2", 1],
+      ["m_3", 1],
+    ];
+    const c34: [string, number][] = [
+      ["m_3", 1],
+      ["m_4", 1],
+    ];
     expect(cache.get("m", "q1", c12)).toBeUndefined();
     cache.put("m", "q1", c12, [0.9, 0.1]);
     cache.put("m", "q2", c23, [0.8, 0.2]);
     expect(cache.get("m", "q1", c12)).toEqual([0.9, 0.1]);
     cache.put("m", "q3", c34, [0.7, 0.3]);
-    expect([cache.get("m", "q2", c23), cache.get("m", "q1", c12)]).toEqual([undefined, [0.9, 0.1]]);
-    expect(cache.get("m", "q1", [["m_1", 2], ["m_2", 1]])).toBeUndefined();
+    expect([cache.get("m", "q2", c23), cache.get("m", "q1", c12)]).toEqual([
+      undefined,
+      [0.9, 0.1],
+    ]);
+    expect(
+      cache.get("m", "q1", [
+        ["m_1", 2],
+        ["m_2", 1],
+      ]),
+    ).toBeUndefined();
     expect(cache.get("m", "q1", c12)).toBeUndefined();
     cache.invalidate("m_1", 2);
-    expect([cache.get("m", "q1", c12), cache.get("m", "q3", c34)]).toEqual([undefined, [0.7, 0.3]]);
+    expect([cache.get("m", "q1", c12), cache.get("m", "q3", c34)]).toEqual([
+      undefined,
+      [0.7, 0.3],
+    ]);
   });
 
   test("rejects oversized IDs, candidate arrays and scores, and evicts by total bytes", () => {
@@ -294,15 +575,35 @@ describe("rerank cache", () => {
     const small: [string, number][] = [["small", 1]];
     cache.put("m", "small", small, [1]);
     const before = cache.retainedBytes;
-    cache.put("m", "large-id", [["界".repeat(MAX_RERANK_CACHE_BYTES / 2), 1]], [1]);
-    cache.put("m", "many-ids", Array.from({ length: MAX_RERANK_CACHE_BYTES / 64 + 1 }, () => ["", 1] as const), []);
-    cache.put("m", "many-scores", [], new Array<number>(MAX_RERANK_CACHE_BYTES / 8 + 1).fill(1));
+    cache.put(
+      "m",
+      "large-id",
+      [["界".repeat(MAX_RERANK_CACHE_BYTES / 2), 1]],
+      [1],
+    );
+    cache.put(
+      "m",
+      "many-ids",
+      Array.from(
+        { length: MAX_RERANK_CACHE_BYTES / 64 + 1 },
+        () => ["", 1] as const,
+      ),
+      [],
+    );
+    cache.put(
+      "m",
+      "many-scores",
+      [],
+      new Array<number>(MAX_RERANK_CACHE_BYTES / 8 + 1).fill(1),
+    );
     expect([cache.size, cache.retainedBytes]).toEqual([1, before]);
     expect(cache.get("m", "small", small)).toEqual([1]);
     cache.invalidate("small");
     expect(cache.retainedBytes).toBe(0);
 
-    const candidates: [string, number][] = [["界".repeat(Math.floor(MAX_RERANK_CACHE_BYTES / 6)), 1]];
+    const candidates: [string, number][] = [
+      ["界".repeat(Math.floor(MAX_RERANK_CACHE_BYTES / 6)), 1],
+    ];
     cache.put("m", "q1", candidates, [1]);
     cache.put("m", "q2", candidates, [2]);
     expect(cache.get("m", "q1", candidates)).toEqual([1]);
@@ -327,22 +628,46 @@ describe("rerank cache", () => {
     let calls = 0;
     const reranker = {
       name: "counting-reranker",
-      rerank: async (_q: string, ps: readonly string[]) => (calls += 1, ps.map((p) => (p.includes("preferential") ? 0.95 : 0.1))),
+      rerank: async (_q: string, ps: readonly string[]) => (
+        (calls += 1), ps.map((p) => (p.includes("preferential") ? 0.95 : 0.1))
+      ),
     };
     const off = await open(db.url, { reranker });
     const on = await open(db.url, { reranker, rerankCache: 2 });
     try {
-      for (const perm of ["read", "write"] as const) await on.hyperag.grant("admin", reader, scope, perm);
-      const m1 = await on.hyperag.ingest(reader, { scope, source: "s1", text: "Rerank cache alpha candidate document." });
-      await on.hyperag.ingest(reader, { scope, source: "s2", text: "Rerank cache preferential beta candidate document." });
+      for (const perm of ["read", "write"] as const)
+        await on.hyperag.grant("admin", reader, scope, perm);
+      const m1 = await on.hyperag.ingest(reader, {
+        scope,
+        source: "s1",
+        text: "Rerank cache alpha candidate document.",
+      });
+      await on.hyperag.ingest(reader, {
+        scope,
+        source: "s2",
+        text: "Rerank cache preferential beta candidate document.",
+      });
       await off.hyperag.retrieve(reader, "rerank cache candidate document");
       await off.hyperag.retrieve(reader, "rerank cache candidate document");
       expect(calls).toBe(2);
       calls = 0;
-      const r1 = await on.hyperag.retrieve(reader, "rerank cache candidate document");
-      const r2 = await on.hyperag.retrieve(reader, "rerank cache candidate document");
-      expect([calls, r1.items.map((i) => i.memory.id)]).toEqual([1, r2.items.map((i) => i.memory.id)]);
-      await on.hyperag.update(reader, m1.id, { text: "Rerank cache alpha candidate document updated.", source: "s1", expectedVersion: 1 });
+      const r1 = await on.hyperag.retrieve(
+        reader,
+        "rerank cache candidate document",
+      );
+      const r2 = await on.hyperag.retrieve(
+        reader,
+        "rerank cache candidate document",
+      );
+      expect([calls, r1.items.map((i) => i.memory.id)]).toEqual([
+        1,
+        r2.items.map((i) => i.memory.id),
+      ]);
+      await on.hyperag.update(reader, m1.id, {
+        text: "Rerank cache alpha candidate document updated.",
+        source: "s1",
+        expectedVersion: 1,
+      });
       await on.hyperag.retrieve(reader, "rerank cache candidate document");
       expect(calls).toBe(2);
     } finally {

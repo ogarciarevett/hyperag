@@ -14,6 +14,7 @@ are one session and one retain(). A recalled fact maps back to the docs of its d
     HINDSIGHT_API_LLM_API_KEY=$EVAL_LLM_API_KEY HINDSIGHT_API_DATABASE_URL=pg0://competitors \\
     eval/public/.venv-hindsight/bin/hindsight-api --host 127.0.0.1 --port 58888
 """
+
 import os
 from importlib.metadata import version
 
@@ -22,12 +23,21 @@ from hindsight_client import Hindsight
 from systems.shared import iso_date, rank
 
 URL = os.environ.get("HINDSIGHT_URL", "http://127.0.0.1:58888")
-VERSION = {"hindsight-api": version("hindsight-api"), "hindsight-client": version("hindsight-client")}
-CONFIG = {"retain": "defaults (LLM extraction)", "recall": "defaults (budget mid, max_tokens 4096)", "database": "pg0 embedded Postgres",
-          "embeddings": "local BAAI/bge-small-en-v1.5 (server default)", "reranker": "local cross-encoder (server default)", "llm": "shared endpoint",
-          # retain's default 64,000 output tokens exceeds the endpoint's whole 32,768 context
-          "max_completion_tokens": "8192 for retain, consolidation and reflect",
-          "asOf": "anchor (recall query_timestamp); session date passed to retain timestamp"}
+VERSION = {
+    "hindsight-api": version("hindsight-api"),
+    "hindsight-client": version("hindsight-client"),
+}
+CONFIG = {
+    "retain": "defaults (LLM extraction)",
+    "recall": "defaults (budget mid, max_tokens 4096)",
+    "database": "pg0 embedded Postgres",
+    "embeddings": "local BAAI/bge-small-en-v1.5 (server default)",
+    "reranker": "local cross-encoder (server default)",
+    "llm": "shared endpoint",
+    # retain's default 64,000 output tokens exceeds the endpoint's whole 32,768 context
+    "max_completion_tokens": "8192 for retain, consolidation and reflect",
+    "asOf": "anchor (recall query_timestamp); session date passed to retain timestamp",
+}
 
 
 class HindsightSystem:
@@ -55,16 +65,37 @@ class HindsightSystem:
             key = f"{b}:{len(self.docs)}"
             self.docs[key] = ",".join(d["id"] for d in docs)
             when = iso_date(docs[0].get("timestamp"))
-            self.h.retain(bank_id=b, content="\n".join(d["text"] for d in docs), document_id=key, context="conversation session", **({"timestamp": when} if when else {}))
+            self.h.retain(
+                bank_id=b,
+                content="\n".join(d["text"] for d in docs),
+                document_id=key,
+                context="conversation session",
+                **({"timestamp": when} if when else {}),
+            )
             return
         for d in docs:
             self.docs[d["id"]] = d["id"]
-            self.h.retain(bank_id=b, content=f"{d['title']}\n{d['text']}" if d.get("title") else d["text"], document_id=d["id"])
+            self.h.retain(
+                bank_id=b,
+                content=f"{d['title']}\n{d['text']}" if d.get("title") else d["text"],
+                document_id=d["id"],
+            )
 
     def search(self, ns, query, k, as_of=None):
         # as_of: the question's own date, Hindsight's anchor for relative dates
-        res = self.h.recall(bank_id=self.bank(ns), query=query, **({"query_timestamp": as_of} if as_of else {}))
-        mems = [([d for d in self.docs.get(r.document_id or "", "").split(",") if d], 1.0 / (i + 1), r.text) for i, r in enumerate(res.results)]
+        res = self.h.recall(
+            bank_id=self.bank(ns),
+            query=query,
+            **({"query_timestamp": as_of} if as_of else {}),
+        )
+        mems = [
+            (
+                [d for d in self.docs.get(r.document_id or "", "").split(",") if d],
+                1.0 / (i + 1),
+                r.text,
+            )
+            for i, r in enumerate(res.results)
+        ]
         return rank(mems, k, self.bank(ns) in self.sessions)
 
     def close(self):

@@ -146,7 +146,10 @@ await A.must("alice", "POST", "/v1/relations", {
 // The same calls on every stack; every answer is kept whole (status and body).
 type Svc = typeof A;
 // Rust flattens history into the explain response; only relations depend on the graph slot.
-const historyResponse = (r: { status: number; json: Record<string, unknown> }) => {
+const historyResponse = (r: {
+  status: number;
+  json: Record<string, unknown>;
+}) => {
   const { relations: _relations, ...history } = r.json;
   return { status: r.status, history };
 };
@@ -212,15 +215,22 @@ const neo = await fetch(`${NEO4J.url}/db/neo4j/query/v2`, {
 if (!neo.ok) throw new Error(`neo4j cleanup: ${neo.status}`);
 
 // ---- stack B: same embedder, graph on ----
-const importedB = cli(`${tag}_b`, ["import", file, "--reranker", "none", "--as", "admin"], {
-  ...graphEnv,
-  HYPERAG_EMBEDDING: E5,
-});
+const importedB = cli(
+  `${tag}_b`,
+  ["import", file, "--reranker", "none", "--as", "admin"],
+  {
+    ...graphEnv,
+    HYPERAG_EMBEDDING: E5,
+  },
+);
 const importedPool = new Pool({ connectionString: dbUrl(`${tag}_b`), max: 1 });
 const spaces = await importedPool.query("select id from embedding_spaces");
 const space = String(spaces.rows[0]?.id ?? "");
 if (!/^[a-f0-9]{16}$/u.test(space)) throw new Error("missing embedding space");
-const vectorsB = Number((await importedPool.query(`select count(*) from vectors_${space}`)).rows[0].count);
+const vectorsB = Number(
+  (await importedPool.query(`select count(*) from vectors_${space}`)).rows[0]
+    .count,
+);
 await importedPool.end();
 const reimport = cli(`${tag}_b`, ["import", file], {
   ...graphEnv,
@@ -267,7 +277,11 @@ const historyOnly = Object.fromEntries(
     }),
 );
 const checks: Array<[string, boolean, unknown]> = [
-  ["reranker-only import fills the active embedding space", vectorsB === 5, { vectors: vectorsB }],
+  [
+    "reranker-only import fills the active embedding space",
+    vectorsB === 5,
+    { vectors: vectorsB },
+  ],
   [
     "B answers equal A (every retrieve and explain)",
     diff(before, afterB).length === 0,
@@ -299,10 +313,15 @@ for (const db of ["a", "b", "c"])
 await admin.end();
 
 const report = {
-  sourceCommit: spawnSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).stdout.trim(),
+  sourceCommit: spawnSync("git", ["rev-parse", "HEAD"], {
+    encoding: "utf8",
+  }).stdout.trim(),
   measuredAt: new Date().toISOString(),
   build: "rust",
-  probes: { sameModels: Object.keys(before).length, historyOnly: Object.keys(historyOnly).length },
+  probes: {
+    sameModels: Object.keys(before).length,
+    historyOnly: Object.keys(historyOnly).length,
+  },
   tag,
   records: lines.length,
   exported: exported.trim(),

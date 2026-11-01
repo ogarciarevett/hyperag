@@ -26,12 +26,24 @@ const fake = Bun.serve({
   port: 0,
   async fetch(req) {
     const body = (await req.json()) as { input?: string[]; text?: string[] };
-    seen.push({ path: new URL(req.url).pathname, auth: req.headers.get("authorization"), body });
+    seen.push({
+      path: new URL(req.url).pathname,
+      auth: req.headers.get("authorization"),
+      body,
+    });
     const n = (body.input ?? body.text ?? []).length;
-    const rows = Array.from({ length: n }, (_, i) => Array.from({ length: 4 }, (_, j) => i + j / 10));
-    if (body.text) return Response.json({ success: true, result: { shape: [n, 4], data: rows } });
+    const rows = Array.from({ length: n }, (_, i) =>
+      Array.from({ length: 4 }, (_, j) => i + j / 10),
+    );
+    if (body.text)
+      return Response.json({
+        success: true,
+        result: { shape: [n, 4], data: rows },
+      });
     // Out of order on purpose: the adapter must sort by index.
-    return Response.json({ data: rows.map((embedding, index) => ({ index, embedding })).reverse() });
+    return Response.json({
+      data: rows.map((embedding, index) => ({ index, embedding })).reverse(),
+    });
   },
 });
 afterAll(() => fake.stop());
@@ -58,24 +70,50 @@ describe("embedder contract", () => {
     const [docs] = await e.embedDocuments(["a", "b"]);
     expect(docs).toEqual([0, 0.1, 0.2, 0.3]);
     expect(seen).toContainEqual(
-      expect.objectContaining({ path: "/v1/embeddings", auth: "Bearer test-key", body: expect.objectContaining({ input_type: "query" }) }),
+      expect.objectContaining({
+        path: "/v1/embeddings",
+        auth: "Bearer test-key",
+        body: expect.objectContaining({ input_type: "query" }),
+      }),
     );
   });
 
   test("Cloudflare Workers AI shape", async () => {
     await embedderContract(
-      createCloudflareEmbedder({ accountId: "acct", apiToken: "t", model: "@cf/baai/bge-m3", dimensions: 4, baseUrl: fake.url.origin }),
+      createCloudflareEmbedder({
+        accountId: "acct",
+        apiToken: "t",
+        model: "@cf/baai/bge-m3",
+        dimensions: 4,
+        baseUrl: fake.url.origin,
+      }),
     );
-    expect(seen).toContainEqual(expect.objectContaining({ path: "/accounts/acct/ai/run/@cf/baai/bge-m3" }));
+    expect(seen).toContainEqual(
+      expect.objectContaining({
+        path: "/accounts/acct/ai/run/@cf/baai/bge-m3",
+      }),
+    );
   });
 
   test("a wrong dimension is refused, never stored", async () => {
-    const e = createOpenAICompatibleEmbedder({ baseUrl: fake.url.origin, model: "m", revision: "r", dimensions: 8, normalized: false });
+    const e = createOpenAICompatibleEmbedder({
+      baseUrl: fake.url.origin,
+      model: "m",
+      revision: "r",
+      dimensions: 8,
+      normalized: false,
+    });
     await expect(e.embedQuery("x")).rejects.toThrow("expected 8");
   });
 
   test("same dimension, different model: different space", () => {
-    const a = { model: "a", revision: "1", dimensions: 384, normalized: true, preprocessing: "none" };
+    const a = {
+      model: "a",
+      revision: "1",
+      dimensions: 384,
+      normalized: true,
+      preprocessing: "none",
+    };
     expect(spaceId(a)).not.toBe(spaceId({ ...a, model: "b" }));
     expect(spaceId(a)).not.toBe(spaceId({ ...a, preprocessing: "query: " }));
   });
@@ -84,7 +122,10 @@ describe("embedder contract", () => {
 describe("reranker contract", () => {
   test("local cross-encoder scores the relevant document higher", async () => {
     const r = createLocalReranker();
-    const [good, bad] = await r.rerank("which database stores memory?", ["Memory is stored in Postgres.", "The cat sat on the mat."]);
+    const [good, bad] = await r.rerank("which database stores memory?", [
+      "Memory is stored in Postgres.",
+      "The cat sat on the mat.",
+    ]);
     expect(good).toBeGreaterThan(bad as number);
     expect(await r.rerank("q", [])).toEqual([]);
   }, 120_000);
@@ -97,11 +138,23 @@ describe("model switch", () => {
     const first = await open(db.url);
     await first.hyperag.grant("admin", "ana", scope, "read");
     await first.hyperag.grant("admin", "ana", scope, "write");
-    await first.hyperag.ingest("ana", { scope, source: "doc", text: "Embeddings switch test document about kayaks." });
-    const other = createOpenAICompatibleEmbedder({ baseUrl: fake.url.origin, model: "fake-4d", revision: "1", dimensions: 4, normalized: false });
+    await first.hyperag.ingest("ana", {
+      scope,
+      source: "doc",
+      text: "Embeddings switch test document about kayaks.",
+    });
+    const other = createOpenAICompatibleEmbedder({
+      baseUrl: fake.url.origin,
+      model: "fake-4d",
+      revision: "1",
+      dimensions: 4,
+      normalized: false,
+    });
     const re = await first.hyperag.reindex(other);
     expect(re.embedded).toBe(1);
-    const tables = await first.pool.query("select count(*)::int as n from embedding_spaces");
+    const tables = await first.pool.query(
+      "select count(*)::int as n from embedding_spaces",
+    );
     expect(tables.rows[0].n).toBe(2);
     await first.close();
     const second = await open(db.url, { embedder: other });

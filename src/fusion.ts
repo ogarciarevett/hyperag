@@ -17,5 +17,7 @@ export function fuse(lists: ReadonlyArray<readonly Hit[]>, k: number): Hit[] {
         score: (prev?.score ?? 0) + 1 / (k + index + 1),
       });
     });
-  return [...scores.values()].sort((a, b) => b.score - a.score || b.at - a.at || a.id.localeCompare(b.id));
+  return [...scores.values()].sort(
+    (a, b) => b.score - a.score || b.at - a.at || a.id.localeCompare(b.id),
+  );
 }

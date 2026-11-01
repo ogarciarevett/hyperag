@@ -4,6 +4,7 @@ A Python adapter has VERSION (package -> version), CONFIG (dict), optional CONTA
 names counted in RAM) and open(workdir, profile) returning an object with ingest(ns, docs),
 search(ns, query, k) -> [{"id", "score", "text"}] and close(). Docs are the runner's Doc objects.
 """
+
 import importlib
 import inspect
 import json
@@ -23,7 +24,12 @@ DOCKER = os.environ.get("DOCKER", "docker")
 
 
 def tree_rss_bytes() -> int:
-    rows = [r.split() for r in subprocess.run(["ps", "-A", "-o", "pid=,ppid=,rss="], capture_output=True, text=True).stdout.splitlines()]
+    rows = [
+        r.split()
+        for r in subprocess.run(
+            ["ps", "-A", "-o", "pid=,ppid=,rss="], capture_output=True, text=True
+        ).stdout.splitlines()
+    ]
     kids: dict[int, list[tuple[int, int]]] = {}
     for pid, ppid, rss in rows:
         kids.setdefault(int(ppid), []).append((int(pid), int(rss)))
@@ -38,7 +44,11 @@ def tree_rss_bytes() -> int:
 def container_bytes(names: list[str]) -> int:
     if not names:
         return 0
-    out = subprocess.run([DOCKER, "stats", "--no-stream", "--format", "{{.MemUsage}}", *names], capture_output=True, text=True).stdout
+    out = subprocess.run(
+        [DOCKER, "stats", "--no-stream", "--format", "{{.MemUsage}}", *names],
+        capture_output=True,
+        text=True,
+    ).stdout
     units = {"KiB": 2**10, "MiB": 2**20, "GiB": 2**30, "B": 1}
     total = 0
     for line in out.splitlines():
@@ -49,13 +59,31 @@ def container_bytes(names: list[str]) -> int:
 
 
 mod = importlib.import_module(f"systems.{name}")
-system = mod.open(tempfile.mkdtemp(prefix=f"{name}-", dir=os.environ.get("TMPDIR")), profile)
+system = mod.open(
+    tempfile.mkdtemp(prefix=f"{name}-", dir=os.environ.get("TMPDIR")), profile
+)
 methods = {
-    "describe": lambda: {"system": name, "version": ", ".join(f"{k} {v}" for k, v in mod.VERSION.items()), "profile": profile, "config": mod.CONFIG},
+    "describe": lambda: {
+        "system": name,
+        "version": ", ".join(f"{k} {v}" for k, v in mod.VERSION.items()),
+        "profile": profile,
+        "config": mod.CONFIG,
+    },
     "open": lambda ns: None,
     "ingest": lambda ns, docs: system.ingest(ns, docs),
     # the question's date goes only to an adapter whose search takes as_of (a native date anchor)
-    "search": lambda ns, query, k, opts=None: system.search(ns, query, k, **({"as_of": opts["asOf"]} if opts and opts.get("asOf") and "as_of" in inspect.signature(system.search).parameters else {})),
+    "search": lambda ns, query, k, opts=None: system.search(
+        ns,
+        query,
+        k,
+        **(
+            {"as_of": opts["asOf"]}
+            if opts
+            and opts.get("asOf")
+            and "as_of" in inspect.signature(system.search).parameters
+            else {}
+        ),
+    ),
     "rss": lambda: tree_rss_bytes() + container_bytes(getattr(mod, "CONTAINERS", [])),
     "close": lambda: system.close(),
 }

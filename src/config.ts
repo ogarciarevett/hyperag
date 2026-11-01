@@ -1,7 +1,10 @@
 import { readFileSync } from "node:fs";
 import { Pool } from "pg";
 
-import { createLocalEmbedder, createLocalReranker } from "./adapters/embedders.js";
+import {
+  createLocalEmbedder,
+  createLocalReranker,
+} from "./adapters/embedders.js";
 import { createNeo4jGraph } from "./adapters/neo4j.js";
 import { createPostgresStore } from "./adapters/postgres.js";
 import { Hyperag } from "./core.js";
@@ -16,12 +19,19 @@ import { Hyperag } from "./core.js";
  *   HYPERAG_RERANKER      `local` or `none` (default)
  *   HYPERAG_ADMINS        comma-separated principals that may grant and revoke
  */
-export async function hyperagFromEnv(env = process.env): Promise<{ hyperag: Hyperag; pool: Pool }> {
+export async function hyperagFromEnv(
+  env = process.env,
+): Promise<{ hyperag: Hyperag; pool: Pool }> {
   const url = env.HYPERAG_PG_URL;
   if (!url) throw new Error("HYPERAG_PG_URL is required");
-  const choice = (name: string, allowed: readonly string[], fallback: string) => {
+  const choice = (
+    name: string,
+    allowed: readonly string[],
+    fallback: string,
+  ) => {
     const value = env[name] ?? fallback;
-    if (!allowed.includes(value)) throw new Error(`${name} must be one of ${allowed.join(", ")}`);
+    if (!allowed.includes(value))
+      throw new Error(`${name} must be one of ${allowed.join(", ")}`);
     return value;
   };
   const embedder = choice("HYPERAG_EMBEDDER", ["local", "none"], "local");
@@ -53,7 +63,15 @@ export function authFromEnv(env = process.env) {
   const valid =
     tokens !== null &&
     typeof tokens === "object" &&
-    Object.entries(tokens).every(([hash, who]) => /^[0-9a-f]{64}$/u.test(hash) && typeof who === "string" && who.length > 0);
-  if (!valid) throw new Error("HYPERAG_TOKENS_FILE must map sha256 hex strings to principal names");
+    Object.entries(tokens).every(
+      ([hash, who]) =>
+        /^[0-9a-f]{64}$/u.test(hash) &&
+        typeof who === "string" &&
+        who.length > 0,
+    );
+  if (!valid)
+    throw new Error(
+      "HYPERAG_TOKENS_FILE must map sha256 hex strings to principal names",
+    );
   return { tokens: tokens as Record<string, string> };
 }

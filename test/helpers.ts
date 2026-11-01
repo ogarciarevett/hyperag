@@ -6,7 +6,9 @@ import { createPostgresStore } from "../src/adapters/postgres";
 import { Hyperag, type HyperagConfig } from "../src/core";
 import type { Embedder } from "../src/types";
 
-export const PG_ADMIN_URL = process.env.HYPERAG_PG_URL ?? "postgres://hyperag:fake-test-only@127.0.0.1:55432/hyperag";
+export const PG_ADMIN_URL =
+  process.env.HYPERAG_PG_URL ??
+  "postgres://hyperag:fake-test-only@127.0.0.1:55432/hyperag";
 export const NEO4J = {
   baseUrl: process.env.HYPERAG_NEO4J_URL ?? "http://127.0.0.1:57474",
   username: "neo4j",
@@ -18,7 +20,10 @@ let shared: Embedder | undefined;
 export const embedder = () => (shared ??= createLocalEmbedder());
 
 /** A fresh database per test file, so files never see each other's rows. */
-export async function freshDatabase(): Promise<{ url: string; drop(): Promise<void> }> {
+export async function freshDatabase(): Promise<{
+  url: string;
+  drop(): Promise<void>;
+}> {
   const name = `${process.env.HYPERAG_DB_PREFIX ?? ""}t_${Date.now()}_${Math.floor(Math.random() * 1e6)}`;
   const admin = new Pool({ connectionString: PG_ADMIN_URL, max: 1 });
   await admin.query(`create database ${name}`);
@@ -49,4 +54,5 @@ export async function open(url: string, config: Partial<HyperagConfig> = {}) {
 }
 
 /** Graph node ids must not collide across test files sharing one Neo4j. */
-export const uniq = (label: string) => `${label}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
+export const uniq = (label: string) =>
+  `${label}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;

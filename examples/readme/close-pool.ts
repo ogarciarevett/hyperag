@@ -9,7 +9,9 @@ export async function closeFixturePool(pool: {
   let remaining = pool.totalCount;
   let removed = () => {};
   const disconnected = new Promise<void>((resolve) => {
-    removed = () => { if (--remaining === 0) resolve(); };
+    removed = () => {
+      if (--remaining === 0) resolve();
+    };
     if (remaining === 0) resolve();
   });
   pool.on("remove", removed);
