@@ -121,15 +121,13 @@ await s.close();
 const rate = (r: typeof rows) =>
   r.length ? r.filter((x) => x.hit).length / r.length : null;
 const byType = Object.fromEntries(
-  [...new Set(rows.map((r) => r.type))]
-    .sort()
-    .map((t) => [
-      t,
-      {
-        n: rows.filter((r) => r.type === t).length,
-        recall: rate(rows.filter((r) => r.type === t)),
-      },
-    ]),
+  [...new Set(rows.map((r) => r.type))].sort().map((t) => [
+    t,
+    {
+      n: rows.filter((r) => r.type === t).length,
+      recall: rate(rows.filter((r) => r.type === t)),
+    },
+  ]),
 );
 const report = {
   split: a.split,
