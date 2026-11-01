@@ -696,13 +696,16 @@ module._write=write
 raise SystemExit(module.main())
 """
         )
-        command = lambda *args: [
-            sys.executable,
-            str(driver),
-            "--config",
-            str(self.config),
-            *args,
-        ]
+
+        def command(*args):
+            return [
+                sys.executable,
+                str(driver),
+                "--config",
+                str(self.config),
+                *args,
+            ]
+
         latencies = []
         with patch.object(self, "command", side_effect=command):
             watchdog = self.arm()
@@ -845,13 +848,16 @@ subprocess.Popen=spawn
 raise SystemExit(module.main())
 """
         )
-        command = lambda *args: [
-            sys.executable,
-            str(driver),
-            "--config",
-            str(self.config),
-            *args,
-        ]
+
+        def command(*args):
+            return [
+                sys.executable,
+                str(driver),
+                "--config",
+                str(self.config),
+                *args,
+            ]
+
         with patch.object(self, "command", side_effect=command):
             self.arm()
             fault.touch()
@@ -1210,11 +1216,14 @@ raise SystemExit(result)
             * 10
         )
         self.assertEqual(module.TAIL_MARGIN_MS, selected)
-        row = lambda latency, warmup=False, error=None: {
-            "latency_ms": latency,
-            "warmup": warmup,
-            "error": error,
-        }
+
+        def row(latency, warmup=False, error=None):
+            return {
+                "latency_ms": latency,
+                "warmup": warmup,
+                "error": error,
+            }
+
         self.assertIsNone(module.evaluate([row(999, True)])["reason"])
         self.assertTrue(module.evaluate([row(1000.001, True)])["reason"])
         self.assertTrue(module.evaluate([row(1, True, "cancelled")])["reason"])

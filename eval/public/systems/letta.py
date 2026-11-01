@@ -105,9 +105,12 @@ class Letta:
         q = urllib.parse.urlencode({"query": query, "top_k": k})
         res = call("GET", f"/v1/agents/{self.agent(ns)}/archival-memory/search?{q}")
         res = res.get("results", res) if isinstance(res, dict) else res
-        doc = lambda r: next(
-            (t[4:] for t in r.get("tags") or [] if t.startswith("doc:")), None
-        )
+
+        def doc(r):
+            return next(
+                (t[4:] for t in r.get("tags") or [] if t.startswith("doc:")), None
+            )
+
         # a long turn can be several passages: each is a memory on a conversation, one doc on BEIR
         return rank(
             [

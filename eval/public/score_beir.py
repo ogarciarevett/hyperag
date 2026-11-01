@@ -5,7 +5,10 @@ the query id (BEIR's default ignore_identical_ids, which matters on ArguAna and 
 .venv-bench/bin/python -I eval/public/score_beir.py --data <BEIR dir> eval/public/results/*.run
 """
 
-import argparse, csv, json, os, sys
+import argparse
+import csv
+import json
+import os
 import pytrec_eval
 
 p = argparse.ArgumentParser()
@@ -46,7 +49,10 @@ for path in a.runs:
         if q in asked
     }
     per = ev.evaluate(ranked)
-    mean = lambda m: sum(v[m] for v in per.values()) / len(per)
+
+    def mean(m):
+        return sum(v[m] for v in per.values()) / len(per)
+
     rows.append(
         {
             "dataset": meta["dataset"],
