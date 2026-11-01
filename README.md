@@ -121,9 +121,14 @@ import assert from "node:assert/strict";
 import { demo } from "./demo";
 
 await demo(async ({ call, scope }) => {
-  const saved = await call<{ id: string; version: number; created: boolean }>("/v1/memories", {
-    scope, source: "retry-policy.md", text: "Failed jobs retry three times with exponential backoff.",
-  });
+  const saved = await call<{ id: string; version: number; created: boolean }>(
+    "/v1/memories",
+    {
+      scope,
+      source: "retry-policy.md",
+      text: "Failed jobs retry three times with exponential backoff.",
+    },
+  );
   assert.equal(saved.version, 1);
   assert.equal(saved.created, true);
 });
@@ -142,11 +147,17 @@ import { demo } from "./demo";
 
 await demo(async ({ call, scope }) => {
   const saved = await call<WriteResult>("/v1/memories", {
-    scope, source: "retry-policy.md", text: "Failed jobs retry three times with exponential backoff.",
+    scope,
+    source: "retry-policy.md",
+    text: "Failed jobs retry three times with exponential backoff.",
   });
-  const context = await call<Context & { retrieval: Retrieval }>("/v1/context", {
-    query: "Failed jobs retry", maxTokens: 400,
-  });
+  const context = await call<Context & { retrieval: Retrieval }>(
+    "/v1/context",
+    {
+      query: "Failed jobs retry",
+      maxTokens: 400,
+    },
+  );
   assert.equal(context.retrieval.insufficientEvidence, false);
   assert.equal(context.citations[0]?.memoryId, saved.id);
   console.log(context.text);
@@ -165,12 +176,25 @@ import type { Relation, WriteResult } from "../../src/index";
 import { demo } from "./demo";
 
 await demo(async ({ call, scope }) => {
-  const save = (text: string) => call<WriteResult>("/v1/memories", { scope, source: "operations.md", text });
+  const save = (text: string) =>
+    call<WriteResult>("/v1/memories", { scope, source: "operations.md", text });
   const evidence = await save("The migration lock timed out after 30 seconds.");
-  const finding = await save("Raise the migration lock timeout to 120 seconds.");
-  await call("/v1/relations", { from: finding.id, to: evidence.id, type: "SUPPORTED_BY" });
-  const edges = await call<Relation[]>(`/v1/memories/${encodeURIComponent(finding.id)}/relations`);
-  assert(edges.some((edge) => edge.to === evidence.id && edge.type === "SUPPORTED_BY"));
+  const finding = await save(
+    "Raise the migration lock timeout to 120 seconds.",
+  );
+  await call("/v1/relations", {
+    from: finding.id,
+    to: evidence.id,
+    type: "SUPPORTED_BY",
+  });
+  const edges = await call<Relation[]>(
+    `/v1/memories/${encodeURIComponent(finding.id)}/relations`,
+  );
+  assert(
+    edges.some(
+      (edge) => edge.to === evidence.id && edge.type === "SUPPORTED_BY",
+    ),
+  );
 });
 ```
 
@@ -185,14 +209,22 @@ import assert from "node:assert/strict";
 import { createLocalReranker, type Retrieval } from "../../src/index";
 import { demo } from "./demo";
 
-await demo(async ({ call, scope }) => {
-  for (const text of ["Failed jobs retry three times.", "Failed jobs appear in the monitoring dashboard."])
-    await call("/v1/memories", { scope, source: "operations.md", text });
-  const ranked = await call<Retrieval>("/v1/retrieve", { query: "How many times do failed jobs retry?" });
-  assert.equal(ranked.items.length, 2);
-  assert(ranked.pathsUsed.some((path) => path.startsWith("rerank:")));
-  assert(ranked.items.every((item) => Number.isFinite(item.rerankScore)));
-}, { reranker: createLocalReranker({ threads: 1 }) });
+await demo(
+  async ({ call, scope }) => {
+    for (const text of [
+      "Failed jobs retry three times.",
+      "Failed jobs appear in the monitoring dashboard.",
+    ])
+      await call("/v1/memories", { scope, source: "operations.md", text });
+    const ranked = await call<Retrieval>("/v1/retrieve", {
+      query: "How many times do failed jobs retry?",
+    });
+    assert.equal(ranked.items.length, 2);
+    assert(ranked.pathsUsed.some((path) => path.startsWith("rerank:")));
+    assert(ranked.items.every((item) => Number.isFinite(item.rerankScore)));
+  },
+  { reranker: createLocalReranker({ threads: 1 }) },
+);
 ```
 
 ### Import the plugin in another app
@@ -217,7 +249,11 @@ import { demo } from "./demo";
 await demo(async ({ url, tokenFile, scope }) => {
   const memory = await loadPlugin({ url, tokenFile });
   await memory.health();
-  const saved = await memory.save({ scope, source: "host-app", text: "Failed jobs retry three times." });
+  const saved = await memory.save({
+    scope,
+    source: "host-app",
+    text: "Failed jobs retry three times.",
+  });
   const context = await memory.search("Failed jobs retry", { maxTokens: 400 });
   assert.equal(context.citations[0]?.memoryId, saved.id);
 });
@@ -231,21 +267,36 @@ Reindex into an OpenAI-compatible embedding space, then construct and serve an i
 
 ```ts
 import assert from "node:assert/strict";
-import { Hyperag, createOpenAICompatibleEmbedder, type Retrieval, type WriteResult } from "../../src/index";
+import {
+  Hyperag,
+  createOpenAICompatibleEmbedder,
+  type Retrieval,
+  type WriteResult,
+} from "../../src/index";
 import { demo } from "./demo";
 
 await demo(async ({ hyperag, store, serve, call, scope }) => {
-  const saved = await call<WriteResult>("/v1/memories", { scope, source: "policy.md", text: "Failed jobs retry three times." });
+  const saved = await call<WriteResult>("/v1/memories", {
+    scope,
+    source: "policy.md",
+    text: "Failed jobs retry three times.",
+  });
   const embedder = createOpenAICompatibleEmbedder({
-    baseUrl: process.env.README_EMBEDDING_URL!, model: "example-embedding", revision: "v1",
-    dimensions: 3, normalized: true,
+    baseUrl: process.env.README_EMBEDDING_URL!,
+    model: "example-embedding",
+    revision: "v1",
+    dimensions: 3,
+    normalized: true,
   });
   const indexed = await hyperag.reindex(embedder);
   assert.equal(indexed.embedded, 1);
   const next = new Hyperag({ store, embedder, graph: null });
   await next.init(); // reindex alone does not switch the running instance.
   serve(next);
-  const result = await call<Retrieval>("/v1/retrieve", { query: "retry", channels: { bm25: false, graph: false } });
+  const result = await call<Retrieval>("/v1/retrieve", {
+    query: "retry",
+    channels: { bm25: false, graph: false },
+  });
   assert(result.pathsUsed.includes("vector"));
   assert.equal(result.items[0]?.memory.id, saved.id);
 });
@@ -263,13 +314,22 @@ import type { Retrieval } from "../../src/index";
 import { demo } from "./demo";
 
 // Neo4j is the built-in backend (used by relate.ts); null disables the graph slot.
-await demo(async ({ call, scope }) => {
-  await call("/v1/memories", { scope, source: "policy.md", text: "Failed jobs retry three times." });
-  const result = await call<Retrieval>("/v1/retrieve", { query: "retry" });
-  assert.equal(result.items.length, 1);
-  assert(!result.pathsUsed.includes("graph"));
-  assert(result.limitations.some((limit) => limit.includes("no graph configured")));
-}, { graph: null });
+await demo(
+  async ({ call, scope }) => {
+    await call("/v1/memories", {
+      scope,
+      source: "policy.md",
+      text: "Failed jobs retry three times.",
+    });
+    const result = await call<Retrieval>("/v1/retrieve", { query: "retry" });
+    assert.equal(result.items.length, 1);
+    assert(!result.pathsUsed.includes("graph"));
+    assert(
+      result.limitations.some((limit) => limit.includes("no graph configured")),
+    );
+  },
+  { graph: null },
+);
 ```
 
 ## Benchmarks
