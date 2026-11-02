@@ -54,7 +54,10 @@ The read-only command checks Black 26.10.1, Ruff 0.14.3, Biome 2.6.4,
 strict TypeScript types, and the existing Rust fmt/clippy gates. The first
 failure stops delivery; it never formats files or downloads models. CI and
 release builds depend on the same command. The `python`, `typescript`, and
-`rust` arguments select an individual language for diagnosis.
+`rust` arguments select an individual language for diagnosis. The `all` and
+`typescript` selections first require `package.json` `engines.node` to stay
+`^24.22.1`, a stable Node `>=24.22.1 <25`, and exactly Bun 1.4.3; the Python and
+Rust selections do not inspect those runtimes.
 
 Install `.githooks/pre-push` only after inspecting existing local hooks. For an
 isolated worktree, enable Git's `extensions.worktreeConfig` in repository-local
