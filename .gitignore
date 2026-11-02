@@ -14,3 +14,6 @@ eval/public/results/memory/*.pid
 
 dist/
 *.tgz
+
+# Contributor-only pinned quality tools.
+.quality-venv/
