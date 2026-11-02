@@ -1,0 +1,9 @@
+#!/bin/sh
+set -eu
+root="$(git rev-parse --show-toplevel)"
+python="$root/.quality-venv/bin/python"
+if [ ! -x "$python" ]; then
+  echo 'Missing quality venv; follow CONTRIBUTING.md local quality setup.' >&2
+  exit 1
+fi
+exec "$python" "$root/scripts/quality-gate.py"

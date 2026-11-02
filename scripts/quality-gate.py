@@ -2,6 +2,7 @@
 """Read-only language gates; the first failure stops the caller."""
 
 import argparse
+import json
 from importlib.metadata import version
 from pathlib import Path
 import subprocess
@@ -20,7 +21,7 @@ def main():
     parser.add_argument(
         "language",
         nargs="?",
-        choices=["all", "python"],
+        choices=["all", "python", "typescript", "rust"],
         default="all",
     )
     language = parser.parse_args().language
@@ -32,6 +33,31 @@ def main():
                 )
         run(sys.executable, "-m", "black", "--check", "--workers", "1", ".")
         run(sys.executable, "-m", "ruff", "check", ".")
+    if language in ("all", "typescript"):
+        pin = json.loads((ROOT / "package.json").read_text())["devDependencies"][
+            "@biomejs/biome"
+        ]
+        biome = str(ROOT / "node_modules/.bin/biome")
+        actual = subprocess.check_output(
+            [biome, "--version"], cwd=ROOT, text=True
+        ).strip()
+        if pin != "2.6.4" or actual != "Version: 2.6.4":
+            raise RuntimeError("Biome must be 2.6.4; run bun install --frozen-lockfile")
+        run(biome, "check", ".")
+        run("bun", "run", "typecheck")
+    if language in ("all", "rust"):
+        run("cargo", "+1.99.0", "fmt", "--all", "--", "--check")
+        run(
+            "cargo",
+            "+1.99.0",
+            "clippy",
+            "--release",
+            "--locked",
+            "-p",
+            "hyperag",
+            "--lib",
+            "--no-deps",
+        )
 
 
 if __name__ == "__main__":
