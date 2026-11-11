@@ -201,7 +201,7 @@ class LiveHooks(unittest.TestCase):
         tails, all_samples, all_adjusted = [], [], []
         for event in ('session-start', 'prompt'):
             samples, adjusted, event_tails = [], [], []
-            for _ in range(300):
+            for index in range(300):
                 result, elapsed = self.call(event)
                 diagnostic = json.dumps(self.call_diagnostics()) if result.returncode or result.stderr else ''
                 self.assertEqual((result.returncode, bool(result.stderr)), (0, False), diagnostic)
@@ -211,6 +211,8 @@ class LiveHooks(unittest.TestCase):
                 tail = elapsed * 1000 - (row['latency_ms'] - margin)
                 tails.append(tail);event_tails.append(tail)
                 adjusted.append(row['latency_ms'])
+                if event == 'prompt':
+                    self.wait(lambda: self.fixture.status().get('stored') == index + 2)
             p95 = sorted(samples)[math.ceil(.95 * len(samples)) - 1]
             print(json.dumps({'fixture': 'full_native_guard_wall', 'event': event, 'calls': len(samples),
                               'p50_ms': round(statistics.median(samples), 3), 'p95_ms': round(p95, 3), 'errors': 0}), flush=True)

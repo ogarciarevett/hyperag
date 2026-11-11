@@ -33,7 +33,10 @@ impl Worker {
         let (finished, done) = oneshot::channel();
         let connect = (*pool.connect_options()).clone();
         std::thread::spawn(move || {
-            let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build().expect("lexical writer runtime");
+            let runtime = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .expect("lexical writer runtime");
             runtime.block_on(async move {
                 let writer_pool = PgPoolOptions::new().max_connections(1).acquire_timeout(Duration::from_secs(3)).connect_lazy_with(connect);
                 while !flag.load(Ordering::Acquire) {
@@ -51,13 +54,21 @@ impl Worker {
                 let _ = finished.send(());
             });
         });
-        Self { cancelled, stop, done, deadline }
+        Self {
+            cancelled,
+            stop,
+            done,
+            deadline,
+        }
     }
 
     pub async fn close(self) -> anyhow::Result<()> {
         self.cancelled.store(true, Ordering::Release);
         let _ = self.stop.send(());
-        if tokio::time::timeout(self.deadline, self.done).await.is_err() {
+        if tokio::time::timeout(self.deadline, self.done)
+            .await
+            .is_err()
+        {
             tracing::warn!("lexical writer shutdown exceeded deadline; proceeding with pool close");
         }
         Ok(())

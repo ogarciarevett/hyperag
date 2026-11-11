@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Pool } from "pg";
 
+import { closeFixturePool } from "../examples/readme/close-pool";
 import { createPostgresStore } from "../src/adapters/postgres";
 import { Hyperag } from "../src/core";
 import { createHandler, tokenHash } from "../src/server";
@@ -36,7 +37,7 @@ beforeAll(async () => {
 });
 afterAll(async () => {
   server?.stop(true);
-  await pool?.end();
+  if (pool) await closeFixturePool(pool);
   await db?.drop();
   await rm(dir, { recursive: true, force: true });
 });

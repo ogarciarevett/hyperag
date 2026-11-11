@@ -188,7 +188,8 @@ impl Consumer {
             .parent()
             .filter(|path| !path.as_os_str().is_empty())
             .unwrap_or(Path::new("."));
-        let parent = parent.canonicalize()
+        let parent = parent
+            .canonicalize()
             .with_context(|| format!("cannot resolve consumer ancestor: {}", parent.display()))?;
         check_ancestors(&parent, uid)?;
         // Retain the resolved path: later operations must not follow a retargeted alias.

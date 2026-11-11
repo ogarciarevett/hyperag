@@ -101,3 +101,21 @@ test("a stale update is 409 with the current version", async () => {
   expect(stale.status).toBe(409);
   expect(await stale.json()).toMatchObject({ error: { code: "version_conflict", currentVersion: 2 } });
 });
+
+test("search filters intersect read grants and empty filters preserve results", async () => {
+  const a = uniq("filter_a"), b = uniq("filter_b"), privateScope = uniq("filter_private");
+  for (const s of [a, b, privateScope]) {
+    await call("root-token", "POST", "/v1/grants", { principal: "ann", scope: s, permission: "write" });
+    await call("ann-token", "POST", "/v1/memories", { scope: s, source: "fixture", text: "quartz scope filter fixture" });
+  }
+  for (const s of [a, b]) await call("root-token", "POST", "/v1/grants", { principal: "ben", scope: s, permission: "read" });
+  const search = async (options: object) => (await (await call("ben-token", "POST", "/v1/retrieve", { query: "quartz scope filter fixture", ...options })).json()) as { items: Array<{ memory: { scope: string } }>; scopeFilterApplied?: boolean };
+  const baseline = await search({});
+  expect((await search({ scopes: [], excludeScopes: [] })).items).toEqual(baseline.items);
+  expect(baseline.items.map((i) => i.memory.scope).sort()).toEqual([a, b].sort());
+  const filtered = await search({ scopes: [a, b, privateScope], excludeScopes: [b] });
+  expect(filtered.scopeFilterApplied).toBe(true);
+  expect(filtered.items.map((i) => i.memory.scope)).toEqual([a]);
+  expect((await search({ scopes: [privateScope] })).items).toEqual([]);
+  expect((await call("ben-token", "POST", "/v1/retrieve", { query: "quartz", scopes: "invalid" })).status).toBe(400);
+});

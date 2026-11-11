@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { Pool } from "pg";
 import { Hyperag, createHandler, createNeo4jGraph, createPostgresStore, tokenHash, type HyperagConfig } from "../../src/index";
 import { freshDatabase, NEO4J, uniq } from "../../test/helpers";
+import { closeFixturePool } from "./close-pool";
 
 export async function demo(run: (env: {
   hyperag: Hyperag; store: HyperagConfig["store"]; scope: string;
@@ -50,7 +51,7 @@ export async function demo(run: (env: {
       const rows = await pool.query<{ id: string }>("select distinct id from memories where scope = $1", [scope]);
       for (const { id } of rows.rows) await graph.deleteMemory(id);
     } finally {
-      await pool.end();
+      await closeFixturePool(pool);
       await db.drop();
       await rm(dir, { recursive: true, force: true });
     }

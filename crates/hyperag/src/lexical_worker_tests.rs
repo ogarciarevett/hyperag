@@ -18,8 +18,17 @@ async fn seed_two_pages(store: &crate::store::Store) -> anyhow::Result<()> {
 
 fn pause_first_step() -> (Arc<Barrier>, Arc<Barrier>, Arc<dyn Fn() + Send + Sync>) {
     let (entered, release) = (Arc::new(Barrier::new(2)), Arc::new(Barrier::new(2)));
-    let (hook_entered, hook_release, hooked) = (entered.clone(), release.clone(), Arc::new(AtomicBool::new(false)));
-    let hook = Arc::new(move || if !hooked.swap(true, Ordering::AcqRel) { hook_entered.wait(); hook_release.wait(); });
+    let (hook_entered, hook_release, hooked) = (
+        entered.clone(),
+        release.clone(),
+        Arc::new(AtomicBool::new(false)),
+    );
+    let hook = Arc::new(move || {
+        if !hooked.swap(true, Ordering::AcqRel) {
+            hook_entered.wait();
+            hook_release.wait();
+        }
+    });
     (entered, release, hook)
 }
 
@@ -33,13 +42,21 @@ async fn stopping_pending_work_releases_snapshot_and_root() -> anyhow::Result<()
             let root = scratch.path().join("index");
             let consumer = Consumer::open(&root)?;
             let (entered, release, hook) = pause_first_step();
-            let writer = Worker::start_with(consumer, store.pool.clone(), Duration::from_secs(5), Some(hook));
+            let writer = Worker::start_with(
+                consumer,
+                store.pool.clone(),
+                Duration::from_secs(5),
+                Some(hook),
+            );
             tokio::task::spawn_blocking(move || entered.wait()).await?;
             assert!(!root.join("CURRENT").exists());
             let releasing = tokio::task::spawn_blocking(move || release.wait());
             writer.close().await?;
             releasing.await?;
-            assert!(!root.join("CURRENT").exists(), "interrupted work was published");
+            assert!(
+                !root.join("CURRENT").exists(),
+                "interrupted work was published"
+            );
             let mut next = Consumer::open(&root)?;
             next.update(&store.pool).await?;
             assert!(root.join("CURRENT").exists());
@@ -47,11 +64,13 @@ async fn stopping_pending_work_releases_snapshot_and_root() -> anyhow::Result<()
             tokio::time::timeout(Duration::from_secs(5), store.pool.close()).await?;
             Ok(())
         },
-    ).await
+    )
+    .await
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-async fn one_worker_runtime_answers_requests_and_bounds_shutdown_during_slow_commit() -> anyhow::Result<()> {
+async fn one_worker_runtime_answers_requests_and_bounds_shutdown_during_slow_commit()
+-> anyhow::Result<()> {
     crate::lexical_read::tests::isolated(
         "lexical_worker::tests::one_worker_runtime_answers_requests_and_bounds_shutdown_during_slow_commit",
         |mut store: crate::store::Store| async move {

@@ -25,14 +25,94 @@ pub struct Candidate {
 /// EmbeddingGemma 2's estimate counts the text graph that is loaded (314 MB at q8), not the
 /// multimodal total.
 pub const CATALOG: &[Candidate] = &[
-    Candidate { slot: "embedder", spec: "http:<vLLM URL>?model=nvidia/Nemotron-3.5-Embed-8B-BF16&dims=1024&truncate=true&normalized=true", name: "Nemotron 3.5 Embed 8B (BF16, first 1024 dims)", params_millions: 8381.0, bytes_per_param: 2.0, batch_mb: 2048.0, runs_on: "gpu", licence: "OpenMDW-1.1", runnable: true },
-    Candidate { slot: "embedder", spec: crate::cli::DEFAULT_EMBEDDING, name: "EmbeddingGemma 2 (q8, 768 dims)", params_millions: 314.0, bytes_per_param: 1.0, batch_mb: 512.0, runs_on: "cpu", licence: "Apache-2.0", runnable: true },
-    Candidate { slot: "embedder", spec: "hf:Xenova/multilingual-e5-small?revision=761b726dd34fb83930e26aab4e9ac3899aa1fa78&dtype=q8&pooling=mean", name: "multilingual e5 small (q8, 384 dims)", params_millions: 118.0, bytes_per_param: 1.0, batch_mb: 256.0, runs_on: "cpu", licence: "MIT", runnable: true },
-    Candidate { slot: "embedder", spec: "none", name: "none (BM25 only)", params_millions: 0.0, bytes_per_param: 0.0, batch_mb: 0.0, runs_on: "cpu", licence: "-", runnable: true },
-    Candidate { slot: "reranker", spec: "-", name: "Nemotron 3.5 Rerank 8B (BF16; the Rust build has no HTTP re-ranker yet)", params_millions: 8381.0, bytes_per_param: 2.0, batch_mb: 2048.0, runs_on: "gpu", licence: "OpenMDW-1.1", runnable: false },
-    Candidate { slot: "reranker", spec: crate::cli::DEFAULT_RERANKER, name: "bge-reranker-v2-m3 (q8)", params_millions: 568.0, bytes_per_param: 1.0, batch_mb: 512.0, runs_on: "cpu", licence: "Apache-2.0", runnable: true },
-    Candidate { slot: "reranker", spec: "hf:Xenova/bge-reranker-base?revision=280bcc27a84e0b898c251e06fddb25171bd9b101&dtype=q8", name: "bge-reranker-base (q8)", params_millions: 278.0, bytes_per_param: 1.0, batch_mb: 256.0, runs_on: "cpu", licence: "MIT", runnable: true },
-    Candidate { slot: "reranker", spec: "none", name: "none (fused order)", params_millions: 0.0, bytes_per_param: 0.0, batch_mb: 0.0, runs_on: "cpu", licence: "-", runnable: true },
+    Candidate {
+        slot: "embedder",
+        spec: "http:<vLLM URL>?model=nvidia/Nemotron-3.5-Embed-8B-BF16&dims=1024&truncate=true&normalized=true",
+        name: "Nemotron 3.5 Embed 8B (BF16, first 1024 dims)",
+        params_millions: 8381.0,
+        bytes_per_param: 2.0,
+        batch_mb: 2048.0,
+        runs_on: "gpu",
+        licence: "OpenMDW-1.1",
+        runnable: true,
+    },
+    Candidate {
+        slot: "embedder",
+        spec: crate::cli::DEFAULT_EMBEDDING,
+        name: "EmbeddingGemma 2 (q8, 768 dims)",
+        params_millions: 314.0,
+        bytes_per_param: 1.0,
+        batch_mb: 512.0,
+        runs_on: "cpu",
+        licence: "Apache-2.0",
+        runnable: true,
+    },
+    Candidate {
+        slot: "embedder",
+        spec: "hf:Xenova/multilingual-e5-small?revision=761b726dd34fb83930e26aab4e9ac3899aa1fa78&dtype=q8&pooling=mean",
+        name: "multilingual e5 small (q8, 384 dims)",
+        params_millions: 118.0,
+        bytes_per_param: 1.0,
+        batch_mb: 256.0,
+        runs_on: "cpu",
+        licence: "MIT",
+        runnable: true,
+    },
+    Candidate {
+        slot: "embedder",
+        spec: "none",
+        name: "none (BM25 only)",
+        params_millions: 0.0,
+        bytes_per_param: 0.0,
+        batch_mb: 0.0,
+        runs_on: "cpu",
+        licence: "-",
+        runnable: true,
+    },
+    Candidate {
+        slot: "reranker",
+        spec: "-",
+        name: "Nemotron 3.5 Rerank 8B (BF16; the Rust build has no HTTP re-ranker yet)",
+        params_millions: 8381.0,
+        bytes_per_param: 2.0,
+        batch_mb: 2048.0,
+        runs_on: "gpu",
+        licence: "OpenMDW-1.1",
+        runnable: false,
+    },
+    Candidate {
+        slot: "reranker",
+        spec: crate::cli::DEFAULT_RERANKER,
+        name: "bge-reranker-v2-m3 (q8)",
+        params_millions: 568.0,
+        bytes_per_param: 1.0,
+        batch_mb: 512.0,
+        runs_on: "cpu",
+        licence: "Apache-2.0",
+        runnable: true,
+    },
+    Candidate {
+        slot: "reranker",
+        spec: "hf:Xenova/bge-reranker-base?revision=280bcc27a84e0b898c251e06fddb25171bd9b101&dtype=q8",
+        name: "bge-reranker-base (q8)",
+        params_millions: 278.0,
+        bytes_per_param: 1.0,
+        batch_mb: 256.0,
+        runs_on: "cpu",
+        licence: "MIT",
+        runnable: true,
+    },
+    Candidate {
+        slot: "reranker",
+        spec: "none",
+        name: "none (fused order)",
+        params_millions: 0.0,
+        bytes_per_param: 0.0,
+        batch_mb: 0.0,
+        runs_on: "cpu",
+        licence: "-",
+        runnable: true,
+    },
 ];
 
 pub fn estimate_mb(c: &Candidate) -> f64 {
@@ -52,36 +132,92 @@ pub struct Resources {
 
 fn run(cmd: &str, args: &[&str]) -> Option<String> {
     let out = std::process::Command::new(cmd).args(args).output().ok()?;
-    out.status.success().then(|| String::from_utf8_lossy(&out.stdout).into_owned())
+    out.status
+        .success()
+        .then(|| String::from_utf8_lossy(&out.stdout).into_owned())
 }
 
 /// What is free now: macOS from `vm_stat` and `sysctl`, Linux from `/proc/meminfo`, GPUs from `nvidia-smi`.
 pub fn detect() -> Resources {
-    let mut r = Resources { cores: std::thread::available_parallelism().map(|n| n.get()).unwrap_or(1), ..Default::default() };
+    let mut r = Resources {
+        cores: std::thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(1),
+        ..Default::default()
+    };
     if let Some(meminfo) = std::fs::read_to_string("/proc/meminfo").ok() {
-        let kb = |key: &str| meminfo.lines().find(|l| l.starts_with(key)).and_then(|l| l.split_whitespace().nth(1)?.parse::<f64>().ok()).unwrap_or(0.0);
+        let kb = |key: &str| {
+            meminfo
+                .lines()
+                .find(|l| l.starts_with(key))
+                .and_then(|l| l.split_whitespace().nth(1)?.parse::<f64>().ok())
+                .unwrap_or(0.0)
+        };
         r.total_mb = kb("MemTotal:") / 1024.0;
         r.free_mb = kb("MemAvailable:") / 1024.0;
         r.swap_used_mb = (kb("SwapTotal:") - kb("SwapFree:")) / 1024.0;
         // Inside a container /proc/meminfo shows the host; the cgroup limit is what this process gets.
-        let cg = |f: &str| std::fs::read_to_string(format!("/sys/fs/cgroup/{f}")).ok().and_then(|v| v.trim().parse::<f64>().ok());
+        let cg = |f: &str| {
+            std::fs::read_to_string(format!("/sys/fs/cgroup/{f}"))
+                .ok()
+                .and_then(|v| v.trim().parse::<f64>().ok())
+        };
         if let (Some(max), Some(used)) = (cg("memory.max"), cg("memory.current")) {
             r.total_mb = r.total_mb.min(max / 1_048_576.0);
             r.free_mb = r.free_mb.min((max - used) / 1_048_576.0);
         }
     } else if let Some(vm) = run("vm_stat", &[]) {
-        let page = vm.split("page size of ").nth(1).and_then(|t| t.split_whitespace().next()?.parse::<f64>().ok()).unwrap_or(16384.0);
-        let pages = |key: &str| vm.lines().find(|l| l.starts_with(key)).and_then(|l| l.rsplit(' ').next()?.trim_end_matches('.').parse::<f64>().ok()).unwrap_or(0.0);
+        let page = vm
+            .split("page size of ")
+            .nth(1)
+            .and_then(|t| t.split_whitespace().next()?.parse::<f64>().ok())
+            .unwrap_or(16384.0);
+        let pages = |key: &str| {
+            vm.lines()
+                .find(|l| l.starts_with(key))
+                .and_then(|l| {
+                    l.rsplit(' ')
+                        .next()?
+                        .trim_end_matches('.')
+                        .parse::<f64>()
+                        .ok()
+                })
+                .unwrap_or(0.0)
+        };
         // Free plus memory the system gives back on demand (inactive, speculative, purgeable).
-        r.free_mb = (pages("Pages free:") + pages("Pages inactive:") + pages("Pages speculative:") + pages("Pages purgeable:")) * page / 1_048_576.0;
-        r.total_mb = run("sysctl", &["-n", "hw.memsize"]).and_then(|s| s.trim().parse::<f64>().ok()).unwrap_or(0.0) / 1_048_576.0;
+        r.free_mb = (pages("Pages free:")
+            + pages("Pages inactive:")
+            + pages("Pages speculative:")
+            + pages("Pages purgeable:"))
+            * page
+            / 1_048_576.0;
+        r.total_mb = run("sysctl", &["-n", "hw.memsize"])
+            .and_then(|s| s.trim().parse::<f64>().ok())
+            .unwrap_or(0.0)
+            / 1_048_576.0;
         r.swap_used_mb = run("sysctl", &["-n", "vm.swapusage"])
-            .and_then(|s| s.split("used = ").nth(1)?.split('M').next()?.trim().parse::<f64>().ok())
+            .and_then(|s| {
+                s.split("used = ")
+                    .nth(1)?
+                    .split('M')
+                    .next()?
+                    .trim()
+                    .parse::<f64>()
+                    .ok()
+            })
             .unwrap_or(0.0);
-        r.apple_silicon = run("sysctl", &["-n", "machdep.cpu.brand_string"]).is_some_and(|s| s.starts_with("Apple"));
+        r.apple_silicon = run("sysctl", &["-n", "machdep.cpu.brand_string"])
+            .is_some_and(|s| s.starts_with("Apple"));
     }
-    r.gpu_free_mb = run("nvidia-smi", &["--query-gpu=memory.free", "--format=csv,noheader,nounits"])
-        .and_then(|s| s.lines().filter_map(|l| l.trim().parse::<f64>().ok()).reduce(f64::max));
+    r.gpu_free_mb = run(
+        "nvidia-smi",
+        &["--query-gpu=memory.free", "--format=csv,noheader,nounits"],
+    )
+    .and_then(|s| {
+        s.lines()
+            .filter_map(|l| l.trim().parse::<f64>().ok())
+            .reduce(f64::max)
+    });
     r
 }
 
@@ -108,7 +244,11 @@ pub fn recommend(r: &Resources) -> Vec<Choice> {
     for slot in ["embedder", "reranker"] {
         for c in CATALOG.iter().filter(|c| c.slot == slot && c.runnable) {
             let need = estimate_mb(c);
-            let (fits, room) = if c.runs_on == "gpu" { (r.gpu_free_mb.is_some() && need <= gpu, gpu) } else { (need <= budget, budget) };
+            let (fits, room) = if c.runs_on == "gpu" {
+                (r.gpu_free_mb.is_some() && need <= gpu, gpu)
+            } else {
+                (need <= budget, budget)
+            };
             if !fits {
                 continue;
             }
@@ -136,9 +276,21 @@ pub fn recommend(r: &Resources) -> Vec<Choice> {
         estimate_mb: 768.0,
         runs_on: "cpu",
         licence: "GPL-3.0 (Neo4j Community)",
-        why: if budget >= 768.0 { "on: links between memories help evidence and handoffs".into() } else { "off: not enough free memory for Neo4j now".into() },
+        why: if budget >= 768.0 {
+            "on: links between memories help evidence and handoffs".into()
+        } else {
+            "off: not enough free memory for Neo4j now".into()
+        },
     });
-    out.push(Choice { slot: "llm", model: "none", spec: "-", estimate_mb: 0.0, runs_on: "-", licence: "-", why: "Hyperag returns context; the agent's own model answers".into() });
+    out.push(Choice {
+        slot: "llm",
+        model: "none",
+        spec: "-",
+        estimate_mb: 0.0,
+        runs_on: "-",
+        licence: "-",
+        why: "Hyperag returns context; the agent's own model answers".into(),
+    });
     out
 }
 
@@ -147,12 +299,22 @@ mod tests {
     use super::*;
 
     fn machine(free_mb: f64, gpu: Option<f64>, swap: f64) -> Resources {
-        Resources { total_mb: 36_864.0, free_mb, swap_used_mb: swap, cores: 12, apple_silicon: gpu.is_none(), gpu_free_mb: gpu }
+        Resources {
+            total_mb: 36_864.0,
+            free_mb,
+            swap_used_mb: swap,
+            cores: 12,
+            apple_silicon: gpu.is_none(),
+            gpu_free_mb: gpu,
+        }
     }
 
     #[test]
     fn formula() {
-        let gemma = CATALOG.iter().find(|c| c.name.starts_with("EmbeddingGemma")).unwrap();
+        let gemma = CATALOG
+            .iter()
+            .find(|c| c.name.starts_with("EmbeddingGemma"))
+            .unwrap();
         assert!((estimate_mb(gemma) - (314.0 * 1.0 * 1.2 + 512.0)).abs() < 1e-9);
     }
 
@@ -163,7 +325,10 @@ mod tests {
         assert_eq!(big[1].model, "bge-reranker-v2-m3 (q8)");
         // The README tier table: these thresholds are what the code does.
         let both = recommend(&machine(4_200.0, None, 0.0));
-        assert_eq!((both[0].model, both[1].model), ("EmbeddingGemma 2 (q8, 768 dims)", "bge-reranker-v2-m3 (q8)"));
+        assert_eq!(
+            (both[0].model, both[1].model),
+            ("EmbeddingGemma 2 (q8, 768 dims)", "bge-reranker-v2-m3 (q8)")
+        );
         let no_rerank = recommend(&machine(3_000.0, None, 0.0));
         assert_eq!(no_rerank[0].model, "EmbeddingGemma 2 (q8, 768 dims)");
         assert!(no_rerank[1].estimate_mb < 1_194.0);
