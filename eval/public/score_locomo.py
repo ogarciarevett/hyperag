@@ -73,7 +73,7 @@ def score(row):
 
 
 for path in sys.argv[1:]:
-    rows = [json.loads(l) for l in open(path) if l.strip()]
+    rows = [json.loads(line) for line in open(path) if line.strip()]
     meta = Path(path.removesuffix(".jsonl") + ".meta.json")
     m = json.loads(meta.read_text()) if meta.exists() else {}
     if m.get("expectedQuestions") is None or len(rows) != m["expectedQuestions"]:

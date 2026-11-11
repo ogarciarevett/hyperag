@@ -1,0 +1,10 @@
+[tool.black]
+required-version = "26.10.1"
+target-version = ["py312"]
+
+[tool.ruff]
+required-version = "0.14.3"
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F"]

@@ -101,7 +101,7 @@ def label(key):
 
 def render(bench, title, metric, percent, keys, values):
     # Zero is visible; absent/partial runs have labels but no bar or invented zero.
-    left, width, top, row, right = 420, 370, 90, 31, 80
+    left, width, top, row = 420, 370, 90, 31
     height = top + row * len(keys) + 75
     esc = html.escape
     out = [
