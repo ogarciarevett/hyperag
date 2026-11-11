@@ -5,6 +5,7 @@ import argparse
 import json
 from importlib.metadata import version
 from pathlib import Path
+import re
 import subprocess
 import sys
 
@@ -14,6 +15,23 @@ ROOT = Path(__file__).resolve().parents[1]
 def run(*command):
     print("+", " ".join(command), flush=True)
     subprocess.run(command, cwd=ROOT, check=True)
+
+
+def check_node(manifest):
+    engine = manifest.get("engines", {}).get("node")
+    if engine != "^24.22.1":
+        raise RuntimeError("package.json engines.node must stay ^24.22.1")
+    actual = subprocess.check_output(["node", "--version"], cwd=ROOT, text=True).strip()
+    # Stable releases only: >=24.22.1 <25, without evaluating any range syntax.
+    release = re.fullmatch(r"v24\.(\d+)\.(\d+)", actual)
+    if not release or tuple(map(int, release.groups())) < (22, 1):
+        raise RuntimeError(f"Node must satisfy {engine}; found {actual}")
+
+
+def check_bun():
+    actual = subprocess.check_output(["bun", "--version"], cwd=ROOT, text=True).strip()
+    if actual != "1.4.3":
+        raise RuntimeError(f"Bun must be 1.4.3; found {actual}")
 
 
 def main():
@@ -34,9 +52,10 @@ def main():
         run(sys.executable, "-m", "black", "--check", "--workers", "1", ".")
         run(sys.executable, "-m", "ruff", "check", ".")
     if language in ("all", "typescript"):
-        pin = json.loads((ROOT / "package.json").read_text())["devDependencies"][
-            "@biomejs/biome"
-        ]
+        manifest = json.loads((ROOT / "package.json").read_text())
+        check_node(manifest)
+        check_bun()
+        pin = manifest["devDependencies"]["@biomejs/biome"]
         biome = str(ROOT / "node_modules/.bin/biome")
         actual = subprocess.check_output(
             [biome, "--version"], cwd=ROOT, text=True
