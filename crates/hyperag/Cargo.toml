@@ -38,7 +38,7 @@ subtle = "=2.6.1"
 tantivy = { version = "=0.26.2", default-features = false, features = ["mmap"] }
 tempfile = "=3.27.0"
 thiserror = "=2.0.21"
-tokio = { version = "=1.53.2", features = ["full"] }
+tokio = { version = "=1.53.3", features = ["full"] }
 toml_edit = { version = "=0.25.17", features = ["serde"] }
 tracing = "=0.1.44"
 tracing-subscriber = { version = "=0.3.23", features = ["env-filter"] }
