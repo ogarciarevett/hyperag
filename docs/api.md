@@ -44,7 +44,7 @@ import { Hyperag, createPostgresStore, createLocalEmbedder, createLocalReranker,
 const h = new Hyperag({
   store: createPostgresStore(new Pool({ connectionString: process.env.HYPERAG_PG_URL })),
   // The TypeScript reference's defaults (the Rust service defaults to EmbeddingGemma 2 and bge-reranker-v2-m3):
-  embedder: createLocalEmbedder({ model: "Xenova/multilingual-e5-small" }),  // CPU, 118M params q8, 384 dims; or null: BM25 only
+  embedder: createLocalEmbedder({ profile: "e5-small" }),  // explicit legacy profile, 384 dims; or null: BM25 only
   reranker: createLocalReranker({ model: "Xenova/bge-reranker-base" }),       // CPU, 278M params q8; or null: fused order
   graph: createNeo4jGraph({ baseUrl, username, password }), // the default template; null turns the graph channel off
   admins: ["root"],                         // who may grant and revoke
