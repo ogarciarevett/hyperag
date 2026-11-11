@@ -1,0 +1,40 @@
+name: quality
+on:
+  workflow_call:
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    env:
+      CARGO_BUILD_JOBS: '1'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.12'
+      - name: Bootstrap patched Python trust tooling
+        run: sh scripts/bootstrap-python-ca.sh python
+      - run: python -m pip install --require-hashes -r requirements-quality.txt
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24.22.1'
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.4.3
+      # prepare builds the package: quality checks must precede that build.
+      - run: bun install --frozen-lockfile --ignore-scripts
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec
+        with:
+          toolchain: '1.99.0'
+          components: rustfmt, clippy
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: |
+            ~/.cargo/registry
+            target
+          key: quality-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+      - name: Shared read-only fail-closed gates
+        run: python scripts/quality-gate.py
+      - name: Real-tool negative controls
+        run: python -I scripts/test_quality_gate.py
