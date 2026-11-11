@@ -42,11 +42,20 @@ export type MemoryUpdate = Readonly<{
   idempotencyKey?: string;
 }>;
 
-export type WriteResult = Readonly<{ id: string; version: number; created: boolean }>;
+export type WriteResult = Readonly<{
+  id: string;
+  version: number;
+  created: boolean;
+}>;
 
 /** What a store returns per channel: ids and versions in that channel's best-first order. */
 /** `at` is the version's recorded time (epoch seconds), used to break ties newest first. */
-export type Hit = Readonly<{ id: string; version: number; score: number; at: number }>;
+export type Hit = Readonly<{
+  id: string;
+  version: number;
+  score: number;
+  at: number;
+}>;
 
 /** Provider-independent embeddings. The space describes everything that makes vectors comparable. */
 export type EmbeddingSpace = Readonly<{

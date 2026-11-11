@@ -15,14 +15,23 @@ for (const mode of ["recover", "reset", "bad-request"] as const) {
         req.socket.destroy();
         return;
       }
-      res.writeHead(mode === "bad-request" ? 400 : 200, { "content-type": "application/json" });
+      res.writeHead(mode === "bad-request" ? 400 : 200, {
+        "content-type": "application/json",
+      });
       res.end(JSON.stringify({ embeddings: [1, 2, 3] }));
     });
-    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    await new Promise<void>((resolve) =>
+      server.listen(0, "127.0.0.1", resolve),
+    );
     const address = server.address();
-    if (!address || typeof address === "string") throw new Error("missing test server address");
+    if (!address || typeof address === "string")
+      throw new Error("missing test server address");
     try {
-      const request = gpuRequest(`http://127.0.0.1:${address.port}`, "/v2/embed", { inputs: ["same input"] });
+      const request = gpuRequest(
+        `http://127.0.0.1:${address.port}`,
+        "/v2/embed",
+        { inputs: ["same input"] },
+      );
       if (mode === "recover") {
         expect(await request).toEqual({ embeddings: [1, 2, 3] });
         expect(calls).toBe(2);

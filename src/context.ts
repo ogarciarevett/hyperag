@@ -32,7 +32,12 @@ export function buildContext(retrieval: Retrieval, maxTokens: number): Context {
   let tokens = 0;
   if (retrieval.insufficientEvidence) {
     const note = "No sufficient evidence was found for this question.";
-    return { text: note, citations, tokens: estimateTokens(note), dropped: retrieval.items.length };
+    return {
+      text: note,
+      citations,
+      tokens: estimateTokens(note),
+      dropped: retrieval.items.length,
+    };
   }
   for (const item of retrieval.items) {
     const n = citations.length + 1;
@@ -42,7 +47,19 @@ export function buildContext(retrieval: Retrieval, maxTokens: number): Context {
     if (tokens + cost > maxTokens) continue;
     parts.push(part);
     tokens += cost;
-    citations.push({ n, memoryId: m.id, version: m.version, source: m.source, author: m.author, scope: m.scope });
+    citations.push({
+      n,
+      memoryId: m.id,
+      version: m.version,
+      source: m.source,
+      author: m.author,
+      scope: m.scope,
+    });
   }
-  return { text: parts.join("\n"), citations, tokens, dropped: retrieval.items.length - citations.length };
+  return {
+    text: parts.join("\n"),
+    citations,
+    tokens,
+    dropped: retrieval.items.length - citations.length,
+  };
 }

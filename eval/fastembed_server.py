@@ -5,6 +5,7 @@ transport; same model, batch size 8, two threads, no cache).
 uv venv --python 3.12 .venv-fastembed && uv pip install fastembed==0.9.0 onnxruntime==1.31.0 numpy==2.5.4
 .venv-fastembed/bin/python eval/fastembed_server.py --cache <dir> --port 58321
 """
+
 import argparse
 import json
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -29,8 +30,13 @@ class Handler(BaseHTTPRequestHandler):
         inputs = body["input"] if isinstance(body["input"], list) else [body["input"]]
         with LOCK:
             vectors = [v.tolist() for v in MODEL.embed(inputs, batch_size=8)]
-        raw = json.dumps({"object": "list", "model": "BAAI/bge-small-en-v1.5",
-                          "data": [{"index": i, "embedding": v} for i, v in enumerate(vectors)]}).encode()
+        raw = json.dumps(
+            {
+                "object": "list",
+                "model": "BAAI/bge-small-en-v1.5",
+                "data": [{"index": i, "embedding": v} for i, v in enumerate(vectors)],
+            }
+        ).encode()
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(raw)))

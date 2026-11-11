@@ -1,22 +1,50 @@
-import { afterAll,beforeAll,expect,test } from "bun:test";
+import { afterAll, beforeAll, expect, test } from "bun:test";
 import { existsSync, readFileSync } from "node:fs";
 import { Pool } from "pg";
 import { freshDatabase } from "./helpers";
 import { extractRankable } from "./rust-sql";
 
-const code=readFileSync(new URL("../crates/hyperag/src/store.rs",import.meta.url),"utf8");
+const code = readFileSync(
+  new URL("../crates/hyperag/src/store.rs", import.meta.url),
+  "utf8",
+);
 const rankable = extractRankable(code);
-const expand=(s:string)=>s.replaceAll("{RANKABLE}",rankable).replaceAll("{BM25_K1}","1.2").replaceAll("{BM25_B}","0.75");
-const legacy=expand(code.match(/fn bm25_sql\(\) -> String \{\s*format!\(\s*"([\s\S]*?)"\s*\)/)![1]!);
-const template=code.match(/const INDEXED_BM25_SQL: &str = r#"([\s\S]*?)"#;/)?.[1];
+const expand = (s: string) =>
+  s
+    .replaceAll("{RANKABLE}", rankable)
+    .replaceAll("{BM25_K1}", "1.2")
+    .replaceAll("{BM25_B}", "0.75");
+const legacy = expand(
+  code.match(
+    /fn bm25_sql\(\) -> String \{\s*format!\(\s*"([\s\S]*?)"\s*\)/,
+  )![1]!,
+);
+const template = code.match(
+  /const INDEXED_BM25_SQL: &str = r#"([\s\S]*?)"#;/,
+)?.[1];
 // Missing implementation uses unchanged legacy SQL to establish the index-use RED.
-const indexed=template ? expand(template.replace("{legacy}",legacy)) : legacy;
-const db=await freshDatabase();const pool=new Pool({connectionString:db.url,max:1});let closing=false;
-pool.on("error",(e:Error&{code?:string})=>{if(!(closing&&e.code==="57P01"))throw e;});
-beforeAll(async()=>{
- for(const name of ["0001_init.sql","0002_settings.sql","0003_memory_text_limit.sql"])
-  await pool.query(readFileSync(new URL(`../crates/hyperag/migrations/${name}`,import.meta.url),"utf8"));
- await pool.query(`insert into memories(id,scope,kind,created_by,current_version)
+const indexed = template
+  ? expand(template.replace("{legacy}", legacy))
+  : legacy;
+const db = await freshDatabase();
+const pool = new Pool({ connectionString: db.url, max: 1 });
+let closing = false;
+pool.on("error", (e: Error & { code?: string }) => {
+  if (!(closing && e.code === "57P01")) throw e;
+});
+beforeAll(async () => {
+  for (const name of [
+    "0001_init.sql",
+    "0002_settings.sql",
+    "0003_memory_text_limit.sql",
+  ])
+    await pool.query(
+      readFileSync(
+        new URL(`../crates/hyperag/migrations/${name}`, import.meta.url),
+        "utf8",
+      ),
+    );
+  await pool.query(`insert into memories(id,scope,kind,created_by,current_version)
    select 'background-'||n,'allowed','fact','fixture',1 from generate_series(1,3000)n;
   insert into memory_versions(memory_id,version,text,source,author,content_hash)
    select id,1,'ordinary background documents','fixture','fixture',id from memories;
@@ -34,97 +62,278 @@ beforeAll(async()=>{
   insert into memory_versions(memory_id,version,text,source,author,content_hash)values('stale',1,repeat('quartz ',100),'fixture','fixture','old');
   update memory_versions set valid_from='2030-01-01',valid_to='2040-01-01' where memory_id='future';
   analyze memories; analyze memory_versions`);
- await pool.query(readFileSync(new URL("../crates/hyperag/migrations/0004_lexical_cache.sql",import.meta.url),"utf8"));
- // Upgrade a populated legacy cache, not just an empty database.
- for(let i=0;i<100;i++){if(Number((await pool.query("select lexical_cache_backfill(256)n")).rows[0].n)===0)break;}
- const migration=new URL("../crates/hyperag/migrations/0005_lexical_postings.sql",import.meta.url);
- if(existsSync(migration))await pool.query(readFileSync(migration,"utf8"));
- // The shipped Rust query requires the same lexeme-first index as Store::migrate.
- await pool.query(readFileSync(new URL("../crates/hyperag/migrations/0007_lexical_term_stats_lexeme_index.sql",import.meta.url),"utf8"));
-},60000);
-afterAll(async()=>{closing=true;await pool.end();await db.drop();});
-const compare=async(scopes:string[],at:string|null,q:string)=>{
- const params=[scopes,at,q,24];
- const actual=(await pool.query(indexed,params)).rows,expected=(await pool.query(legacy,params)).rows;
- expect(actual).toEqual(expected);
- return actual;
+  await pool.query(
+    readFileSync(
+      new URL(
+        "../crates/hyperag/migrations/0004_lexical_cache.sql",
+        import.meta.url,
+      ),
+      "utf8",
+    ),
+  );
+  // Upgrade a populated legacy cache, not just an empty database.
+  for (let i = 0; i < 100; i++) {
+    if (
+      Number(
+        (await pool.query("select lexical_cache_backfill(256)n")).rows[0].n,
+      ) === 0
+    )
+      break;
+  }
+  const migration = new URL(
+    "../crates/hyperag/migrations/0005_lexical_postings.sql",
+    import.meta.url,
+  );
+  if (existsSync(migration)) await pool.query(readFileSync(migration, "utf8"));
+  // The shipped Rust query requires the same lexeme-first index as Store::migrate.
+  await pool.query(
+    readFileSync(
+      new URL(
+        "../crates/hyperag/migrations/0007_lexical_term_stats_lexeme_index.sql",
+        import.meta.url,
+      ),
+      "utf8",
+    ),
+  );
+}, 60000);
+afterAll(async () => {
+  closing = true;
+  await pool.end();
+  await db.drop();
+});
+const compare = async (scopes: string[], at: string | null, q: string) => {
+  const params = [scopes, at, q, 24];
+  const actual = (await pool.query(indexed, params)).rows,
+    expected = (await pool.query(legacy, params)).rows;
+  expect(actual).toEqual(expected);
+  return actual;
 };
-test("the fixture installs the runtime lexeme-first index before indexed queries",async()=>{
- const row=(await pool.query("select indexdef from pg_indexes where indexname='lexical_term_stats_lexeme'")).rows[0];
- expect(row?.indexdef).toContain("(lexeme, scope)");
- expect(row?.indexdef).toContain("INCLUDE (df, valid_from, valid_to)");
+test("the fixture installs the runtime lexeme-first index before indexed queries", async () => {
+  const row = (
+    await pool.query(
+      "select indexdef from pg_indexes where indexname='lexical_term_stats_lexeme'",
+    )
+  ).rows[0];
+  expect(row?.indexdef).toContain("(lexeme, scope)");
+  expect(row?.indexdef).toContain("INCLUDE (df, valid_from, valid_to)");
 });
-test("unready falls back, then exact legacy scores/order across scopes, dates and rare/common terms",async()=>{
- await compare(["allowed"],null,"ordinary quartz");
- for(let i=0;i<100;i++){if(Number((await pool.query("select lexical_cache_backfill(256)n")).rows[0].n)===0)break;}
- expect((await pool.query("select value from settings where key='lexical_cache_ready'")).rows[0].value).toBe("true");
- if((await pool.query("select to_regprocedure('lexical_postings_backfill(integer)') as fn")).rows[0].fn){
-  await pool.query("select lexical_postings_backfill(1)");await compare(["allowed"],null,"ordinary quartz");
-  for(let i=0;i<100;i++){if(Number((await pool.query("select lexical_postings_backfill(256)n")).rows[0].n)===0)break;}
- }
- for(const scopes of [["allowed"],["hidden"],["allowed","hidden"],[]])
-  for(const at of [null,"2026-01-01","2035-01-01","2040-01-01"])
-   for(const q of ["ordinary quartz","ordinary quartz nebula","quartz nebula","'quartz' | nebula","no-synthetic-match"])
-    await compare(scopes,at,q);
- const rare=await compare(["allowed"],null,"ordinary quartz");expect(rare.some(r=>r.id==='rare')).toBe(true);
-},60000);
-test("small-cache search stays cache-only under planner-selected access paths",async()=>{
- await pool.query("vacuum (analyze) memory_versions");
- // Fresh backfilled fixture tables need the statistics already present on the live cache.
- await pool.query("analyze lexical_documents; analyze lexical_postings; analyze lexical_term_stats; analyze lexical_corpus_stats");
- const nodes:any[]=[];const walk=(n:any)=>{nodes.push(n);for(const p of n.Plans??[])walk(p);};
- const plan=(await pool.query(`explain(analyze,buffers,format json) ${indexed}`,[["allowed"],null,"ultrararefixturetoken",24])).rows[0]["QUERY PLAN"][0];walk(plan.Plan);
- // At this small cardinality PostgreSQL may correctly prefer a cache sequential scan.
- expect(plan.Plan['Actual Rows']).toBe(1);
- expect(nodes.filter(n=>['memory_versions','memories'].includes(n["Relation Name"])).every(n=>n["Actual Loops"]===0)).toBe(true);
- const broad=(await pool.query(`explain(analyze,buffers,format json) ${indexed}`,[["allowed"],null,"ordinary quartz",24])).rows[0]["QUERY PLAN"][0];nodes.length=0;walk(broad.Plan);
- expect(nodes.filter(n=>n["Node Type"]==='Function Scan').every(n=>n["Actual Loops"]<=1)).toBe(true);
- expect(nodes.some(n=>n["Node Type"]==='Function Scan'&&n["Actual Loops"]===1)).toBe(true);
- expect(nodes.filter(n=>n['Relation Name']&&n['Actual Loops']>0).every(n=>['settings','lexical_documents','lexical_postings','lexical_corpus_stats','lexical_term_stats'].includes(n['Relation Name']))).toBe(true);
- console.info('indexed-bm25-fixture',JSON.stringify({selectiveMs:plan["Execution Time"],broadMs:broad["Execution Time"]}));
+test("unready falls back, then exact legacy scores/order across scopes, dates and rare/common terms", async () => {
+  await compare(["allowed"], null, "ordinary quartz");
+  for (let i = 0; i < 100; i++) {
+    if (
+      Number(
+        (await pool.query("select lexical_cache_backfill(256)n")).rows[0].n,
+      ) === 0
+    )
+      break;
+  }
+  expect(
+    (
+      await pool.query(
+        "select value from settings where key='lexical_cache_ready'",
+      )
+    ).rows[0].value,
+  ).toBe("true");
+  if (
+    (
+      await pool.query(
+        "select to_regprocedure('lexical_postings_backfill(integer)') as fn",
+      )
+    ).rows[0].fn
+  ) {
+    await pool.query("select lexical_postings_backfill(1)");
+    await compare(["allowed"], null, "ordinary quartz");
+    for (let i = 0; i < 100; i++) {
+      if (
+        Number(
+          (await pool.query("select lexical_postings_backfill(256)n")).rows[0]
+            .n,
+        ) === 0
+      )
+        break;
+    }
+  }
+  for (const scopes of [["allowed"], ["hidden"], ["allowed", "hidden"], []])
+    for (const at of [null, "2026-01-01", "2035-01-01", "2040-01-01"])
+      for (const q of [
+        "ordinary quartz",
+        "ordinary quartz nebula",
+        "quartz nebula",
+        "'quartz' | nebula",
+        "no-synthetic-match",
+      ])
+        await compare(scopes, at, q);
+  const rare = await compare(["allowed"], null, "ordinary quartz");
+  expect(rare.some((r) => r.id === "rare")).toBe(true);
+}, 60000);
+test("small-cache search stays cache-only under planner-selected access paths", async () => {
+  await pool.query("vacuum (analyze) memory_versions");
+  // Fresh backfilled fixture tables need the statistics already present on the live cache.
+  await pool.query(
+    "analyze lexical_documents; analyze lexical_postings; analyze lexical_term_stats; analyze lexical_corpus_stats",
+  );
+  const nodes: any[] = [];
+  const walk = (n: any) => {
+    nodes.push(n);
+    for (const p of n.Plans ?? []) walk(p);
+  };
+  const plan = (
+    await pool.query(`explain(analyze,buffers,format json) ${indexed}`, [
+      ["allowed"],
+      null,
+      "ultrararefixturetoken",
+      24,
+    ])
+  ).rows[0]["QUERY PLAN"][0];
+  walk(plan.Plan);
+  // At this small cardinality PostgreSQL may correctly prefer a cache sequential scan.
+  expect(plan.Plan["Actual Rows"]).toBe(1);
+  expect(
+    nodes
+      .filter((n) =>
+        ["memory_versions", "memories"].includes(n["Relation Name"]),
+      )
+      .every((n) => n["Actual Loops"] === 0),
+  ).toBe(true);
+  const broad = (
+    await pool.query(`explain(analyze,buffers,format json) ${indexed}`, [
+      ["allowed"],
+      null,
+      "ordinary quartz",
+      24,
+    ])
+  ).rows[0]["QUERY PLAN"][0];
+  nodes.length = 0;
+  walk(broad.Plan);
+  expect(
+    nodes
+      .filter((n) => n["Node Type"] === "Function Scan")
+      .every((n) => n["Actual Loops"] <= 1),
+  ).toBe(true);
+  expect(
+    nodes.some(
+      (n) => n["Node Type"] === "Function Scan" && n["Actual Loops"] === 1,
+    ),
+  ).toBe(true);
+  expect(
+    nodes
+      .filter((n) => n["Relation Name"] && n["Actual Loops"] > 0)
+      .every((n) =>
+        [
+          "settings",
+          "lexical_documents",
+          "lexical_postings",
+          "lexical_corpus_stats",
+          "lexical_term_stats",
+        ].includes(n["Relation Name"]),
+      ),
+  ).toBe(true);
+  console.info(
+    "indexed-bm25-fixture",
+    JSON.stringify({
+      selectiveMs: plan["Execution Time"],
+      broadMs: broad["Execution Time"],
+    }),
+  );
 });
-test("metadata/postings backfill is idempotent, bounded and matches every current source lexeme",async()=>{
- await pool.query("select lexical_cache_backfill(64)");
- await pool.query("select lexical_postings_backfill(64)");
- expect((await pool.query("select value from settings where key='lexical_postings_ready'")).rows[0].value).toBe("true");
- await postingsOracle();
- const before=(await pool.query("select memory_id,posting_id from lexical_documents order by memory_id")).rows;
- await pool.query("begin; select pg_advisory_xact_lock(1213811052,1)");
- for(const name of ["0004_lexical_cache.sql","0005_lexical_postings.sql","0007_lexical_term_stats_lexeme_index.sql"])await pool.query(readFileSync(new URL(`../crates/hyperag/migrations/${name}`,import.meta.url),"utf8"));
- await pool.query("commit; select lexical_refresh_document('both')");
- expect((await pool.query("select memory_id,posting_id from lexical_documents order by memory_id")).rows).toEqual(before);
- await postingsOracle();
- for(const n of [null,0,257])await expect(pool.query("select lexical_postings_backfill($1)",[n])).rejects.toThrow();
+test("metadata/postings backfill is idempotent, bounded and matches every current source lexeme", async () => {
+  await pool.query("select lexical_cache_backfill(64)");
+  await pool.query("select lexical_postings_backfill(64)");
+  expect(
+    (
+      await pool.query(
+        "select value from settings where key='lexical_postings_ready'",
+      )
+    ).rows[0].value,
+  ).toBe("true");
+  await postingsOracle();
+  const before = (
+    await pool.query(
+      "select memory_id,posting_id from lexical_documents order by memory_id",
+    )
+  ).rows;
+  await pool.query("begin; select pg_advisory_xact_lock(1213811052,1)");
+  for (const name of [
+    "0004_lexical_cache.sql",
+    "0005_lexical_postings.sql",
+    "0007_lexical_term_stats_lexeme_index.sql",
+  ])
+    await pool.query(
+      readFileSync(
+        new URL(`../crates/hyperag/migrations/${name}`, import.meta.url),
+        "utf8",
+      ),
+    );
+  await pool.query("commit; select lexical_refresh_document('both')");
+  expect(
+    (
+      await pool.query(
+        "select memory_id,posting_id from lexical_documents order by memory_id",
+      )
+    ).rows,
+  ).toEqual(before);
+  await postingsOracle();
+  for (const n of [null, 0, 257])
+    await expect(
+      pool.query("select lexical_postings_backfill($1)", [n]),
+    ).rejects.toThrow();
 });
 
-test("write-maintained statistics preserve equality after mutation and reset fallback",async()=>{
- await pool.query("update memory_versions set text='quartz quartz nebula nebula' where memory_id='both'; update memories set scope='hidden' where id='rare'");
- await compare(["allowed"],null,"ordinary quartz");await compare(["allowed","hidden"],"2035-01-01","quartz nebula");
- await pool.query("insert into memory_versions(memory_id,version,text,source,author,content_hash) values('both',2,'quartz fresh comet','fixture','fixture','new-head'); update memories set current_version=2 where id='both'");
- await compare(["allowed","hidden"],null,"quartz nebula");await postingsOracle();
- await pool.query("update memory_versions set status='invalidated' where memory_id='both'; update memories set deleted_at=now() where id='future'");
- await compare(["allowed"],null,"quartz nebula");
- await postingsOracle();
- // Prove reset/missing-marker fallback with positive source hits and deliberately empty caches.
- await pool.query("begin; select pg_advisory_xact_lock(1213811052,1); update settings set value='reset' where key='lexical_cache_ready'; truncate lexical_documents,lexical_corpus_stats,lexical_term_stats cascade; commit");
- expect((await compare(["allowed","hidden"],null,"quartz nebula")).length).toBeGreaterThan(0);
- await pool.query("delete from settings where key='lexical_cache_ready'");
- await compare(["allowed","hidden"],null,"quartz nebula");
- await pool.query("insert into settings(key,value) values('lexical_cache_ready','reset')");
- await pool.query("begin; select pg_advisory_xact_lock(1213811052,1); truncate memory_versions; commit");await compare(["allowed"],null,"quartz");
+test("write-maintained statistics preserve equality after mutation and reset fallback", async () => {
+  await pool.query(
+    "update memory_versions set text='quartz quartz nebula nebula' where memory_id='both'; update memories set scope='hidden' where id='rare'",
+  );
+  await compare(["allowed"], null, "ordinary quartz");
+  await compare(["allowed", "hidden"], "2035-01-01", "quartz nebula");
+  await pool.query(
+    "insert into memory_versions(memory_id,version,text,source,author,content_hash) values('both',2,'quartz fresh comet','fixture','fixture','new-head'); update memories set current_version=2 where id='both'",
+  );
+  await compare(["allowed", "hidden"], null, "quartz nebula");
+  await postingsOracle();
+  await pool.query(
+    "update memory_versions set status='invalidated' where memory_id='both'; update memories set deleted_at=now() where id='future'",
+  );
+  await compare(["allowed"], null, "quartz nebula");
+  await postingsOracle();
+  // Prove reset/missing-marker fallback with positive source hits and deliberately empty caches.
+  await pool.query(
+    "begin; select pg_advisory_xact_lock(1213811052,1); update settings set value='reset' where key='lexical_cache_ready'; truncate lexical_documents,lexical_corpus_stats,lexical_term_stats cascade; commit",
+  );
+  expect(
+    (await compare(["allowed", "hidden"], null, "quartz nebula")).length,
+  ).toBeGreaterThan(0);
+  await pool.query("delete from settings where key='lexical_cache_ready'");
+  await compare(["allowed", "hidden"], null, "quartz nebula");
+  await pool.query(
+    "insert into settings(key,value) values('lexical_cache_ready','reset')",
+  );
+  await pool.query(
+    "begin; select pg_advisory_xact_lock(1213811052,1); truncate memory_versions; commit",
+  );
+  await compare(["allowed"], null, "quartz");
 });
 
-async function postingsOracle(){
- const actual=(await pool.query("select d.memory_id,d.version,d.current_version,d.status,d.scope,d.recorded_at,p.lexeme,p.tf from lexical_documents d join lexical_postings p using(posting_id) order by d.memory_id,p.lexeme")).rows;
- const expected=(await pool.query("select m.id as memory_id,v.version,m.current_version,v.status,m.scope,v.recorded_at,u.lexeme,coalesce(array_length(u.positions,1),1) as tf from memories m join memory_versions v on v.memory_id=m.id and v.version=m.current_version cross join lateral unnest(v.text_search)u where m.deleted_at is null and v.status='active' order by m.id,u.lexeme")).rows;
- expect(actual.length).toBeGreaterThan(3000);
- expect(actual).toEqual(expected);
+async function postingsOracle() {
+  const actual = (
+    await pool.query(
+      "select d.memory_id,d.version,d.current_version,d.status,d.scope,d.recorded_at,p.lexeme,p.tf from lexical_documents d join lexical_postings p using(posting_id) order by d.memory_id,p.lexeme",
+    )
+  ).rows;
+  const expected = (
+    await pool.query(
+      "select m.id as memory_id,v.version,m.current_version,v.status,m.scope,v.recorded_at,u.lexeme,coalesce(array_length(u.positions,1),1) as tf from memories m join memory_versions v on v.memory_id=m.id and v.version=m.current_version cross join lateral unnest(v.text_search)u where m.deleted_at is null and v.status='active' order by m.id,u.lexeme",
+    )
+  ).rows;
+  expect(actual.length).toBeGreaterThan(3000);
+  expect(actual).toEqual(expected);
 }
 
-test("100k narrow lookup is indexed and bounded; dense queries preserve scores without source scans",async()=>{
- await pool.query("select lexical_cache_backfill(64); select lexical_postings_backfill(64)");
- // Bulk-load equivalent synthetic source/cache rows so this tests the planner, not backfill throughput.
- await pool.query(`begin; select pg_advisory_xact_lock(1213811052,1);
+test("100k narrow lookup is indexed and bounded; dense queries preserve scores without source scans", async () => {
+  await pool.query(
+    "select lexical_cache_backfill(64); select lexical_postings_backfill(64)",
+  );
+  // Bulk-load equivalent synthetic source/cache rows so this tests the planner, not backfill throughput.
+  await pool.query(`begin; select pg_advisory_xact_lock(1213811052,1);
   alter table memories disable trigger lexical_memory_sync;
   alter table memory_versions disable trigger lexical_version_sync;
   alter table lexical_documents disable trigger lexical_delta;
@@ -144,24 +353,117 @@ test("100k narrow lookup is indexed and bounded; dense queries preserve scores w
   alter table memory_versions enable trigger lexical_version_sync;
   alter table lexical_documents enable trigger lexical_delta;
   alter table lexical_documents enable trigger lexical_postings_sync; commit`);
- for(const name of ["memories","memory_versions","lexical_documents","lexical_postings","lexical_corpus_stats","lexical_term_stats"])
-  await pool.query(`vacuum(analyze) ${name}`);
- expect(Number((await pool.query("select count(*)n from memory_versions")).rows[0].n)).toBe(100000);
- expect(Number((await pool.query("select count(*)n from lexical_postings")).rows[0].n)).toBe(400000);
- // One unique lexeme per document models a real vocabulary while keeping four postings per row.
- const nodes:any[]=[];const walk=(n:any)=>{nodes.push(n);for(const c of n.Plans??[])walk(c);};
- const narrow=(await pool.query(`explain(analyze,buffers,format json) ${indexed}`,[["allowed"],null,"large1",24])).rows[0]["QUERY PLAN"][0];walk(narrow.Plan);
- expect(narrow.Plan["Actual Rows"]).toBe(1);
- const postingReads=nodes.filter(n=>n["Relation Name"]==='lexical_postings'&&n["Actual Loops"]>0);
- expect(postingReads.some(n=>['Index Scan','Index Only Scan','Bitmap Heap Scan'].includes(n['Node Type']))).toBe(true);
- const postingWork=nodes.filter(n=>(n['Relation Name']==='lexical_postings'||n['Index Name']?.startsWith('lexical_postings'))&&n['Actual Loops']>0);
- expect(postingWork.reduce((sum,n)=>sum+((n['Actual Rows']??0)+(n['Rows Removed by Filter']??0)+(n['Rows Removed by Index Recheck']??0))*n['Actual Loops'],0)).toBeLessThanOrEqual(24);
- expect(nodes.filter(n=>['memories','memory_versions'].includes(n['Relation Name'])||(n['Relation Name']==='lexical_documents'&&n['Node Type']==='Seq Scan')).every(n=>n['Actual Loops']===0)).toBe(true);
- await compare(["allowed"],null,"large1");
- await compare(["allowed"],null,"ordinary quartz");
- const plan=(await pool.query(`explain(analyze,buffers,format json) ${indexed}`,[["allowed"],null,"ordinary quartz",24])).rows[0]["QUERY PLAN"][0];
- nodes.length=0;walk(plan.Plan);
- expect(nodes.filter(n=>['memory_versions','memories'].includes(n['Relation Name'])).every(n=>n['Actual Loops']===0)).toBe(true);
- expect(nodes.filter(n=>n['Relation Name']&&n['Actual Loops']>0).every(n=>['settings','lexical_documents','lexical_postings','lexical_corpus_stats','lexical_term_stats'].includes(n['Relation Name']))).toBe(true);
- console.info('postings-100k-plan',JSON.stringify({executionMs:plan["Execution Time"],narrowMs:narrow["Execution Time"],sourceRows:100000,postings:400000}));
-},180000);
+  for (const name of [
+    "memories",
+    "memory_versions",
+    "lexical_documents",
+    "lexical_postings",
+    "lexical_corpus_stats",
+    "lexical_term_stats",
+  ])
+    await pool.query(`vacuum(analyze) ${name}`);
+  expect(
+    Number(
+      (await pool.query("select count(*)n from memory_versions")).rows[0].n,
+    ),
+  ).toBe(100000);
+  expect(
+    Number(
+      (await pool.query("select count(*)n from lexical_postings")).rows[0].n,
+    ),
+  ).toBe(400000);
+  // One unique lexeme per document models a real vocabulary while keeping four postings per row.
+  const nodes: any[] = [];
+  const walk = (n: any) => {
+    nodes.push(n);
+    for (const c of n.Plans ?? []) walk(c);
+  };
+  const narrow = (
+    await pool.query(`explain(analyze,buffers,format json) ${indexed}`, [
+      ["allowed"],
+      null,
+      "large1",
+      24,
+    ])
+  ).rows[0]["QUERY PLAN"][0];
+  walk(narrow.Plan);
+  expect(narrow.Plan["Actual Rows"]).toBe(1);
+  const postingReads = nodes.filter(
+    (n) => n["Relation Name"] === "lexical_postings" && n["Actual Loops"] > 0,
+  );
+  expect(
+    postingReads.some((n) =>
+      ["Index Scan", "Index Only Scan", "Bitmap Heap Scan"].includes(
+        n["Node Type"],
+      ),
+    ),
+  ).toBe(true);
+  const postingWork = nodes.filter(
+    (n) =>
+      (n["Relation Name"] === "lexical_postings" ||
+        n["Index Name"]?.startsWith("lexical_postings")) &&
+      n["Actual Loops"] > 0,
+  );
+  expect(
+    postingWork.reduce(
+      (sum, n) =>
+        sum +
+        ((n["Actual Rows"] ?? 0) +
+          (n["Rows Removed by Filter"] ?? 0) +
+          (n["Rows Removed by Index Recheck"] ?? 0)) *
+          n["Actual Loops"],
+      0,
+    ),
+  ).toBeLessThanOrEqual(24);
+  expect(
+    nodes
+      .filter(
+        (n) =>
+          ["memories", "memory_versions"].includes(n["Relation Name"]) ||
+          (n["Relation Name"] === "lexical_documents" &&
+            n["Node Type"] === "Seq Scan"),
+      )
+      .every((n) => n["Actual Loops"] === 0),
+  ).toBe(true);
+  await compare(["allowed"], null, "large1");
+  await compare(["allowed"], null, "ordinary quartz");
+  const plan = (
+    await pool.query(`explain(analyze,buffers,format json) ${indexed}`, [
+      ["allowed"],
+      null,
+      "ordinary quartz",
+      24,
+    ])
+  ).rows[0]["QUERY PLAN"][0];
+  nodes.length = 0;
+  walk(plan.Plan);
+  expect(
+    nodes
+      .filter((n) =>
+        ["memory_versions", "memories"].includes(n["Relation Name"]),
+      )
+      .every((n) => n["Actual Loops"] === 0),
+  ).toBe(true);
+  expect(
+    nodes
+      .filter((n) => n["Relation Name"] && n["Actual Loops"] > 0)
+      .every((n) =>
+        [
+          "settings",
+          "lexical_documents",
+          "lexical_postings",
+          "lexical_corpus_stats",
+          "lexical_term_stats",
+        ].includes(n["Relation Name"]),
+      ),
+  ).toBe(true);
+  console.info(
+    "postings-100k-plan",
+    JSON.stringify({
+      executionMs: plan["Execution Time"],
+      narrowMs: narrow["Execution Time"],
+      sourceRows: 100000,
+      postings: 400000,
+    }),
+  );
+}, 180000);

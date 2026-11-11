@@ -4,6 +4,7 @@ the query id (BEIR's default ignore_identical_ids, which matters on ArguAna and 
 
 .venv-bench/bin/python -I eval/public/score_beir.py --data <BEIR dir> eval/public/results/*.run
 """
+
 import argparse, csv, json, os, sys
 import pytrec_eval
 
@@ -31,16 +32,48 @@ for path in a.runs:
     asked = set(meta["askedIds"]) if "askedIds" in meta else set(qrels)
     for q in asked:
         run.setdefault(q, {})
-    ev = pytrec_eval.RelevanceEvaluator({q: qrels[q] for q in asked}, {"ndcg_cut.10", "recall.100", "map_cut.100", "recip_rank"})
+    ev = pytrec_eval.RelevanceEvaluator(
+        {q: qrels[q] for q in asked},
+        {"ndcg_cut.10", "recall.100", "map_cut.100", "recip_rank"},
+    )
     # pytrec_eval ranks by score; feed rank-derived scores so the system's own order is kept.
-    ranked = {q: {d: 1.0 / (i + 1) for i, d in enumerate(sorted(docs, key=docs.get, reverse=True))} for q, docs in run.items() if q in asked}
+    ranked = {
+        q: {
+            d: 1.0 / (i + 1)
+            for i, d in enumerate(sorted(docs, key=docs.get, reverse=True))
+        }
+        for q, docs in run.items()
+        if q in asked
+    }
     per = ev.evaluate(ranked)
     mean = lambda m: sum(v[m] for v in per.values()) / len(per)
-    rows.append({"dataset": meta["dataset"], "system": meta["system"], "version": meta["version"], "profile": meta["profile"],
-                 "queries": len(per), "test_queries": len(qrels), "ndcg@10": mean("ndcg_cut_10"), "recall@100": mean("recall_100"), "map@100": mean("map_cut_100"),
-                 "p50_ms": meta["latencyP50Ms"], "p95_ms": meta["latencyP95Ms"], "ingest_s": meta["ingestMs"] / 1000, "date": meta["date"][:10]})
-print("| dataset | system | profile | queries | nDCG@10 | Recall@100 | MAP@100 | p50 ms | p95 ms | ingest s |")
+    rows.append(
+        {
+            "dataset": meta["dataset"],
+            "system": meta["system"],
+            "version": meta["version"],
+            "profile": meta["profile"],
+            "queries": len(per),
+            "test_queries": len(qrels),
+            "ndcg@10": mean("ndcg_cut_10"),
+            "recall@100": mean("recall_100"),
+            "map@100": mean("map_cut_100"),
+            "p50_ms": meta["latencyP50Ms"],
+            "p95_ms": meta["latencyP95Ms"],
+            "ingest_s": meta["ingestMs"] / 1000,
+            "date": meta["date"][:10],
+        }
+    )
+print(
+    "| dataset | system | profile | queries | nDCG@10 | Recall@100 | MAP@100 | p50 ms | p95 ms | ingest s |"
+)
 print("| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |")
 for r in rows:
-    print(f"| {r['dataset']} | {r['system']} {r['version']} | {r['profile']} | {r['queries']} | {r['ndcg@10']:.3f} | {r['recall@100']:.3f} | {r['map@100']:.3f} | {r['p50_ms']:.1f} | {r['p95_ms']:.1f} | {r['ingest_s']:.0f} |")
-json.dump(rows, open(os.path.join(os.path.dirname(a.runs[0]), "beir-scores.json"), "w"), indent=1)
+    print(
+        f"| {r['dataset']} | {r['system']} {r['version']} | {r['profile']} | {r['queries']} | {r['ndcg@10']:.3f} | {r['recall@100']:.3f} | {r['map@100']:.3f} | {r['p50_ms']:.1f} | {r['p95_ms']:.1f} | {r['ingest_s']:.0f} |"
+    )
+json.dump(
+    rows,
+    open(os.path.join(os.path.dirname(a.runs[0]), "beir-scores.json"), "w"),
+    indent=1,
+)

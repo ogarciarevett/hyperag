@@ -24,4 +24,7 @@ class SlowPool extends pg.Pool {
   }
 }
 
-mock.module(fileURLToPath(import.meta.resolve("pg")), () => ({ ...pg, Pool: SlowPool }));
+mock.module(fileURLToPath(import.meta.resolve("pg")), () => ({
+  ...pg,
+  Pool: SlowPool,
+}));

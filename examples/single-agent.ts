@@ -3,15 +3,31 @@
 // Run: docker compose -p hyperag up -d && bun examples/single-agent.ts
 import { Pool } from "pg";
 
-import { createLocalEmbedder, createNeo4jGraph, createPostgresStore, Hyperag } from "../src";
+import {
+  createLocalEmbedder,
+  createNeo4jGraph,
+  createPostgresStore,
+  Hyperag,
+} from "../src";
 
-const PG = process.env.HYPERAG_PG_URL ?? "postgres://hyperag:fake-test-only@127.0.0.1:55432/hyperag";
-const graph = createNeo4jGraph({ baseUrl: "http://127.0.0.1:57474", username: "neo4j", password: "fake-test-only" });
+const PG =
+  process.env.HYPERAG_PG_URL ??
+  "postgres://hyperag:fake-test-only@127.0.0.1:55432/hyperag";
+const graph = createNeo4jGraph({
+  baseUrl: "http://127.0.0.1:57474",
+  username: "neo4j",
+  password: "fake-test-only",
+});
 const embedder = createLocalEmbedder();
 
 async function session<T>(fn: (h: Hyperag) => Promise<T>): Promise<T> {
   const pool = new Pool({ connectionString: PG });
-  const h = new Hyperag({ store: createPostgresStore(pool), embedder, graph, admins: ["admin"] });
+  const h = new Hyperag({
+    store: createPostgresStore(pool),
+    embedder,
+    graph,
+    admins: ["admin"],
+  });
   await h.init();
   try {
     return await fn(h);
@@ -34,8 +50,17 @@ await session(async (h) => {
 });
 
 await session(async (h) => {
-  const ctx = await h.context("coder", "what is our retry policy for failed HTTP calls?", { maxTokens: 300 });
+  const ctx = await h.context(
+    "coder",
+    "what is our retry policy for failed HTTP calls?",
+    { maxTokens: 300 },
+  );
   console.log("session 2 context:\n" + ctx.text);
   console.log("citations:", ctx.citations);
-  console.log("paths:", ctx.retrieval.pathsUsed, "limitations:", ctx.retrieval.limitations);
+  console.log(
+    "paths:",
+    ctx.retrieval.pathsUsed,
+    "limitations:",
+    ctx.retrieval.limitations,
+  );
 });

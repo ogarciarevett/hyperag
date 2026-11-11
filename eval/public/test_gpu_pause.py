@@ -3,6 +3,7 @@
 Run: python3 -I eval/public/test_gpu_pause.py
 No model, credentials, database or external network is used.
 """
+
 import json
 import os
 from pathlib import Path
@@ -25,7 +26,9 @@ def main():
             self.rfile.read(int(self.headers["Content-Length"]))
             requested.set()
             resumed.wait(5)
-            time.sleep(0.05)  # The reply arrives after resume, not before the expired timer.
+            time.sleep(
+                0.05
+            )  # The reply arrives after resume, not before the expired timer.
             try:
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
@@ -44,16 +47,20 @@ def main():
             child = folder / "request.ts"
             module = Path(__file__).resolve().parent / "systems/gpu-request.ts"
             child.write_text(
-                f'import {{ gpuRequest }} from {json.dumps(str(module))};\n'
-                'const original = AbortSignal.timeout.bind(AbortSignal);\n'
-                'AbortSignal.timeout = (ms) => original(ms === 120000 ? 80 : ms);\n'
+                f"import {{ gpuRequest }} from {json.dumps(str(module))};\n"
+                "const original = AbortSignal.timeout.bind(AbortSignal);\n"
+                "AbortSignal.timeout = (ms) => original(ms === 120000 ? 80 : ms);\n"
                 'process.env.GPU_RETRY_PROXY = "1";\n'
-                f'const output = {json.dumps(str(result))};\n'
+                f"const output = {json.dumps(str(result))};\n"
                 f'try {{ const value = await gpuRequest("http://127.0.0.1:{server.server_port}", "/v2/embed", {{inputs:["test"]}});'
-                ' await Bun.write(output, JSON.stringify({ok:true,value})); }\n'
-                'catch(error) { await Bun.write(output, JSON.stringify({ok:false,name:error.name})); }\n'
+                " await Bun.write(output, JSON.stringify({ok:true,value})); }\n"
+                "catch(error) { await Bun.write(output, JSON.stringify({ok:false,name:error.name})); }\n"
             )
-            proc = subprocess.Popen(["bun", str(child)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            proc = subprocess.Popen(
+                ["bun", str(child)],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
             try:
                 assert requested.wait(5), "request did not reach the local socket"
                 os.kill(proc.pid, signal.SIGSTOP)
@@ -63,7 +70,9 @@ def main():
                 assert proc.wait(timeout=5) == 0
                 value = json.loads(result.read_text())
                 assert value == {"ok": True, "value": {"embeddings": [1, 2, 3]}}, value
-                print("PASS: a proxied request survives a machine pause beyond the old deadline")
+                print(
+                    "PASS: a proxied request survives a machine pause beyond the old deadline"
+                )
             finally:
                 if proc.poll() is None:
                     os.kill(proc.pid, signal.SIGCONT)

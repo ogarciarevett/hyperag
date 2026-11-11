@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Clock and marker completion races; all process probes are mocked."""
+
 import importlib.util
 import json
 import os
@@ -8,7 +9,9 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-spec = importlib.util.spec_from_file_location('native_guard', Path(__file__).with_name('native_guard.py'))
+spec = importlib.util.spec_from_file_location(
+    "native_guard", Path(__file__).with_name("native_guard.py")
+)
 guard = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(guard)
 
@@ -17,134 +20,254 @@ class WatchdogClockTest(unittest.TestCase):
     def test_budget_skip_is_counted_with_cap_but_hard_rule_uses_uncapped_wall(self):
         with tempfile.TemporaryDirectory() as name:
             directory = Path(name)
-            config = {'state_dir': name}
-            with patch.object(guard.time, 'monotonic', return_value=guard.STARTED + .544174), patch.object(guard, '_trip') as trip:
-                summary = guard._record(config, {'agent': 'claude-code', 'event': 'prompt', 'category': 'budget_skip', 'error': None})
+            config = {"state_dir": name}
+            with (
+                patch.object(
+                    guard.time, "monotonic", return_value=guard.STARTED + 0.544174
+                ),
+                patch.object(guard, "_trip") as trip,
+            ):
+                summary = guard._record(
+                    config,
+                    {
+                        "agent": "claude-code",
+                        "event": "prompt",
+                        "category": "budget_skip",
+                        "error": None,
+                    },
+                )
                 trip.assert_not_called()
-            row = json.loads((directory / 'calls.jsonl').read_text())
-            self.assertEqual(row['latency_ms'], 250)
-            self.assertEqual(row['wall_ms'], 624.174)
-            self.assertEqual((summary['calls'], summary['budget_skips'], summary['errors']), (0, 1, 0))
-            measured = [{**row, 'warmup': False} for _ in range(20)]
+            row = json.loads((directory / "calls.jsonl").read_text())
+            self.assertEqual(row["latency_ms"], 250)
+            self.assertEqual(row["wall_ms"], 624.174)
+            self.assertEqual(
+                (summary["calls"], summary["budget_skips"], summary["errors"]),
+                (0, 1, 0),
+            )
+            measured = [{**row, "warmup": False} for _ in range(20)]
             result = guard.evaluate(measured)
-            self.assertEqual((result['calls'], result['p95_ms'], result['reason']), (20, 250, None))
-            self.assertEqual(guard.evaluate([{**row, 'wall_ms': 1000.001}])['reason'], 'single_call_limit')
-            self.assertEqual(guard.evaluate([{**row, 'error': 'native_hook_error'}])['reason'], 'hook_error')
-            for value in (float('nan'), -1, True):
-                with self.assertRaises(ValueError):guard.evaluate([{**row, 'wall_ms': value}])
+            self.assertEqual(
+                (result["calls"], result["p95_ms"], result["reason"]), (20, 250, None)
+            )
+            self.assertEqual(
+                guard.evaluate([{**row, "wall_ms": 1000.001}])["reason"],
+                "single_call_limit",
+            )
+            self.assertEqual(
+                guard.evaluate([{**row, "error": "native_hook_error"}])["reason"],
+                "hook_error",
+            )
+            for value in (float("nan"), -1, True):
+                with self.assertRaises(ValueError):
+                    guard.evaluate([{**row, "wall_ms": value}])
 
     def test_error_budget_row_cannot_hide_latency_and_capped_rows_still_trip_p95(self):
         with tempfile.TemporaryDirectory() as name:
-            with patch.object(guard.time, 'monotonic', return_value=guard.STARTED + .4), patch.object(guard, '_trip') as trip:
-                guard._record({'state_dir': name}, {'agent': 'claude-code', 'event': 'prompt', 'category': 'budget_skip', 'error': 'stderr'})
+            with (
+                patch.object(guard.time, "monotonic", return_value=guard.STARTED + 0.4),
+                patch.object(guard, "_trip") as trip,
+            ):
+                guard._record(
+                    {"state_dir": name},
+                    {
+                        "agent": "claude-code",
+                        "event": "prompt",
+                        "category": "budget_skip",
+                        "error": "stderr",
+                    },
+                )
                 trip.assert_called_once()
-            row = json.loads((Path(name) / 'calls.jsonl').read_text())
-            self.assertEqual(row['latency_ms'], 480)
-        rows = [{'latency_ms': 250, 'wall_ms': 260, 'category': 'budget_skip'} for _ in range(18)]
-        self.assertEqual(guard.evaluate(rows + [{'latency_ms': 301}] * 2)['reason'], 'p95_limit')
+            row = json.loads((Path(name) / "calls.jsonl").read_text())
+            self.assertEqual(row["latency_ms"], 480)
+        rows = [
+            {"latency_ms": 250, "wall_ms": 260, "category": "budget_skip"}
+            for _ in range(18)
+        ]
+        self.assertEqual(
+            guard.evaluate(rows + [{"latency_ms": 301}] * 2)["reason"], "p95_limit"
+        )
 
-    def test_late_collection_of_success_counts_as_budget_skip_without_hiding_errors(self):
-        for stderr, category in [(False, 'budget_skip'), (True, 'enqueued')]:
+    def test_late_collection_of_success_counts_as_budget_skip_without_hiding_errors(
+        self,
+    ):
+        for stderr, category in [(False, "budget_skip"), (True, "enqueued")]:
             with self.subTest(stderr=stderr), tempfile.TemporaryDirectory() as name:
                 root = Path(name)
-                marker = root / 'active';marker.touch()
-                config = {'state_dir': name, 'active_marker': str(marker)}
+                marker = root / "active"
+                marker.touch()
+                config = {"state_dir": name, "active_marker": str(marker)}
                 clock = [10.0]
+
                 def completed(*args, **kwargs):
-                    clock[0] += .4
-                    return 0, b'', stderr, b'{"category":"enqueued"}'
-                with patch.object(guard, 'STARTED', 10), patch.object(guard.time, 'monotonic', side_effect=lambda: clock[0]), \
-                        patch.object(guard.time, 'time', return_value=100), patch.dict(os.environ, {'HYPERAG_HOOK_STARTED_AT': '100'}), \
-                        patch.object(guard, 'arm'), patch.object(guard, '_input', return_value=b'{}'), \
-                        patch.object(guard, '_native', side_effect=completed), patch.object(guard, '_trip') as trip, \
-                        patch.object(guard.sys, 'stderr'):
-                    guard._hook(config, 'prompt', 'claude-code')
-                row = json.loads((root / 'calls.jsonl').read_text())
-                self.assertEqual(row['category'], category)
-                self.assertEqual(row['wall_ms'], 480)
-                self.assertEqual(row['latency_ms'], 480 if stderr else 250)
+                    clock[0] += 0.4
+                    return 0, b"", stderr, b'{"category":"enqueued"}'
+
+                with (
+                    patch.object(guard, "STARTED", 10),
+                    patch.object(guard.time, "monotonic", side_effect=lambda: clock[0]),
+                    patch.object(guard.time, "time", return_value=100),
+                    patch.dict(os.environ, {"HYPERAG_HOOK_STARTED_AT": "100"}),
+                    patch.object(guard, "arm"),
+                    patch.object(guard, "_input", return_value=b"{}"),
+                    patch.object(guard, "_native", side_effect=completed),
+                    patch.object(guard, "_trip") as trip,
+                    patch.object(guard.sys, "stderr"),
+                ):
+                    guard._hook(config, "prompt", "claude-code")
+                row = json.loads((root / "calls.jsonl").read_text())
+                self.assertEqual(row["category"], category)
+                self.assertEqual(row["wall_ms"], 480)
+                self.assertEqual(row["latency_ms"], 480 if stderr else 250)
                 self.assertEqual(trip.call_count, int(stderr))
 
     def test_delivery_failure_precedes_simultaneous_mode_mismatch(self):
-        for counters in ({'categories': {'http401': 1}}, {'failed': 1}, {'blocked': True},
-                         {'rejected': 1}, {'enqueue_errors': {'rejected': 1}},
-                         {'enqueue_errors': {'categories': {'queue_full': 1}}}):
+        for counters in (
+            {"categories": {"http401": 1}},
+            {"failed": 1},
+            {"blocked": True},
+            {"rejected": 1},
+            {"enqueue_errors": {"rejected": 1}},
+            {"enqueue_errors": {"categories": {"queue_full": 1}}},
+        ):
             with self.subTest(counters=counters):
-                response = {'async_writes': False, 'token_file': False, **counters}
-                with patch.object(guard, '_native', return_value=(0, json.dumps(response).encode(), False, b'')), \
-                        self.assertRaises(guard.WriterFailure):
-                    guard._status({'active_marker': '/fixture-marker'})
-        with patch.object(guard, '_native', return_value=(0, b'{"async_writes":false}', False, b'')), \
-                self.assertRaisesRegex(ValueError, 'writer_mode_mismatch') as error:
-            guard._status({'active_marker': '/fixture-marker'})
+                response = {"async_writes": False, "token_file": False, **counters}
+                with (
+                    patch.object(
+                        guard,
+                        "_native",
+                        return_value=(0, json.dumps(response).encode(), False, b""),
+                    ),
+                    self.assertRaises(guard.WriterFailure),
+                ):
+                    guard._status({"active_marker": "/fixture-marker"})
+        with (
+            patch.object(
+                guard,
+                "_native",
+                return_value=(0, b'{"async_writes":false}', False, b""),
+            ),
+            self.assertRaisesRegex(ValueError, "writer_mode_mismatch") as error,
+        ):
+            guard._status({"active_marker": "/fixture-marker"})
         self.assertNotIsInstance(error.exception, guard.WriterFailure)
 
     def test_shared_clock_uses_raw_clock_not_process_relative_monotonic(self):
-        with patch.object(guard.time, 'clock_gettime', return_value=123) as clock, \
-                patch.object(guard.time, 'monotonic', side_effect=AssertionError('process-relative clock')):
+        with (
+            patch.object(guard.time, "clock_gettime", return_value=123) as clock,
+            patch.object(
+                guard.time,
+                "monotonic",
+                side_effect=AssertionError("process-relative clock"),
+            ),
+        ):
             self.assertEqual(guard._shared_time(), 123)
         clock.assert_called_once_with(guard.time.CLOCK_MONOTONIC_RAW)
 
     def test_only_a_live_call_with_a_remaining_marker_can_time_out(self):
         with tempfile.TemporaryDirectory() as directory:
-            path = Path(directory) / 'inflight-123.json'
-            for remove, dead, reason in [(False, False, 'foreground_timeout'),
-                                         (True, False, None), (True, True, None),
-                                         (False, True, 'foreground_lost')]:
+            path = Path(directory) / "inflight-123.json"
+            for remove, dead, reason in [
+                (False, False, "foreground_timeout"),
+                (True, False, None),
+                (True, True, None),
+                (False, True, "foreground_lost"),
+            ]:
                 with self.subTest(remove=remove, dead=dead):
-                    path.write_text(json.dumps({'pid': 123, 'started': 1}))
+                    path.write_text(json.dumps({"pid": 123, "started": 1}))
+
                     def probe(pid, signal):
                         self.assertEqual((pid, signal), (123, 0))
-                        if remove:path.unlink()
-                        if dead:raise ProcessLookupError()
-                    with patch.object(guard, '_shared_time', return_value=3), patch.object(guard.os, 'kill', side_effect=probe):
+                        if remove:
+                            path.unlink()
+                        if dead:
+                            raise ProcessLookupError()
+
+                    with (
+                        patch.object(guard, "_shared_time", return_value=3),
+                        patch.object(guard.os, "kill", side_effect=probe),
+                    ):
                         if reason:
-                            with self.assertRaisesRegex(ValueError, reason):guard._check_inflight(path)
-                        else:guard._check_inflight(path)
+                            with self.assertRaisesRegex(ValueError, reason):
+                                guard._check_inflight(path)
+                        else:
+                            guard._check_inflight(path)
 
     def test_invalid_shared_age_fails_closed(self):
         with tempfile.TemporaryDirectory() as directory:
-            path = Path(directory) / 'inflight-123.json'
-            path.write_text(json.dumps({'pid': 123, 'started': 1}))
-            for value in (0, float('nan'), float('inf')):
-                with self.subTest(value=value), patch.object(guard, '_shared_time', return_value=value), \
-                        patch.object(guard.os, 'kill'), self.assertRaisesRegex(ValueError, 'invalid_foreground_clock'):
+            path = Path(directory) / "inflight-123.json"
+            path.write_text(json.dumps({"pid": 123, "started": 1}))
+            for value in (0, float("nan"), float("inf")):
+                with (
+                    self.subTest(value=value),
+                    patch.object(guard, "_shared_time", return_value=value),
+                    patch.object(guard.os, "kill"),
+                    self.assertRaisesRegex(ValueError, "invalid_foreground_clock"),
+                ):
                     guard._check_inflight(path)
 
     def test_trip_persists_first_trace_across_recovery_retry_without_payload(self):
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory);marker = root / 'active';marker.touch()
-            config = {'state_dir': str(root), 'active_marker': str(marker), 'rollback_command': ['/fixture']}
-            trace = guard._trace('watchdog', 'hook-writer-status', child_pid=123, agent='codex', event='prompt',
-                                 _duration_ms=250.123, payload='private-fixture-input')
-            with patch.object(guard._recovery, 'dispatch_confirmed', side_effect=[TimeoutError(), 456]):
-                guard._trip(config, 'TimeoutError', trace)
-                guard._trip(config, 'recovery_pending', guard._trace('watchdog', 'retry'))
-            raw = (root / 'trip.json').read_text();value = json.loads(raw)
-            self.assertEqual((value['stage'], value['operation'], value['child_pid'], value['duration_ms']),
-                             ('watchdog', 'hook-writer-status', 123, 250.123))
-            self.assertEqual((value['agent'], value['event'], value['category']), ('codex', 'prompt', 'TimeoutError'))
-            self.assertNotIn('private-fixture-input', raw)
-            self.assertNotIn('_started', raw)
+            root = Path(directory)
+            marker = root / "active"
+            marker.touch()
+            config = {
+                "state_dir": str(root),
+                "active_marker": str(marker),
+                "rollback_command": ["/fixture"],
+            }
+            trace = guard._trace(
+                "watchdog",
+                "hook-writer-status",
+                child_pid=123,
+                agent="codex",
+                event="prompt",
+                _duration_ms=250.123,
+                payload="private-fixture-input",
+            )
+            with patch.object(
+                guard._recovery, "dispatch_confirmed", side_effect=[TimeoutError(), 456]
+            ):
+                guard._trip(config, "TimeoutError", trace)
+                guard._trip(
+                    config, "recovery_pending", guard._trace("watchdog", "retry")
+                )
+            raw = (root / "trip.json").read_text()
+            value = json.loads(raw)
+            self.assertEqual(
+                (
+                    value["stage"],
+                    value["operation"],
+                    value["child_pid"],
+                    value["duration_ms"],
+                ),
+                ("watchdog", "hook-writer-status", 123, 250.123),
+            )
+            self.assertEqual(
+                (value["agent"], value["event"], value["category"]),
+                ("codex", "prompt", "TimeoutError"),
+            )
+            self.assertNotIn("private-fixture-input", raw)
+            self.assertNotIn("_started", raw)
             self.assertFalse(marker.exists())
 
     def test_non_child_trip_has_explicit_null_pid_and_elapsed_duration(self):
-        trace = guard._trace('watchdog', 'heartbeat')
+        trace = guard._trace("watchdog", "heartbeat")
         value = guard._snapshot(trace)
-        self.assertIsNone(value['child_pid'])
-        self.assertGreaterEqual(value['duration_ms'], 0)
-        self.assertIn('started_at', value)
+        self.assertIsNone(value["child_pid"])
+        self.assertGreaterEqual(value["duration_ms"], 0)
+        self.assertIn("started_at", value)
 
     def test_fast_call_and_missing_marker_do_not_trip(self):
         with tempfile.TemporaryDirectory() as directory:
-            path = Path(directory) / 'inflight-123.json'
-            with patch.object(guard.os, 'kill') as probe:
+            path = Path(directory) / "inflight-123.json"
+            with patch.object(guard.os, "kill") as probe:
                 guard._check_inflight(path)
                 probe.assert_not_called()
-                path.write_text(json.dumps({'pid': 123, 'started': 1}))
-                with patch.object(guard, '_shared_time', return_value=1.059):guard._check_inflight(path)
+                path.write_text(json.dumps({"pid": 123, "started": 1}))
+                with patch.object(guard, "_shared_time", return_value=1.059):
+                    guard._check_inflight(path)
                 probe.assert_called_once_with(123, 0)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

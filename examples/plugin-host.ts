@@ -7,11 +7,24 @@ try {
     tokenFile: process.env.HYPERAG_TOKEN_FILE ?? "./agent.token",
   });
   await memory.health();
-  await memory.save({ scope: "project:demo", source: "example-host", text: "The example stores decisions in Hyperag." });
+  await memory.save({
+    scope: "project:demo",
+    source: "example-host",
+    text: "The example stores decisions in Hyperag.",
+  });
   const recalled = await memory.recall("where are decisions stored?");
-  const context = await memory.search("where are decisions stored?", { maxTokens: 400 });
-  console.log({ recalled: recalled.items.length, citations: context.citations.length });
+  const context = await memory.search("where are decisions stored?", {
+    maxTokens: 400,
+  });
+  console.log({
+    recalled: recalled.items.length,
+    citations: context.citations.length,
+  });
 } catch (error) {
-  console.error(error instanceof PluginError ? { code: error.code, status: error.status } : { code: "host_failed" });
+  console.error(
+    error instanceof PluginError
+      ? { code: error.code, status: error.status }
+      : { code: "host_failed" },
+  );
   process.exitCode = 1;
 }

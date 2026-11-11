@@ -16,7 +16,7 @@ export function sanitizeEnvironment(
   config: EnvironmentSanitizationConfig,
 ): NodeJS.ProcessEnv {
   const isStrictSanitization =
-    !!processEnv['GITHUB_SHA'] || processEnv['SURFACE'] === 'Github';
+    !!processEnv["GITHUB_SHA"] || processEnv["SURFACE"] === "Github";
 
   if (!config.enableEnvironmentVariableRedaction && !isStrictSanitization) {
     return { ...processEnv };
@@ -53,59 +53,59 @@ export function sanitizeEnvironment(
 export const ALWAYS_ALLOWED_ENVIRONMENT_VARIABLES: ReadonlySet<string> =
   new Set([
     // Cross-platform
-    'PATH',
+    "PATH",
     // Windows specific
-    'SYSTEMROOT',
-    'COMSPEC',
-    'PATHEXT',
-    'WINDIR',
-    'TEMP',
-    'TMP',
-    'USERPROFILE',
-    'SYSTEMDRIVE',
+    "SYSTEMROOT",
+    "COMSPEC",
+    "PATHEXT",
+    "WINDIR",
+    "TEMP",
+    "TMP",
+    "USERPROFILE",
+    "SYSTEMDRIVE",
     // Unix/Linux/macOS specific
-    'HOME',
-    'LANG',
-    'SHELL',
-    'TMPDIR',
-    'USER',
-    'LOGNAME',
+    "HOME",
+    "LANG",
+    "SHELL",
+    "TMPDIR",
+    "USER",
+    "LOGNAME",
     // Terminal capability variables (needed by editors like vim/emacs and
     // interactive commands like top)
-    'TERM',
-    'COLORTERM',
+    "TERM",
+    "COLORTERM",
     // GitHub Action-related variables
-    'ADDITIONAL_CONTEXT',
-    'AVAILABLE_LABELS',
-    'BRANCH_NAME',
-    'DESCRIPTION',
-    'EVENT_NAME',
-    'GITHUB_ENV',
-    'IS_PULL_REQUEST',
-    'ISSUES_TO_TRIAGE',
-    'ISSUE_BODY',
-    'ISSUE_NUMBER',
-    'ISSUE_TITLE',
-    'PULL_REQUEST_NUMBER',
-    'REPOSITORY',
-    'TITLE',
-    'TRIGGERING_ACTOR',
+    "ADDITIONAL_CONTEXT",
+    "AVAILABLE_LABELS",
+    "BRANCH_NAME",
+    "DESCRIPTION",
+    "EVENT_NAME",
+    "GITHUB_ENV",
+    "IS_PULL_REQUEST",
+    "ISSUES_TO_TRIAGE",
+    "ISSUE_BODY",
+    "ISSUE_NUMBER",
+    "ISSUE_TITLE",
+    "PULL_REQUEST_NUMBER",
+    "REPOSITORY",
+    "TITLE",
+    "TRIGGERING_ACTOR",
   ]);
 
 export const NEVER_ALLOWED_ENVIRONMENT_VARIABLES: ReadonlySet<string> = new Set(
   [
-    'CLIENT_ID',
-    'DB_URI',
-    'CONNECTION_STRING',
-    'AWS_DEFAULT_REGION',
-    'AZURE_CLIENT_ID',
-    'AZURE_TENANT_ID',
-    'SLACK_WEBHOOK_URL',
-    'TWILIO_ACCOUNT_SID',
-    'DATABASE_URL',
-    'GOOGLE_CLOUD_PROJECT',
-    'GOOGLE_CLOUD_ACCOUNT',
-    'FIREBASE_PROJECT_ID',
+    "CLIENT_ID",
+    "DB_URI",
+    "CONNECTION_STRING",
+    "AWS_DEFAULT_REGION",
+    "AZURE_CLIENT_ID",
+    "AZURE_TENANT_ID",
+    "SLACK_WEBHOOK_URL",
+    "TWILIO_ACCOUNT_SID",
+    "DATABASE_URL",
+    "GOOGLE_CLOUD_PROJECT",
+    "GOOGLE_CLOUD_ACCOUNT",
+    "FIREBASE_PROJECT_ID",
   ],
 );
 
@@ -151,7 +151,7 @@ function shouldRedactEnvironmentVariable(
   key = key.toUpperCase();
   value = value?.toUpperCase();
 
-  if (key.startsWith('GEMINI_CLI_')) {
+  if (key.startsWith("GEMINI_CLI_")) {
     return false;
   }
 
@@ -163,7 +163,7 @@ function shouldRedactEnvironmentVariable(
     }
   }
 
-  if (key.startsWith('GIT_CONFIG_')) {
+  if (key.startsWith("GIT_CONFIG_")) {
     return false;
   }
 
@@ -194,4 +194,3 @@ function shouldRedactEnvironmentVariable(
 
   return false;
 }
-

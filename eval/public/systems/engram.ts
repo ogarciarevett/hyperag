@@ -10,17 +10,35 @@ import type { SystemFactory } from "../system";
 const project = (ns: string) => ns.replaceAll("/", "_");
 
 const factory: SystemFactory = async (profile) => {
-  if (profile !== "default" && profile !== "any") throw new Error("engram profile is default or any");
+  if (profile !== "default" && profile !== "any")
+    throw new Error("engram profile is default or any");
   const e = engramMcp(profile === "any" ? "any" : undefined);
   const version = Bun.spawnSync(["engram", "version"]).stdout.toString().trim();
   return {
-    describe: async () => ({ system: "engram", version, profile, config: { transport: "mcp stdio", match_mode: profile === "any" ? "any" : "all (default)", asOf: "none (no date parameter at search)" } }),
+    describe: async () => ({
+      system: "engram",
+      version,
+      profile,
+      config: {
+        transport: "mcp stdio",
+        match_mode: profile === "any" ? "any" : "all (default)",
+        asOf: "none (no date parameter at search)",
+      },
+    }),
     open: async () => undefined,
     ingest: async (ns, docs) => {
-      for (const d of docs) await e.save(project(ns), d.id, d.title ? `${d.title}\n${d.text}` : d.text);
+      for (const d of docs)
+        await e.save(
+          project(ns),
+          d.id,
+          d.title ? `${d.title}\n${d.text}` : d.text,
+        );
     },
     search: async (ns, query, k) =>
-      (await e.search(project(ns), query, Math.min(k, 20))).map((r) => ({ id: r.title, text: r.text })),
+      (await e.search(project(ns), query, Math.min(k, 20))).map((r) => ({
+        id: r.title,
+        text: r.text,
+      })),
     close: () => e.close(),
   };
 };

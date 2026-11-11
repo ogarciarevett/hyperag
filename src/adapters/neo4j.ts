@@ -10,7 +10,10 @@ export type Neo4jConfig = Readonly<{
   fetch?: (request: Request) => Promise<Response>;
 }>;
 
-type Run = (statement: string, parameters: Record<string, unknown>) => Promise<unknown[][]>;
+type Run = (
+  statement: string,
+  parameters: Record<string, unknown>,
+) => Promise<unknown[][]>;
 
 /**
  * One statement through Neo4j's Query API over HTTP, so no driver is needed. From the original
@@ -24,7 +27,11 @@ export function createNeo4jQueryRun(config: Neo4jConfig): Run {
     const response = await doFetch(
       new Request(url, {
         method: "POST",
-        headers: { authorization, "content-type": "application/json", accept: "application/json" },
+        headers: {
+          authorization,
+          "content-type": "application/json",
+          accept: "application/json",
+        },
         body: JSON.stringify({ statement, parameters }),
         signal: AbortSignal.timeout(config.timeoutMs ?? 5_000),
       }),
@@ -33,7 +40,10 @@ export function createNeo4jQueryRun(config: Neo4jConfig): Run {
       data?: { values?: unknown[][] };
       errors?: Array<{ code?: string }>;
     } | null;
-    if ((response.status !== 200 && response.status !== 202) || !Array.isArray(body?.data?.values))
+    if (
+      (response.status !== 200 && response.status !== 202) ||
+      !Array.isArray(body?.data?.values)
+    )
       return unavailable(body?.errors?.[0]?.code ?? `http_${response.status}`);
     return body.data.values;
   };
@@ -48,10 +58,16 @@ export function createNeo4jGraph(config: Neo4jConfig): GraphStore {
   const run = createNeo4jQueryRun(config);
   return {
     async ensureSchema() {
-      await run("CREATE CONSTRAINT hyperag_memory_id IF NOT EXISTS FOR (m:Memory) REQUIRE m.id IS UNIQUE", {});
+      await run(
+        "CREATE CONSTRAINT hyperag_memory_id IF NOT EXISTS FOR (m:Memory) REQUIRE m.id IS UNIQUE",
+        {},
+      );
     },
     async upsertMemory(id, scope) {
-      await run("MERGE (m:Memory {id: $id}) SET m.scope = $scope", { id, scope });
+      await run("MERGE (m:Memory {id: $id}) SET m.scope = $scope", {
+        id,
+        scope,
+      });
     },
     async relate(rel, scopes) {
       // MERGE on (from, to, type): relating twice is a no-op, so the write is idempotent.

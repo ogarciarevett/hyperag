@@ -19,8 +19,14 @@ test("Rust adapter refuses a foreign-owned database before service startup", asy
       if (!error.message.includes("belongs to another role") || !ended) throw error;
     }
   `;
-  const child = Bun.spawn([process.execPath, "-e", script], { stdout: "ignore", stderr: "pipe" });
-  const [code, error] = await Promise.all([child.exited, new Response(child.stderr).text()]);
+  const child = Bun.spawn([process.execPath, "-e", script], {
+    stdout: "ignore",
+    stderr: "pipe",
+  });
+  const [code, error] = await Promise.all([
+    child.exited,
+    new Response(child.stderr).text(),
+  ]);
   if (code) console.error(error);
   expect(code).toBe(0);
 });

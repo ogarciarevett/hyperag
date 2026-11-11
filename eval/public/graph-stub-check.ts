@@ -105,7 +105,9 @@ await s.ingest(`${set}corpus`, [{ id: "d1", text: "a document" }]);
 const corpusHits = await s.search(`${set}corpus`, "document", 10);
 checks.push([
   "a corpus expands the graph, writes no edges and still answers",
-  relations.length === before && expansions > expansionsBeforeCorpus && corpusHits.length === 1,
+  relations.length === before &&
+    expansions > expansionsBeforeCorpus &&
+    corpusHits.length === 1,
 ]);
 await s.close();
 stub.stop();

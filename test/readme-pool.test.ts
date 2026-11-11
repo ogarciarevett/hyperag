@@ -4,8 +4,12 @@ import { closeFixturePool } from "../examples/readme/close-pool";
 
 class FixturePool extends EventEmitter {
   endCalls = 0;
-  constructor(readonly totalCount: number) { super(); }
-  async end() { this.endCalls++; }
+  constructor(readonly totalCount: number) {
+    super();
+  }
+  async end() {
+    this.endCalls++;
+  }
 }
 
 test("database teardown waits for every pool disconnect after end resolves", async () => {
@@ -13,7 +17,9 @@ test("database teardown waits for every pool disconnect after end resolves", asy
   const order: string[] = [];
   const observer = () => order.push("disconnect");
   pool.on("remove", observer);
-  const closing = closeFixturePool(pool).then(() => order.push("drop database"));
+  const closing = closeFixturePool(pool).then(() =>
+    order.push("drop database"),
+  );
   // Flush the already-resolved end promise; disconnects are controlled explicitly.
   await Promise.resolve();
   await Promise.resolve();
@@ -37,14 +43,19 @@ test("an empty pool still ends without waiting for nonexistent disconnects", asy
 test("end failure propagates without waiting for disconnects or retaining a listener", async () => {
   const pool = new FixturePool(2);
   const failure = new Error("fixture close failed");
-  pool.end = async () => { throw failure; };
+  pool.end = async () => {
+    throw failure;
+  };
   await expect(closeFixturePool(pool)).rejects.toBe(failure);
   expect(pool.listenerCount("remove")).toBe(0);
 });
 
 test("synchronous disconnect events during end are not missed", async () => {
   const pool = new FixturePool(2);
-  pool.end = async () => { pool.emit("remove"); pool.emit("remove"); };
+  pool.end = async () => {
+    pool.emit("remove");
+    pool.emit("remove");
+  };
   await closeFixturePool(pool);
   expect(pool.listenerCount("remove")).toBe(0);
 });

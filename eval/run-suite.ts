@@ -5,7 +5,11 @@ import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 import { parseArgs } from "node:util";
 import { Pool } from "pg";
 
-import { createLocalEmbedder, createLocalReranker, createOpenAICompatibleEmbedder } from "../src/adapters/embedders";
+import {
+  createLocalEmbedder,
+  createLocalReranker,
+  createOpenAICompatibleEmbedder,
+} from "../src/adapters/embedders";
 import { createNeo4jGraph } from "../src/adapters/neo4j";
 import { createPostgresStore } from "../src/adapters/postgres";
 import { Hyperag, type RetrieveOptions } from "../src/core";
@@ -20,13 +24,29 @@ const { values: args } = parseArgs({
     concurrency: { type: "string", default: "1,4,8" },
   },
 });
-const PG = process.env.HYPERAG_PG_URL ?? "postgres://hyperag:fake-test-only@127.0.0.1:55432/hyperag";
-const NEO4J = { baseUrl: "http://127.0.0.1:57474", username: "neo4j", password: "fake-test-only" };
+const PG =
+  process.env.HYPERAG_PG_URL ??
+  "postgres://hyperag:fake-test-only@127.0.0.1:55432/hyperag";
+const NEO4J = {
+  baseUrl: "http://127.0.0.1:57474",
+  username: "neo4j",
+  password: "fake-test-only",
+};
 
-type Doc = { id: string; scope: string; text: string; source: string; language: string; parent_id: string };
+type Doc = {
+  id: string;
+  scope: string;
+  text: string;
+  source: string;
+  language: string;
+  parent_id: string;
+};
 type Query = { id: string; scope: string; query: string };
 
-const VARIANTS: Record<string, { family: "bge" | "e5" | "lex"; graph: boolean; rerank: boolean }> = {
+const VARIANTS: Record<
+  string,
+  { family: "bge" | "e5" | "lex"; graph: boolean; rerank: boolean }
+> = {
   V0: { family: "bge", graph: false, rerank: false },
   V1: { family: "bge", graph: true, rerank: false },
   V2: { family: "bge", graph: false, rerank: true },
@@ -35,7 +55,8 @@ const VARIANTS: Record<string, { family: "bge" | "e5" | "lex"; graph: boolean; r
   L: { family: "lex", graph: false, rerank: false },
 };
 const variant = VARIANTS[args.variant ?? ""];
-if (!variant || !args.data || !args.out) throw new Error("--variant, --data and --out are required");
+if (!variant || !args.data || !args.out)
+  throw new Error("--variant, --data and --out are required");
 
 const embedders: Record<string, () => Embedder | null> = {
   // The baseline's dense model and runtime: fastembed 0.9.0 (Qdrant ONNX build of
@@ -44,7 +65,8 @@ const embedders: Record<string, () => Embedder | null> = {
     createOpenAICompatibleEmbedder({
       baseUrl: process.env.HYPERAG_FASTEMBED_URL ?? "http://127.0.0.1:58321",
       model: "BAAI/bge-small-en-v1.5",
-      revision: "fastembed-0.9.0 Qdrant/bge-small-en-v1.5-onnx-Q@aa8f8b060edb00e03bfdd08813a2949946c8ba55",
+      revision:
+        "fastembed-0.9.0 Qdrant/bge-small-en-v1.5-onnx-Q@aa8f8b060edb00e03bfdd08813a2949946c8ba55",
       dimensions: 384,
       normalized: true,
     }),
@@ -52,17 +74,26 @@ const embedders: Record<string, () => Embedder | null> = {
   lex: () => null,
 };
 
-const corpus = JSON.parse(readFileSync(`${args.data}/corpus.json`, "utf8")) as Doc[];
-const queries = JSON.parse(readFileSync(`${args.data}/queries.json`, "utf8")) as Query[];
+const corpus = JSON.parse(
+  readFileSync(`${args.data}/corpus.json`, "utf8"),
+) as Doc[];
+const queries = JSON.parse(
+  readFileSync(`${args.data}/queries.json`, "utf8"),
+) as Query[];
 const scopes = [...new Set(corpus.map((d) => d.scope))];
 
 // One database per embedding family and suite, ingested once and reused by the variants.
 const dbName = `eval_${args.suite!.replace(/\W/gu, "_")}_${variant.family}`;
 const admin = new Pool({ connectionString: PG, max: 1 });
-const exists = (await admin.query("select 1 from pg_database where datname = $1", [dbName])).rowCount === 1;
+const exists =
+  (await admin.query("select 1 from pg_database where datname = $1", [dbName]))
+    .rowCount === 1;
 if (!exists) await admin.query(`create database ${dbName}`);
 await admin.end();
-const pool = new Pool({ connectionString: PG.replace(/\/[^/]+$/u, `/${dbName}`), max: 8 });
+const pool = new Pool({
+  connectionString: PG.replace(/\/[^/]+$/u, `/${dbName}`),
+  max: 8,
+});
 const graph = createNeo4jGraph(NEO4J);
 const store = createPostgresStore(pool);
 const hyperag = new Hyperag({
@@ -74,13 +105,18 @@ const hyperag = new Hyperag({
 });
 
 let rssPeak = 0;
-const sampler = setInterval(() => (rssPeak = Math.max(rssPeak, process.memoryUsage().rss)), 200);
+const sampler = setInterval(
+  () => (rssPeak = Math.max(rssPeak, process.memoryUsage().rss)),
+  200,
+);
 const t0 = performance.now();
 await hyperag.init();
 const startupMs = performance.now() - t0;
 
 const ingestFile = `eval/results/${dbName}.ingest.json`;
-const count = Number((await pool.query("select count(*) from memories")).rows[0].count);
+const count = Number(
+  (await pool.query("select count(*) from memories")).rows[0].count,
+);
 if (count < corpus.length) {
   for (const scope of scopes) {
     await hyperag.grant("eval-admin", "eval-writer", scope, "write");
@@ -101,26 +137,46 @@ if (count < corpus.length) {
   const graphStarted = performance.now();
   const groups = new Map<string, string[]>();
   for (const doc of corpus)
-    for (const ident of new Set(doc.text.match(/\b(?:[A-Z][a-z]+-\d+|[A-Z]{2,}-[A-Z0-9]+)\b/gu) ?? [])) {
+    for (const ident of new Set(
+      doc.text.match(/\b(?:[A-Z][a-z]+-\d+|[A-Z]{2,}-[A-Z0-9]+)\b/gu) ?? [],
+    )) {
       const key = `${doc.scope}|${ident}`;
       groups.set(key, [...(groups.get(key) ?? []), `${doc.scope}/${doc.id}`]);
     }
   let edges = 0;
   for (const members of groups.values())
     for (const member of members.slice(1)) {
-      await hyperag.relate("eval-writer", { from: member, to: members[0]!, type: "SHARES_ID" });
+      await hyperag.relate("eval-writer", {
+        from: member,
+        to: members[0]!,
+        type: "SHARES_ID",
+      });
       edges++;
     }
   writeFileSync(
     ingestFile,
-    JSON.stringify({ documents: corpus.length, ingestMs, graphEdges: edges, graphMs: performance.now() - graphStarted }, null, 2),
+    JSON.stringify(
+      {
+        documents: corpus.length,
+        ingestMs,
+        graphEdges: edges,
+        graphMs: performance.now() - graphStarted,
+      },
+      null,
+      2,
+    ),
   );
 }
 
 const options: RetrieveOptions = {
   limit: 10,
   candidatesPerChannel: 24,
-  channels: { bm25: true, vector: variant.family !== "lex", graph: variant.graph, rerank: variant.rerank },
+  channels: {
+    bm25: true,
+    vector: variant.family !== "lex",
+    graph: variant.graph,
+    rerank: variant.rerank,
+  },
 };
 const ask = async (q: Query) => {
   const started = performance.now();
@@ -128,16 +184,34 @@ const ask = async (q: Query) => {
     const r = await hyperag.retrieve(`reader:${q.scope}`, q.query, options);
     const latency = performance.now() - started;
     // Stored ids are `<scope>/<corpus id>`; the scorer wants the corpus id.
-    const hits = r.items.map((i) => ({ id: i.memory.id.slice(i.memory.id.indexOf("/") + 1) }));
-    return { response: { ok: true, hits, abstained: r.insufficientEvidence, paths: r.pathsUsed }, latency };
+    const hits = r.items.map((i) => ({
+      id: i.memory.id.slice(i.memory.id.indexOf("/") + 1),
+    }));
+    return {
+      response: {
+        ok: true,
+        hits,
+        abstained: r.insufficientEvidence,
+        paths: r.pathsUsed,
+      },
+      latency,
+    };
   } catch (error) {
-    return { response: { ok: false, error: String(error), hits: [] }, latency: performance.now() - started };
+    return {
+      response: { ok: false, error: String(error), hits: [] },
+      latency: performance.now() - started,
+    };
   }
 };
 
 writeFileSync(args.out, "");
 for (const q of queries.slice(0, 8)) await ask(q); // warm-up, not recorded
-const record = (q: Query, r: Awaited<ReturnType<typeof ask>>, workload: string, concurrency: number) =>
+const record = (
+  q: Query,
+  r: Awaited<ReturnType<typeof ask>>,
+  workload: string,
+  concurrency: number,
+) =>
   appendFileSync(
     args.out!,
     `${JSON.stringify({ query_id: q.id, workload, concurrency, latency_ms: r.latency, response: r.response })}\n`,
@@ -177,4 +251,6 @@ writeFileSync(
   ),
 );
 await pool.end();
-console.log(`done ${args.variant}: ${queries.length} queries, throughput ${JSON.stringify(throughput)}`);
+console.log(
+  `done ${args.variant}: ${queries.length} queries, throughput ${JSON.stringify(throughput)}`,
+);
